@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: piscine-tracker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: CLIENT_ID
+        sync: false   # Set manually in Render dashboard
+      - key: CLIENT_SECRET
+        sync: false   # Set manually in Render dashboard
+      - key: PORT
+        value: 10000  # Render uses port 10000
