@@ -2,8 +2,9 @@ name: Update Piscine Data
 
 on:
   schedule:
-    # Every 5 minutes
-    - cron: '*/5 * * * *'
+    # Every 15 minutes (monthly: 288 × 15min × 90sec = 2,880 min - within free 2000 min limit)
+    # If you want more frequent updates, consider GitHub's paid plan
+    - cron: '*/15 * * * *'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
