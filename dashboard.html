@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piscine Dashboard - 42 Tokyo</title>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a24;
+    --surface2: #22222e;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00cec9;
+    --green-dim: #00b8941a;
+    --red: #ff7675;
+    --red-dim: #ff76751a;
+    --orange: #fdcb6e;
+    --gradient: linear-gradient(135deg, #6c5ce7, #00cec9);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 80px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 24px 0 16px;
+  }
+  .header-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* Stats summary */
+  .summary {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .summary-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 20px;
+    text-align: center;
+    flex: 1;
+    max-width: 160px;
+  }
+  .summary-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .summary-value {
+    font-size: 28px;
+    font-weight: 800;
+  }
+  .summary-value.green { color: var(--green); }
+  .summary-value.accent { color: var(--accent-light); }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px 0;
+    margin-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filter-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .filter-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  /* Section headers */
+  .section-header {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-header .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .section-header .dot.green {
+    background: var(--green);
+    box-shadow: 0 0 8px rgba(0, 206, 201, 0.5);
+    animation: pulse 2s infinite;
+  }
+  .section-header .dot.dim {
+    background: var(--text-dim);
+    opacity: 0.4;
+  }
+  .section-count {
+    color: var(--accent-light);
+    font-weight: 600;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Student grid */
+  .student-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .student-card {
+    background: var(--surface2);
+    border-radius: 12px;
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+    border: 1px solid transparent;
+  }
+  .student-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .student-card.online {
+    border-color: rgba(0, 206, 201, 0.3);
+  }
+  .student-card.online:hover {
+    border-color: var(--green);
+  }
+
+  .student-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 6px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+  }
+  .student-card.online .student-avatar {
+    border-color: var(--green);
+  }
+
+  .avatar-placeholder {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-dim);
+  }
+  .student-card.online .avatar-placeholder {
+    border-color: var(--green);
+  }
+
+  .student-login {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .student-seat {
+    font-size: 10px;
+    color: var(--green);
+    margin-top: 2px;
+  }
+
+  .student-hours {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-light);
+    margin-top: 3px;
+  }
+  .student-hours.high { color: var(--green); }
+  .student-hours.low { color: var(--red); }
+
+  .student-rank {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  /* Sort bar */
+  .sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .sort-bar label {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .sort-btn {
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sort-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .sort-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  /* Loading */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+  }
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--surface2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  /* Error */
+  .error-card {
+    background: var(--red-dim);
+    border: 1px solid rgba(255, 118, 117, 0.3);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    margin: 20px 0;
+  }
+  .error-card h3 { color: var(--red); margin-bottom: 8px; font-size: 15px; }
+  .error-card p { font-size: 13px; color: var(--text-dim); }
+
+  /* Updated timestamp */
+  .updated {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 16px 0;
+    opacity: 0.6;
+  }
+
+  /* Animations */
+  .fade-in {
+    animation: fadeIn 0.5s ease forwards;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Refresh button */
+  .refresh-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(108, 92, 231, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+    z-index: 10;
+  }
+  .refresh-btn:active { transform: scale(0.9); }
+  .refresh-btn.spinning svg { animation: spin 0.8s linear infinite; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  /* Search */
+  .search-wrap {
+    margin-bottom: 16px;
+  }
+  .search-input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input::placeholder { color: var(--text-dim); }
+  .search-input:focus { border-color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading piscine data...</div>
+    </div>
+  </div>
+
+  <button class="refresh-btn" id="refreshBtn" onclick="loadDashboard()" title="Refresh">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+      <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+    </svg>
+  </button>
+
+<script>
+let dashboardData = null;
+let currentFilter = 'all';
+let searchQuery = '';
+let currentSort = 'hours'; // 'hours', 'name'
+
+function sortStudents(arr) {
+  const sorted = [...arr];
+  switch (currentSort) {
+    case 'hours':
+      sorted.sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0));
+      break;
+    case 'name':
+      sorted.sort((a, b) => a.login.localeCompare(b.login));
+      break;
+  }
+  return sorted;
+}
+
+function formatHours(h, loading) {
+  if (loading) return '...';
+  if (!h) return '0h';
+  return h >= 100 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`;
+}
+
+function hoursClass(h) {
+  if (h >= 128) return 'high';  // 8h/day * 16 days = on track
+  if (h < 64) return 'low';     // very behind
+  return '';
+}
+
+function renderDashboard() {
+  const d = dashboardData;
+  const app = document.getElementById('app');
+
+  // Build online lookup
+  const onlineSet = new Set(d.online.map(s => s.login));
+  const onlineMap = {};
+  d.online.forEach(s => { onlineMap[s.login] = s; });
+
+  // Merge all students into a single list
+  let allStudents = [...d.online, ...d.offline].map(s => ({
+    ...s,
+    // Ensure online students have location info merged
+    ...(onlineMap[s.login] || {}),
+    _isOnline: onlineSet.has(s.login),
+  }));
+
+  // Apply cluster filter (only show students currently in that cluster)
+  if (currentFilter !== 'all') {
+    allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
+  }
+
+  // Apply search filter
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    allStudents = allStudents.filter(s => s.login.toLowerCase().includes(q) || (s.display_name || '').toLowerCase().includes(q));
+  }
+
+  // Apply sort
+  allStudents = sortStudents(allStudents);
+
+  // Build global rank (before filters, all students sorted by hours)
+  const allForRank = [...d.online, ...d.offline].sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0));
+  const rankMap = {};
+  allForRank.forEach((s, i) => { rankMap[s.login] = i + 1; });
+
+  // Collect available clusters from online data
+  const clusters = [...new Set(d.online.map(s => s.cluster).filter(Boolean))].sort();
+
+  // Build filter buttons
+  const filterBtns = [
+    `<button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" onclick="setFilter('all')">All</button>`
+  ];
+  clusters.forEach(c => {
+    const count = d.online.filter(s => s.cluster === c).length;
+    filterBtns.push(
+      `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${c}')">${c} (${count})</button>`
+    );
+  });
+
+  // Build sort buttons
+  const sortBtns = [
+    { key: 'hours', label: 'Hours' },
+    { key: 'name', label: 'Name' },
+  ].map(s =>
+    `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
+  ).join('');
+
+  // Build student cards
+  function makeCard(student) {
+    const isOnline = student._isOnline;
+    const cls = isOnline ? 'online' : '';
+    const avatar = student.image_small
+      ? `<img class="student-avatar" src="${student.image_small}" alt="${student.login}" onerror="this.outerHTML='<div class=\\'avatar-placeholder\\'>${student.login[0].toUpperCase()}</div>'">`
+      : `<div class="avatar-placeholder">${student.login[0].toUpperCase()}</div>`;
+    const seat = isOnline && student.host
+      ? `<div class="student-seat">${student.host.split('.')[0]}</div>`
+      : '';
+    const hours = student.total_hours || 0;
+    const rank = rankMap[student.login] || '-';
+    const isLoading = d.hours_loading;
+    return `
+      <div class="student-card ${cls}" onclick="goToStudent('${student.login}')">
+            <div class="student-rank">#${rank}</div>
+        ${avatar}
+        <div class="student-login" title="${student.display_name || student.login}">${student.login}</div>
+        <div class="student-hours ${hoursClass(hours)}">${formatHours(hours, false)}</div>
+        ${seat}
+      </div>`;
+  }
+
+  const cards = allStudents.map(s => makeCard(s)).join('');
+  const onlineInView = allStudents.filter(s => s._isOnline).length;
+
+  app.innerHTML = `
+    <div class="header fade-in">
+      <div class="header-label">42 Tokyo</div>
+      <h1>Piscine Dashboard</h1>
+      <div class="header-sub">Feb 2 - Feb 27, 2026</div>
+    </div>
+
+    <div class="summary fade-in">
+      <div class="summary-item">
+        <div class="summary-label">Online</div>
+        <div class="summary-value green">${d.total_online}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Total</div>
+        <div class="summary-value accent">${d.total_students}</div>
+      </div>
+    </div>
+
+    <div class="search-wrap fade-in">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search by login..." value="${searchQuery}" oninput="onSearch(this.value)">
+    </div>
+
+    <div class="filter-bar fade-in">
+      ${filterBtns.join('')}
+    </div>
+
+    <div class="sort-bar fade-in">
+      <label>Sort:</label>
+      ${sortBtns}
+    </div>
+
+    <div class="section-header fade-in">
+      ALL STUDENTS <span class="section-count">(${allStudents.length})</span>
+    </div>
+    ${allStudents.length > 0
+      ? `<div class="student-grid fade-in">${cards}</div>`
+      : `<div class="empty-state fade-in">No students found</div>`}
+
+    <div class="updated">
+      Updated: ${new Date(d.cached_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
+    </div>
+  `;
+
+  // Restore focus on search input
+  const input = document.getElementById('searchInput');
+  if (input && searchQuery) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
+
+function setFilter(cluster) {
+  currentFilter = cluster;
+  renderDashboard();
+}
+
+function setSort(sortKey) {
+  currentSort = sortKey;
+  renderDashboard();
+}
+
+function onSearch(value) {
+  searchQuery = value;
+  renderDashboard();
+}
+
+function goToStudent(login) {
+  window.location.href = `index.html?login=${encodeURIComponent(login)}`;
+}
+
+async function loadDashboard() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+
+  try {
+    // GitHub Pages: read from static JSON (cache-busted with timestamp)
+    const resp = await fetch(`data.json?t=${Date.now()}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    dashboardData = data;
+    renderDashboard();
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <div class="header-label">42 Tokyo</div>
+      <h1>Piscine Dashboard</h1>
+    </div>
+    <div class="error-card">
+      <h3>Error</h3>
+      <p>${msg}</p>
+      <p style="margin-top:12px;font-size:11px">Data is updated every 5 minutes via GitHub Actions</p>
+    </div>
+  `;
+}
+
+loadDashboard();
+// Auto refresh every 5 minutes
+setInterval(loadDashboard, 5 * 60 * 1000);
+</script>
+</body>
+</html>
