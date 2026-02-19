@@ -555,6 +555,17 @@ function renderDashboard() {
 
     <div class="updated">
       Updated: ${new Date(d.cached_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
+      ${(() => {
+        const ageMin = (Date.now() - new Date(d.cached_at).getTime()) / 60000;
+        if (ageMin > 60) {
+          return `<br><a href="https://github.com/Tsunanko/piscine-tracker/actions/workflows/update-data.yml"
+            target="_blank"
+            style="color:var(--orange);font-size:11px;text-decoration:none;">
+            ⚠️ ${Math.floor(ageMin)}分前のデータ — GitHubで手動更新 →
+          </a>`;
+        }
+        return '';
+      })()}
     </div>
   `;
 
