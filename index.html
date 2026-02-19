@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piscine Tracker</title>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a24;
+    --surface2: #22222e;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00cec9;
+    --green-dim: #00b8941a;
+    --red: #ff7675;
+    --red-dim: #ff76751a;
+    --orange: #fdcb6e;
+    --orange-dim: #fdcb6e1a;
+    --gradient: linear-gradient(135deg, #6c5ce7, #00cec9);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 80px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 24px 0 20px;
+  }
+  .header-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-period {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* Big Circle Progress */
+  .progress-ring-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 20px 0;
+    position: relative;
+  }
+  .progress-ring-container {
+    position: relative;
+    width: 200px;
+    height: 200px;
+  }
+  .progress-ring {
+    transform: rotate(-90deg);
+  }
+  .progress-ring-bg {
+    fill: none;
+    stroke: var(--surface2);
+    stroke-width: 10;
+  }
+  .progress-ring-fill {
+    fill: none;
+    stroke: url(#gradient);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease;
+  }
+  .progress-ring-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .progress-big-num {
+    font-size: 40px;
+    font-weight: 800;
+    line-height: 1;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .progress-unit {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .progress-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 8px auto 0;
+  }
+  .status-badge.on-track {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(0, 206, 201, 0.2);
+  }
+  .status-badge.behind {
+    background: var(--red-dim);
+    color: var(--red);
+    border: 1px solid rgba(255, 118, 117, 0.2);
+  }
+  .status-badge.warning {
+    background: var(--orange-dim);
+    color: var(--orange);
+    border: 1px solid rgba(253, 203, 110, 0.2);
+  }
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  /* Stat Grid */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .stat-item {
+    background: var(--surface2);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .stat-value.accent { color: var(--accent-light); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.orange { color: var(--orange); }
+  .stat-suffix {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+
+  /* Remaining Alert */
+  .remaining-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  .remaining-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .remaining-value {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .remaining-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  /* Bar Chart */
+  .chart-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -4px;
+    padding: 0 4px;
+  }
+  .chart {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 120px;
+    min-width: fit-content;
+  }
+  .chart-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 16px;
+    flex: 1;
+  }
+  .chart-bar-wrap {
+    width: 100%;
+    height: 90px;
+    display: flex;
+    align-items: flex-end;
+    position: relative;
+  }
+  .chart-bar {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    transition: height 0.5s ease;
+    position: relative;
+  }
+  .chart-bar.met { background: var(--green); opacity: 0.8; }
+  .chart-bar.partial { background: var(--accent-light); opacity: 0.7; }
+  .chart-bar.zero { background: var(--surface2); min-height: 2px; }
+  .chart-bar.future { background: var(--surface2); min-height: 2px; opacity: 0.3; }
+  .chart-day {
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+  .chart-target-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px dashed var(--red);
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .chart-hours {
+    font-size: 8px;
+    color: var(--text-dim);
+    position: absolute;
+    top: -12px;
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Tooltip */
+  .chart-col:hover .chart-hours { color: var(--text); }
+  .chart-col:hover .chart-bar { opacity: 1; }
+
+  /* Loading */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+  }
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--surface2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  /* Error */
+  .error-card {
+    background: var(--red-dim);
+    border: 1px solid rgba(255, 118, 117, 0.3);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    margin: 20px 0;
+  }
+  .error-card h3 { color: var(--red); margin-bottom: 8px; font-size: 15px; }
+  .error-card p { font-size: 13px; color: var(--text-dim); }
+
+  /* Updated timestamp */
+  .updated {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 16px 0;
+    opacity: 0.6;
+  }
+
+  /* Animations */
+  .fade-in {
+    animation: fadeIn 0.5s ease forwards;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Refresh button */
+  .refresh-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(108, 92, 231, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+    z-index: 10;
+  }
+  .refresh-btn:active { transform: scale(0.9); }
+
+  /* Back link */
+  .back-link {
+    display: inline-block;
+    color: var(--accent-light);
+    text-decoration: none;
+    font-size: 13px;
+    padding: 8px 0;
+    transition: opacity 0.2s;
+  }
+  .back-link:hover { opacity: 0.7; }
+  .refresh-btn.spinning svg { animation: spin 0.8s linear infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+  <div class="container" id="app">
+    <a href="dashboard.html" class="back-link">← Dashboard</a>
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading location data...</div>
+    </div>
+  </div>
+
+  <button class="refresh-btn" id="refreshBtn" onclick="loadData()" title="Refresh">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+      <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+    </svg>
+  </button>
+
+  <svg width="0" height="0">
+    <defs>
+      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#6c5ce7"/>
+        <stop offset="100%" stop-color="#00cec9"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+<script>
+const CIRCUMFERENCE = 2 * Math.PI * 85;
+const params = new URLSearchParams(window.location.search);
+const LOGIN = params.get('login') || 'yuichika';
+
+function render(d) {
+  const app = document.getElementById('app');
+
+  // Determine status
+  let statusClass, statusText;
+  if (d.on_track) {
+    statusClass = 'on-track';
+    statusText = 'On Track';
+  } else if (d.diff_from_target > -10) {
+    statusClass = 'warning';
+    statusText = 'Slightly Behind';
+  } else {
+    statusClass = 'behind';
+    statusText = 'Behind Schedule';
+  }
+
+  // Required avg color
+  const reqAvgClass = d.required_avg_remaining <= 8 ? 'green' :
+                      d.required_avg_remaining <= 10 ? 'orange' : 'red';
+
+  // Daily chart
+  const maxH = Math.max(12, ...d.daily.map(x => x.hours));
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+
+  const bars = d.daily.map(day => {
+    const pct = (day.hours / maxH) * 100;
+    const isFuture = day.date > todayStr;
+    const cls = isFuture ? 'future' : day.hours === 0 ? 'zero' : day.met_target ? 'met' : 'partial';
+    const dd = new Date(day.date + 'T00:00:00+09:00').getDate();
+    const hoursLabel = day.hours > 0 ? day.hours.toFixed(1) : '';
+    return `
+      <div class="chart-col">
+        <div class="chart-bar-wrap">
+          <div class="chart-bar ${cls}" style="height:${Math.max(2, pct)}%">
+            ${hoursLabel ? `<span class="chart-hours">${hoursLabel}</span>` : ''}
+          </div>
+        </div>
+        <span class="chart-day">${dd}</span>
+      </div>`;
+  }).join('');
+
+  // Target line position
+  const targetPct = (8 / maxH) * 100;
+
+  // Progress ring offset
+  const offset = CIRCUMFERENCE - (d.progress_pct / 100) * CIRCUMFERENCE;
+
+  app.innerHTML = `
+    <a href="dashboard.html" class="back-link">← Dashboard</a>
+    <div class="header fade-in">
+      <div class="header-label">Piscine Commitment Tracker</div>
+      <h1>${d.login}</h1>
+      <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
+    </div>
+
+    <!-- Progress Ring -->
+    <div class="progress-ring-wrap fade-in">
+      <div class="progress-ring-container">
+        <svg class="progress-ring" width="200" height="200" viewBox="0 0 200 200">
+          <circle class="progress-ring-bg" cx="100" cy="100" r="85"/>
+          <circle class="progress-ring-fill" cx="100" cy="100" r="85"
+            stroke-dasharray="${CIRCUMFERENCE}"
+            stroke-dashoffset="${offset}"/>
+        </svg>
+        <div class="progress-ring-center">
+          <div class="progress-big-num">${d.progress_pct.toFixed(1)}%</div>
+          <div class="progress-unit">達成率</div>
+          <div class="progress-sub">${d.total_logged_hours}h / ${d.total_target_hours}h</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center" class="fade-in">
+      ${d.is_active ? `<div class="status-badge on-track" style="margin-bottom:6px">
+        <span class="status-dot" style="animation:pulse 1.5s infinite"></span>
+        Now Online (+${d.active_extra_hours.toFixed(1)}h live)
+      </div><br>` : ''}
+      <div class="status-badge ${statusClass}">
+        <span class="status-dot"></span>
+        ${statusText} (${d.diff_from_target >= 0 ? '+' : ''}${d.diff_from_target.toFixed(1)}h)
+      </div>
+    </div>
+
+    <!-- Key Stats -->
+    <div class="card fade-in" style="margin-top:16px">
+      <div class="card-title">Current Stats</div>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Total Hours</div>
+          <div class="stat-value accent">${d.total_logged_hours}<span class="stat-suffix">h</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Avg / Day</div>
+          <div class="stat-value ${d.avg_hours_per_day >= 8 ? 'green' : d.avg_hours_per_day >= 6 ? 'orange' : 'red'}">${d.avg_hours_per_day}<span class="stat-suffix">h</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Elapsed</div>
+          <div class="stat-value" style="color:var(--text)">${d.elapsed_days}<span class="stat-suffix"> days</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Remaining</div>
+          <div class="stat-value" style="color:var(--text)">${d.remaining_days}<span class="stat-suffix"> days</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Remaining Required -->
+    ${d.remaining_days > 0 ? `
+    <div class="remaining-card fade-in">
+      <div class="remaining-title">Required Avg for Remaining Days</div>
+      <div class="remaining-value ${reqAvgClass}">${d.required_avg_remaining}<span class="stat-suffix"> h/day</span></div>
+      <div class="remaining-desc">
+        Remaining ${d.remaining_hours_needed}h in ${d.remaining_days} days to reach ${d.target_hours_per_day}h/day target
+      </div>
+    </div>` : ''}
+
+    <!-- Daily Chart -->
+    <div class="card fade-in">
+      <div class="card-title">Daily Breakdown (Feb)</div>
+      <div class="chart-container" style="position:relative">
+        <div class="chart">
+          ${bars}
+        </div>
+        <div class="chart-target-line" style="bottom:calc(${targetPct}% * 90 / 100 + 24px)"></div>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:12px; justify-content:center">
+        <span style="font-size:10px;color:var(--text-dim)">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);vertical-align:middle;margin-right:3px"></span>8h+
+        </span>
+        <span style="font-size:10px;color:var(--text-dim)">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent-light);vertical-align:middle;margin-right:3px"></span>&lt;8h
+        </span>
+        <span style="font-size:10px;color:var(--text-dim)">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;border:1px dashed var(--red);vertical-align:middle;margin-right:3px;opacity:0.5"></span>Target 8h
+        </span>
+      </div>
+    </div>
+
+    <div class="updated">
+      Updated: ${new Date(d.updated_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
+    </div>
+  `;
+}
+
+async function loadData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+
+  try {
+    // GitHub Pages: read from static per-user JSON (cache-busted with timestamp)
+    const resp = await fetch(`data/${encodeURIComponent(LOGIN)}.json?t=${Date.now()}`);
+    if (!resp.ok) throw new Error(`User "${LOGIN}" not found (HTTP ${resp.status})`);
+    const data = await resp.json();
+    render(data);
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <div class="header-label">Piscine Commitment Tracker</div>
+      <h1>${LOGIN}</h1>
+    </div>
+    <div class="error-card">
+      <h3>Error</h3>
+      <p>${msg}</p>
+      <p style="margin-top:12px;font-size:11px">Data is updated every 5 minutes via GitHub Actions</p>
+    </div>
+  `;
+}
+
+loadData();
+// Auto refresh every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
