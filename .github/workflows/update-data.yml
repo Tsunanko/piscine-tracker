@@ -2,8 +2,11 @@ name: Update Piscine Data
 
 on:
   schedule:
-    # Every 30 minutes (monthly: ~1,440 min - well within free 2,000 min limit)
-    - cron: '*/30 * * * *'
+    # Daytime (9-18 JST): every 30 minutes (18 runs/day)
+    - cron: '*/30 9-18 * * *'
+    # Nighttime (18-9 JST): every hour (15 runs/day)
+    # Total: ~33 runs/day × 1.5min = 1,485min/month (within 2,000 min limit)
+    - cron: '0 18-23,0-8 * * *'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
