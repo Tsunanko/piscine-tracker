@@ -1,0 +1,28 @@
+name: Deploy Static Pages
+
+# コード変更(HTML/JS/CSS/Python)をpushした際に即座にGitHub Pagesへデプロイ
+# データ更新(fetch_data.py実行)は update-data.yml のスケジュール実行が担当
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          force_orphan: false
