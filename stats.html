@@ -312,7 +312,7 @@
   <!-- 検索バー -->
   <div class="search-bar">
     <input type="text" class="search-input" id="searchInput"
-      placeholder="ログイン名で検索してハイライト... (例: yuichika)"
+      placeholder="ログイン名でハイライト"
       oninput="onSearch(this.value)" />
     <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     <div class="search-result" id="searchResult"></div>
@@ -454,6 +454,18 @@ async function loadData() {
     `全${allStudents.length}人` + (hasPassData ? ' · 合否データあり' : '');
 
   buildAllCorrTable();
+
+  // URL パラメータ ?login=XXX があれば自動ハイライト
+  const urlLogin = new URLSearchParams(window.location.search).get('login');
+  if (urlLogin) {
+    searchLogin = urlLogin.toLowerCase();
+    const input = document.getElementById('searchInput');
+    if (input) {
+      input.value = urlLogin;
+      document.getElementById('searchClear').style.display = 'block';
+    }
+  }
+
   render();
 }
 
@@ -720,7 +732,7 @@ function renderChart(cached) {
         const el = elements.find(e => e.datasetIndex === 0);
         if (el) {
           const login = pts[el.index].login;
-          window.location.href = `${login}.html`;
+          window.location.href = `index.html?login=${encodeURIComponent(login)}`;
         }
       },
       onHover(event, elements) {
@@ -751,14 +763,14 @@ function renderChart(cached) {
           title: { display: true, text: tab.xLabel, color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0' },
-          min: xMin - xPad,
+          min: Math.max(0, xMin - xPad),
           max: xMax + xPad,
         },
         y: {
           title: { display: true, text: tab.yLabel, color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0' },
-          min: yMin - yPad,
+          min: Math.max(0, yMin - yPad),
           max: yMax + yPad,
         },
       },

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Piscine Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #0f0f14;
@@ -387,7 +388,10 @@
 </head>
 <body>
   <div class="container" id="app">
-    <a href="dashboard.html" class="back-link">← Dashboard</a>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
+      <a id="statsLinkInit" href="stats.html" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
+    </div>
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <div class="loading-text">Loading location data...</div>
@@ -414,6 +418,10 @@
 const CIRCUMFERENCE = 2 * Math.PI * 85;
 const params = new URLSearchParams(window.location.search);
 const LOGIN = params.get('login') || 'yuichika';
+
+// 初期表示の統計リンクにもloginを付ける
+const initStatsLink = document.getElementById('statsLinkInit');
+if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}`;
 
 function render(d) {
   const app = document.getElementById('app');
@@ -464,7 +472,10 @@ function render(d) {
   const offset = CIRCUMFERENCE - (d.progress_pct / 100) * CIRCUMFERENCE;
 
   app.innerHTML = `
-    <a href="dashboard.html" class="back-link">← Dashboard</a>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
+      <a href="stats.html?login=${encodeURIComponent(d.login)}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
+    </div>
     <div class="header fade-in">
       <div class="header-label">Piscine Commitment Tracker</div>
       ${d.image_small ? `<img src="${d.image_small}" alt="${d.login}" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--accent);object-fit:cover;display:block;margin:0 auto 10px">` : ''}
@@ -617,6 +628,24 @@ function render(d) {
       }).join('')}
     </div>` : ''}
 
+    <!-- ミニ散布図：全体での位置 -->
+    <div class="card fade-in" style="padding:16px 14px 14px">
+      <div class="card-title">全体での位置 (時間 × Level)</div>
+      <div style="font-size:11px;color:var(--text-dim);text-align:center;margin-bottom:6px">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff7675;margin-right:4px;vertical-align:middle"></span>あなた
+        &nbsp;&nbsp;
+        <span style="display:inline-block;border-top:2px dashed rgba(253,203,110,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>時間平均
+        &nbsp;&nbsp;
+        <span style="display:inline-block;border-top:2px dashed rgba(0,206,201,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>Level平均
+      </div>
+      <div style="position:relative;height:220px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}'">
+        <canvas id="miniScatterCanvas"></canvas>
+      </div>
+      <div style="text-align:center;margin-top:8px">
+        <a href="stats.html?login=${encodeURIComponent(d.login)}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
+      </div>
+    </div>
+
     <div class="updated">
       Updated: ${new Date(d.updated_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
     </div>
@@ -633,10 +662,97 @@ async function loadData() {
     if (!resp.ok) throw new Error(`User "${LOGIN}" not found (HTTP ${resp.status})`);
     const data = await resp.json();
     render(data);
+    renderMiniChart(data.login);  // 全体散布図（非同期・ノンブロッキング）
   } catch (e) {
     showError(e.message);
   } finally {
     btn.classList.remove('spinning');
+  }
+}
+
+// ─── Mini Scatter Chart ───────────────────────
+let miniChartInstance = null;
+
+async function renderMiniChart(login) {
+  try {
+    const res = await fetch('data.json');
+    const d = await res.json();
+    const all = [...(d.online || []), ...(d.offline || [])];
+
+    const pts = all
+      .filter(s => s.total_hours != null && s.total_hours >= 0 && s.level != null && s.level > 0)
+      .map(s => ({ x: s.total_hours, y: s.level, login: s.login }));
+
+    if (pts.length === 0) return;
+
+    const xs = pts.map(p => p.x);
+    const ys = pts.map(p => p.y);
+    const xMean = xs.reduce((a,b)=>a+b,0) / xs.length;
+    const yMean = ys.reduce((a,b)=>a+b,0) / ys.length;
+    const xMax = Math.max(...xs);
+    const yMax = Math.max(...ys);
+
+    const canvas = document.getElementById('miniScatterCanvas');
+    if (!canvas) return;
+    if (miniChartInstance) { miniChartInstance.destroy(); miniChartInstance = null; }
+
+    miniChartInstance = new Chart(canvas.getContext('2d'), {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: '学生',
+            data: pts,
+            backgroundColor: pts.map(p => p.login === login ? 'rgba(255,118,117,1)' : 'rgba(108,92,231,0.45)'),
+            pointRadius: pts.map(p => p.login === login ? 9 : 4),
+            pointHoverRadius: pts.map(p => p.login === login ? 11 : 6),
+            pointBorderColor: pts.map(p => p.login === login ? 'rgba(255,255,255,0.9)' : 'transparent'),
+            pointBorderWidth: pts.map(p => p.login === login ? 2 : 0),
+            order: 2,
+          },
+          {  // 時間平均 縦線
+            data: [{x: xMean, y: 0}, {x: xMean, y: yMax * 1.1}],
+            type: 'line', borderColor: 'rgba(253,203,110,0.65)', borderWidth: 1.5,
+            borderDash: [4,3], pointRadius: 0, fill: false, order: 1,
+          },
+          {  // Level平均 横線
+            data: [{x: 0, y: yMean}, {x: xMax * 1.1, y: yMean}],
+            type: 'line', borderColor: 'rgba(0,206,201,0.65)', borderWidth: 1.5,
+            borderDash: [4,3], pointRadius: 0, fill: false, order: 1,
+          },
+        ],
+      },
+      options: {
+        animation: { duration: 400 },
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter(item) { return item.datasetIndex === 0; },
+            callbacks: {
+              label(ctx) {
+                return ` ${ctx.raw.login}: ${Number(ctx.raw.x).toFixed(1)}h / Lv${Number(ctx.raw.y).toFixed(2)}`;
+              },
+            },
+            backgroundColor: '#1a1a24', borderColor: '#2a2a3a', borderWidth: 1,
+            bodyColor: '#e8e8f0', padding: 8,
+          },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'ログイン時間 (h)', color: '#8888a0', font: { size: 10 } },
+            grid: { color: '#2a2a3a' }, ticks: { color: '#8888a0', font: { size: 9 } }, min: 0,
+          },
+          y: {
+            title: { display: true, text: 'Level', color: '#8888a0', font: { size: 10 } },
+            grid: { color: '#2a2a3a' }, ticks: { color: '#8888a0', font: { size: 9 } }, min: 0,
+          },
+        },
+      },
+    });
+  } catch(e) {
+    console.warn('mini chart error:', e);
   }
 }
 
