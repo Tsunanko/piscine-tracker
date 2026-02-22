@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>統計分析 - Piscine Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a24;
+    --surface2: #22222e;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00cec9;
+    --green-dim: #00b8941a;
+    --red: #ff7675;
+    --red-dim: #ff76751a;
+    --orange: #fdcb6e;
+    --gradient: linear-gradient(135deg, #6c5ce7, #00cec9);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+
+  /* ── ヘッダー ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .back-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .back-btn:hover { color: var(--text); border-color: var(--accent); }
+  .header-title {
+    font-size: 18px;
+    font-weight: 700;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header-sub {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ── タブ ── */
+  .tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+  .tab-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* ── 相関カード ── */
+  .corr-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .corr-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .corr-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .r-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .r-value {
+    font-size: 24px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .r-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .r-interp {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 340px;
+  }
+
+  /* ── サマリー行 ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+  }
+  @media (max-width: 500px) {
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .summary-item {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .summary-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .summary-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent-light);
+  }
+
+  /* ── 全ペアサマリーテーブル ── */
+  .all-corr {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .all-corr-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+  .corr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .corr-table th {
+    text-align: left;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 11px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .corr-table td {
+    padding: 8px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .corr-table tr:last-child td { border-bottom: none; }
+  .corr-table tr { cursor: pointer; transition: background 0.1s; }
+  .corr-table tr:hover td { background: var(--surface2); }
+
+  .loading {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 60px 0;
+    font-size: 14px;
+  }
+
+  /* pass/fail 凡例（合否データがある場合） */
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <a href="dashboard.html" class="back-btn">← Dashboard</a>
+    <div class="header-title">📊 統計分析</div>
+    <div class="header-sub" id="headerSub">読み込み中...</div>
+  </div>
+
+  <!-- タブ -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab(0)">時間 × Level</button>
+    <button class="tab-btn" onclick="switchTab(1)">時間 × レビュー回数</button>
+    <button class="tab-btn" onclick="switchTab(2)">Level × レビュー回数</button>
+  </div>
+
+  <!-- メインチャートカード -->
+  <div class="corr-card" id="mainCard">
+    <div class="loading">データ読み込み中...</div>
+  </div>
+
+  <!-- 全ペア相関サマリー -->
+  <div class="all-corr" id="allCorrTable" style="display:none">
+    <div class="all-corr-title">相関係数まとめ</div>
+    <table class="corr-table">
+      <thead>
+        <tr>
+          <th>指標ペア</th>
+          <th>相関係数 r</th>
+          <th>強さ</th>
+          <th>n</th>
+        </tr>
+      </thead>
+      <tbody id="corrTableBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// データ & 設定
+// ─────────────────────────────────────────────
+const TABS = [
+  { label: '時間 × Level',         xKey: 'total_hours', yKey: 'level',        xLabel: 'ログイン時間 (h)', yLabel: 'Level' },
+  { label: '時間 × レビュー回数',   xKey: 'total_hours', yKey: 'review_given', xLabel: 'ログイン時間 (h)', yLabel: 'レビュー回数' },
+  { label: 'Level × レビュー回数',  xKey: 'level',       yKey: 'review_given', xLabel: 'Level',           yLabel: 'レビュー回数' },
+];
+
+let currentTab = 0;
+let allStudents = [];
+let passes = {};          // login → 'pass'|'fail'|undefined
+let chartInstance = null;
+let hasPassData = false;
+let hasReviewData = false;
+
+// ─────────────────────────────────────────────
+// ユーティリティ
+// ─────────────────────────────────────────────
+function pearsonR(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mx = xs.reduce((a,b)=>a+b,0)/n;
+  const my = ys.reduce((a,b)=>a+b,0)/n;
+  const num = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my), 0);
+  const den = Math.sqrt(xs.reduce((s,x)=>s+(x-mx)**2,0) * ys.reduce((s,y)=>s+(y-my)**2,0));
+  return den === 0 ? 0 : num/den;
+}
+
+function linearRegLine(xs, ys) {
+  const n = xs.length;
+  const mx = xs.reduce((a,b)=>a+b,0)/n;
+  const my = ys.reduce((a,b)=>a+b,0)/n;
+  const slope = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0) / xs.reduce((s,x)=>s+(x-mx)**2,0);
+  const intercept = my - slope*mx;
+  return { slope, intercept };
+}
+
+function rColor(r) {
+  const abs = Math.abs(r);
+  if (abs >= 0.7) return '#00cec9';
+  if (abs >= 0.4) return '#fdcb6e';
+  return '#8888a0';
+}
+
+function rInterp(r) {
+  const abs = Math.abs(r);
+  const dir = r >= 0 ? '正' : '負';
+  if (abs >= 0.7) return { text: `強い${dir}の相関`, bg: '#00cec91a', color: '#00cec9' };
+  if (abs >= 0.4) return { text: `中程度の${dir}の相関`, bg: '#fdcb6e1a', color: '#fdcb6e' };
+  if (abs >= 0.2) return { text: `弱い${dir}の相関`, bg: '#a29bfe1a', color: '#a29bfe' };
+  return { text: 'ほぼ相関なし', bg: '#8888a01a', color: '#8888a0' };
+}
+
+function pointColor(login) {
+  if (!hasPassData) return 'rgba(108,92,231,0.75)';
+  const p = passes[login];
+  if (p === 'pass') return 'rgba(0,206,201,0.80)';
+  if (p === 'fail') return 'rgba(255,118,117,0.80)';
+  return 'rgba(136,136,160,0.55)';
+}
+
+function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function stddev(arr) {
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((s,v)=>s+(v-m)**2,0)/arr.length);
+}
+
+// ─────────────────────────────────────────────
+// データ読み込み
+// ─────────────────────────────────────────────
+async function loadData() {
+  // data.json（online + offline の全学生）
+  const res = await fetch('data.json?' + Date.now());
+  const d = await res.json();
+  const all = [...(d.online || []), ...(d.offline || [])];
+
+  // 重複除去（loginキーで）
+  const map = {};
+  for (const s of all) map[s.login] = s;
+  allStudents = Object.values(map);
+
+  // review_given があるか確認
+  hasReviewData = allStudents.some(s => s.review_given != null && s.review_given > 0);
+
+  // passes.json（オプション）
+  try {
+    const pr = await fetch('data/passes.json?' + Date.now());
+    if (pr.ok) {
+      passes = await pr.json();
+      hasPassData = Object.keys(passes).length > 0;
+    }
+  } catch(_) {}
+
+  // ヘッダー更新
+  document.getElementById('headerSub').textContent =
+    `全${allStudents.length}人` + (hasPassData ? ' · 合否データあり' : '');
+
+  buildAllCorrTable();
+  render();
+}
+
+// ─────────────────────────────────────────────
+// タブ切り替え
+// ─────────────────────────────────────────────
+function switchTab(i) {
+  currentTab = i;
+  document.querySelectorAll('.tab-btn').forEach((b,j)=>
+    b.classList.toggle('active', i===j));
+  render();
+}
+
+// ─────────────────────────────────────────────
+// メインレンダリング
+// ─────────────────────────────────────────────
+function render() {
+  const tab = TABS[currentTab];
+
+  // データフィルタリング（両軸が有効な数値の学生）
+  let pts = allStudents.map(s => ({
+    x: s[tab.xKey],
+    y: s[tab.yKey],
+    login: s.login,
+  })).filter(p => p.x != null && p.y != null && !isNaN(p.x) && !isNaN(p.y));
+
+  // レビューが全員0の場合はタブ内でメッセージ
+  const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
+  if (reviewTab && !hasReviewData) {
+    document.getElementById('mainCard').innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+        <div style="font-size:32px;margin-bottom:12px">⏳</div>
+        <div style="font-size:14px">レビュー回数データはまだ更新中です</div>
+        <div style="font-size:12px;margin-top:6px">次のデータ更新後（最大1時間）に表示されます</div>
+      </div>`;
+    return;
+  }
+
+  const xs = pts.map(p=>p.x);
+  const ys = pts.map(p=>p.y);
+  const r = pearsonR(xs, ys);
+  const interp = rInterp(r);
+  const reg = linearRegLine(xs, ys);
+
+  // 回帰直線の2点
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const regPts = [
+    { x: xMin, y: reg.slope*xMin + reg.intercept },
+    { x: xMax, y: reg.slope*xMax + reg.intercept },
+  ];
+
+  // サマリー統計
+  const xMean = mean(xs), xStd = stddev(xs);
+  const yMean = mean(ys), yStd = stddev(ys);
+
+  // HTML
+  document.getElementById('mainCard').innerHTML = `
+    <div class="corr-header">
+      <div class="corr-title">${tab.label}</div>
+      <div class="r-badge">
+        <div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">相関係数 r</div>
+          <div class="r-value" style="color:${rColor(r)}">${r.toFixed(3)}</div>
+        </div>
+        <div class="r-interp" style="background:${interp.bg};color:${interp.color}">${interp.text}</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="scatterCanvas"></canvas></div>
+    ${hasPassData ? `
+    <div class="legend">
+      <span><span class="legend-dot" style="background:#00cec9"></span>合格</span>
+      <span><span class="legend-dot" style="background:#ff7675"></span>不合格</span>
+      <span><span class="legend-dot" style="background:#8888a0"></span>未確定</span>
+    </div>` : ''}
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="summary-label">n（対象人数）</div>
+        <div class="summary-value">${pts.length}人</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">${tab.xLabel} 平均</div>
+        <div class="summary-value">${xMean.toFixed(1)}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">${tab.yLabel} 平均</div>
+        <div class="summary-value">${yMean.toFixed(2)}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">${tab.xLabel} 標準偏差</div>
+        <div class="summary-value">${xStd.toFixed(1)}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">${tab.yLabel} 標準偏差</div>
+        <div class="summary-value">${yStd.toFixed(2)}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">決定係数 r²</div>
+        <div class="summary-value">${(r*r).toFixed(3)}</div>
+      </div>
+    </div>`;
+
+  // Chart.js
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+  const ctx = document.getElementById('scatterCanvas').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: '学生',
+          data: pts.map(p=>({ x:p.x, y:p.y, login:p.login })),
+          backgroundColor: pts.map(p=>pointColor(p.login)),
+          pointRadius: 5,
+          pointHoverRadius: 8,
+          order: 2,
+        },
+        {
+          label: '回帰直線',
+          data: regPts,
+          type: 'line',
+          borderColor: 'rgba(162,155,254,0.6)',
+          borderWidth: 2,
+          borderDash: [5,4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      animation: { duration: 300 },
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const d = ctx.raw;
+              return ` ${d.login}  (${tab.xLabel}: ${Number(d.x).toFixed(1)}, ${tab.yLabel}: ${Number(d.y).toFixed(2)})`;
+            },
+          },
+          backgroundColor: '#1a1a24',
+          borderColor: '#2a2a3a',
+          borderWidth: 1,
+          titleColor: '#a29bfe',
+          bodyColor: '#e8e8f0',
+          padding: 10,
+        },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: tab.xLabel, color: '#8888a0', font: { size: 12 } },
+          grid: { color: '#2a2a3a' },
+          ticks: { color: '#8888a0' },
+        },
+        y: {
+          title: { display: true, text: tab.yLabel, color: '#8888a0', font: { size: 12 } },
+          grid: { color: '#2a2a3a' },
+          ticks: { color: '#8888a0' },
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────
+// 全ペア相関テーブル
+// ─────────────────────────────────────────────
+function buildAllCorrTable() {
+  const tbody = document.getElementById('corrTableBody');
+  tbody.innerHTML = '';
+
+  TABS.forEach((tab, i) => {
+    let pts = allStudents.map(s=>({
+      x: s[tab.xKey], y: s[tab.yKey], login: s.login,
+    })).filter(p=>p.x!=null&&p.y!=null&&!isNaN(p.x)&&!isNaN(p.y));
+
+    const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
+    if (reviewTab && !hasReviewData) {
+      tbody.innerHTML += `<tr onclick="switchTab(${i})">
+        <td>${tab.label}</td>
+        <td style="color:var(--text-dim)">—</td>
+        <td style="color:var(--text-dim);font-size:11px">データ更新待ち</td>
+        <td style="color:var(--text-dim)">—</td>
+      </tr>`;
+      return;
+    }
+
+    const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
+    const r = pearsonR(xs, ys);
+    const interp = rInterp(r);
+    tbody.innerHTML += `<tr onclick="switchTab(${i})">
+      <td>${tab.label}</td>
+      <td style="font-weight:700;color:${rColor(r)}">${r.toFixed(3)}</td>
+      <td><span style="font-size:11px;color:${interp.color}">${interp.text}</span></td>
+      <td style="color:var(--text-dim)">${pts.length}</td>
+    </tr>`;
+  });
+
+  document.getElementById('allCorrTable').style.display = 'block';
+}
+
+// ─────────────────────────────────────────────
+// 起動
+// ─────────────────────────────────────────────
+loadData().catch(e => {
+  document.getElementById('mainCard').innerHTML =
+    `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
+});
+</script>
+</body>
+</html>
