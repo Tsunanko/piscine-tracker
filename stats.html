@@ -77,7 +77,7 @@
   .tab-bar {
     display: flex;
     gap: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     flex-wrap: wrap;
   }
   .tab-btn {
@@ -98,6 +98,46 @@
     color: #fff;
     font-weight: 600;
   }
+
+  /* ── 検索バー ── */
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .search-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 8px 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text-dim); }
+  .search-clear {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    transition: color 0.15s;
+    display: none;
+  }
+  .search-clear:hover { color: var(--red); }
+  .search-result {
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 100px;
+  }
+  .search-result.found { color: var(--red); font-weight: 600; }
 
   /* ── 相関カード ── */
   .corr-card {
@@ -129,11 +169,6 @@
     font-weight: 800;
     font-variant-numeric: tabular-nums;
   }
-  .r-label {
-    font-size: 11px;
-    color: var(--text-dim);
-    line-height: 1.4;
-  }
   .r-interp {
     font-size: 12px;
     font-weight: 600;
@@ -141,9 +176,30 @@
     border-radius: 10px;
   }
 
+  /* ── 平均線の凡例 ── */
+  .mean-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+  }
+  .mean-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .mean-line-sample {
+    width: 20px;
+    height: 2px;
+    border-top: 2px dashed;
+    flex-shrink: 0;
+  }
+
   .chart-wrap {
     position: relative;
-    height: 340px;
+    height: 360px;
   }
 
   /* ── サマリー行 ── */
@@ -172,6 +228,8 @@
     font-weight: 700;
     color: var(--accent-light);
   }
+  .summary-value.highlight-x { color: var(--orange); }
+  .summary-value.highlight-y { color: var(--green); }
 
   /* ── 全ペアサマリーテーブル ── */
   .all-corr {
@@ -181,7 +239,6 @@
     padding: 20px;
   }
   .all-corr-title {
-    font-size: 14px;
     font-weight: 700;
     color: var(--text-dim);
     margin-bottom: 12px;
@@ -217,7 +274,7 @@
     font-size: 14px;
   }
 
-  /* pass/fail 凡例（合否データがある場合） */
+  /* pass/fail 凡例 */
   .legend {
     display: flex;
     gap: 16px;
@@ -250,6 +307,15 @@
     <button class="tab-btn active" onclick="switchTab(0)">時間 × Level</button>
     <button class="tab-btn" onclick="switchTab(1)">時間 × レビュー回数</button>
     <button class="tab-btn" onclick="switchTab(2)">Level × レビュー回数</button>
+  </div>
+
+  <!-- 検索バー -->
+  <div class="search-bar">
+    <input type="text" class="search-input" id="searchInput"
+      placeholder="ログイン名で検索してハイライト... (例: yuichika)"
+      oninput="onSearch(this.value)" />
+    <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    <div class="search-result" id="searchResult"></div>
   </div>
 
   <!-- メインチャートカード -->
@@ -287,10 +353,11 @@ const TABS = [
 
 let currentTab = 0;
 let allStudents = [];
-let passes = {};          // login → 'pass'|'fail'|undefined
+let passes = {};
 let chartInstance = null;
 let hasPassData = false;
 let hasReviewData = false;
+let searchLogin = '';   // 検索中のログイン名
 
 // ─────────────────────────────────────────────
 // ユーティリティ
@@ -330,7 +397,7 @@ function rInterp(r) {
   return { text: 'ほぼ相関なし', bg: '#8888a01a', color: '#8888a0' };
 }
 
-function pointColor(login) {
+function baseColor(login) {
   if (!hasPassData) return 'rgba(108,92,231,0.75)';
   const p = passes[login];
   if (p === 'pass') return 'rgba(0,206,201,0.80)';
@@ -345,23 +412,36 @@ function stddev(arr) {
 }
 
 // ─────────────────────────────────────────────
+// 検索
+// ─────────────────────────────────────────────
+function onSearch(val) {
+  searchLogin = val.trim().toLowerCase();
+  document.getElementById('searchClear').style.display = searchLogin ? 'block' : 'none';
+  renderChart();   // チャートだけ再描画（HTMLは維持）
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  searchLogin = '';
+  document.getElementById('searchClear').style.display = 'none';
+  document.getElementById('searchResult').textContent = '';
+  document.getElementById('searchResult').className = 'search-result';
+  renderChart();
+}
+
+// ─────────────────────────────────────────────
 // データ読み込み
 // ─────────────────────────────────────────────
 async function loadData() {
-  // data.json（online + offline の全学生）
   const res = await fetch('data.json?' + Date.now());
   const d = await res.json();
   const all = [...(d.online || []), ...(d.offline || [])];
-
-  // 重複除去（loginキーで）
   const map = {};
   for (const s of all) map[s.login] = s;
   allStudents = Object.values(map);
 
-  // review_given があるか確認
   hasReviewData = allStudents.some(s => s.review_given != null && s.review_given > 0);
 
-  // passes.json（オプション）
   try {
     const pr = await fetch('data/passes.json?' + Date.now());
     if (pr.ok) {
@@ -370,7 +450,6 @@ async function loadData() {
     }
   } catch(_) {}
 
-  // ヘッダー更新
   document.getElementById('headerSub').textContent =
     `全${allStudents.length}人` + (hasPassData ? ' · 合否データあり' : '');
 
@@ -389,20 +468,18 @@ function switchTab(i) {
 }
 
 // ─────────────────────────────────────────────
-// メインレンダリング
+// フルレンダリング（HTML + Chart）
 // ─────────────────────────────────────────────
 function render() {
   const tab = TABS[currentTab];
+  const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
 
-  // データフィルタリング（両軸が有効な数値の学生）
   let pts = allStudents.map(s => ({
     x: s[tab.xKey],
     y: s[tab.yKey],
     login: s.login,
   })).filter(p => p.x != null && p.y != null && !isNaN(p.x) && !isNaN(p.y));
 
-  // レビューが全員0の場合はタブ内でメッセージ
-  const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
   if (reviewTab && !hasReviewData) {
     document.getElementById('mainCard').innerHTML = `
       <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
@@ -419,18 +496,13 @@ function render() {
   const interp = rInterp(r);
   const reg = linearRegLine(xs, ys);
 
-  // 回帰直線の2点
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const regPts = [
-    { x: xMin, y: reg.slope*xMin + reg.intercept },
-    { x: xMax, y: reg.slope*xMax + reg.intercept },
-  ];
-
-  // サマリー統計
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
   const xMean = mean(xs), xStd = stddev(xs);
   const yMean = mean(ys), yStd = stddev(ys);
+  const xPad = (xMax - xMin) * 0.05;
+  const yPad = (yMax - yMin) * 0.05;
 
-  // HTML
   document.getElementById('mainCard').innerHTML = `
     <div class="corr-header">
       <div class="corr-title">${tab.label}</div>
@@ -443,6 +515,21 @@ function render() {
       </div>
     </div>
     <div class="chart-wrap"><canvas id="scatterCanvas"></canvas></div>
+    <div class="mean-legend">
+      <div class="mean-legend-item">
+        <div class="mean-line-sample" style="border-color:#fdcb6e"></div>
+        <span style="color:#fdcb6e">${tab.xLabel} 平均</span>
+        <span style="font-weight:700;color:#fdcb6e;margin-left:2px">${xMean.toFixed(1)}</span>
+      </div>
+      <div class="mean-legend-item">
+        <div class="mean-line-sample" style="border-color:#00cec9"></div>
+        <span style="color:#00cec9">${tab.yLabel} 平均</span>
+        <span style="font-weight:700;color:#00cec9;margin-left:2px">${yMean.toFixed(2)}</span>
+      </div>
+      <div class="mean-legend-item" style="margin-left:auto;color:var(--text-dim);font-size:10px">
+        --- 回帰直線
+      </div>
+    </div>
     ${hasPassData ? `
     <div class="legend">
       <span><span class="legend-dot" style="background:#00cec9"></span>合格</span>
@@ -456,11 +543,11 @@ function render() {
       </div>
       <div class="summary-item">
         <div class="summary-label">${tab.xLabel} 平均</div>
-        <div class="summary-value">${xMean.toFixed(1)}</div>
+        <div class="summary-value highlight-x">${xMean.toFixed(1)}</div>
       </div>
       <div class="summary-item">
         <div class="summary-label">${tab.yLabel} 平均</div>
-        <div class="summary-value">${yMean.toFixed(2)}</div>
+        <div class="summary-value highlight-y">${yMean.toFixed(2)}</div>
       </div>
       <div class="summary-item">
         <div class="summary-label">${tab.xLabel} 標準偏差</div>
@@ -476,29 +563,147 @@ function render() {
       </div>
     </div>`;
 
-  // Chart.js
+  // Chart を描画（変数を closure で渡す）
+  renderChart({ pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab });
+}
+
+// ─────────────────────────────────────────────
+// チャートのみ再描画（検索ハイライト用）
+// ─────────────────────────────────────────────
+function renderChart(cached) {
+  // cached がない場合は現在のデータから再構築
+  if (!cached) {
+    const tab = TABS[currentTab];
+    const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
+    if (reviewTab && !hasReviewData) return;
+    if (!document.getElementById('scatterCanvas')) return;
+
+    const pts = allStudents.map(s => ({
+      x: s[tab.xKey], y: s[tab.yKey], login: s.login,
+    })).filter(p => p.x != null && p.y != null && !isNaN(p.x) && !isNaN(p.y));
+    const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    const yMin = Math.min(...ys), yMax = Math.max(...ys);
+    const xMean = mean(xs), yMean = mean(ys);
+    const xPad = (xMax - xMin)*0.05, yPad = (yMax - yMin)*0.05;
+    const reg = linearRegLine(xs, ys);
+    cached = { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab };
+  }
+
+  const { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab } = cached;
+
+  // 検索マッチ判定
+  const hasSearch = searchLogin.length > 0;
+  const matchedLogin = hasSearch
+    ? (allStudents.find(s => s.login.toLowerCase() === searchLogin)?.login || null)
+    : null;
+
+  // 検索結果表示更新
+  const resultEl = document.getElementById('searchResult');
+  if (hasSearch) {
+    if (matchedLogin) {
+      const s = allStudents.find(s => s.login === matchedLogin);
+      const xVal = s[tab.xKey];
+      const yVal = s[tab.yKey];
+      resultEl.className = 'search-result found';
+      resultEl.textContent = xVal != null && yVal != null
+        ? `${matchedLogin}: ${Number(xVal).toFixed(1)} / ${Number(yVal).toFixed(2)}`
+        : `${matchedLogin}: データなし`;
+    } else {
+      resultEl.className = 'search-result';
+      resultEl.textContent = '見つかりません';
+    }
+  } else {
+    resultEl.className = 'search-result';
+    resultEl.textContent = '';
+  }
+
+  // 点の色・サイズを決定
+  const colors = pts.map(p => {
+    if (matchedLogin && p.login === matchedLogin) return 'rgba(255,118,117,1)';  // 赤ハイライト
+    if (hasSearch) return 'rgba(108,92,231,0.18)';  // 他は薄く
+    return baseColor(p.login);
+  });
+  const radii = pts.map(p =>
+    (matchedLogin && p.login === matchedLogin) ? 10 : 5
+  );
+  const borders = pts.map(p =>
+    (matchedLogin && p.login === matchedLogin) ? 'rgba(255,255,255,0.9)' : 'transparent'
+  );
+  const borderWidths = pts.map(p =>
+    (matchedLogin && p.login === matchedLogin) ? 2 : 0
+  );
+
+  // 平均線の2点ずつ（縦線: x=xMean、横線: y=yMean）
+  const meanXLine = [
+    { x: xMean, y: yMin - yPad },
+    { x: xMean, y: yMax + yPad },
+  ];
+  const meanYLine = [
+    { x: xMin - xPad, y: yMean },
+    { x: xMax + xPad, y: yMean },
+  ];
+  // 回帰直線
+  const regPts = [
+    { x: xMin - xPad, y: reg.slope*(xMin-xPad) + reg.intercept },
+    { x: xMax + xPad, y: reg.slope*(xMax+xPad) + reg.intercept },
+  ];
+
   if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
-  const ctx = document.getElementById('scatterCanvas').getContext('2d');
+  const canvas = document.getElementById('scatterCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
   chartInstance = new Chart(ctx, {
     type: 'scatter',
     data: {
       datasets: [
+        // ① 学生の点（通常 or ハイライト）
         {
           label: '学生',
           data: pts.map(p=>({ x:p.x, y:p.y, login:p.login })),
-          backgroundColor: pts.map(p=>pointColor(p.login)),
-          pointRadius: 5,
-          pointHoverRadius: 8,
+          backgroundColor: colors,
+          pointRadius: radii,
+          pointHoverRadius: radii.map(r=>r+3),
+          pointBorderColor: borders,
+          pointBorderWidth: borderWidths,
+          order: 3,
+        },
+        // ② X軸平均線（縦）
+        {
+          label: `${tab.xLabel} 平均: ${xMean.toFixed(1)}`,
+          data: meanXLine,
+          type: 'line',
+          borderColor: 'rgba(253,203,110,0.7)',
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
           order: 2,
         },
+        // ③ Y軸平均線（横）
+        {
+          label: `${tab.yLabel} 平均: ${yMean.toFixed(2)}`,
+          data: meanYLine,
+          type: 'line',
+          borderColor: 'rgba(0,206,201,0.7)',
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
+          order: 2,
+        },
+        // ④ 回帰直線
         {
           label: '回帰直線',
           data: regPts,
           type: 'line',
-          borderColor: 'rgba(162,155,254,0.6)',
-          borderWidth: 2,
-          borderDash: [5,4],
+          borderColor: 'rgba(162,155,254,0.5)',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
           pointRadius: 0,
           fill: false,
           tension: 0,
@@ -507,16 +712,30 @@ function render() {
       ],
     },
     options: {
-      animation: { duration: 300 },
+      animation: { duration: 200 },
       responsive: true,
       maintainAspectRatio: false,
+      onClick(event, elements) {
+        // 学生の点（dataset index 0）をクリックしたら個人ページへ
+        const el = elements.find(e => e.datasetIndex === 0);
+        if (el) {
+          const login = pts[el.index].login;
+          window.location.href = `${login}.html`;
+        }
+      },
+      onHover(event, elements) {
+        const el = elements.find(e => e.datasetIndex === 0);
+        event.native.target.style.cursor = el ? 'pointer' : 'default';
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
+          filter(item) { return item.datasetIndex === 0; },  // 学生点のみtooltip
           callbacks: {
             label(ctx) {
               const d = ctx.raw;
-              return ` ${d.login}  (${tab.xLabel}: ${Number(d.x).toFixed(1)}, ${tab.yLabel}: ${Number(d.y).toFixed(2)})`;
+              if (!d.login) return '';
+              return ` ${d.login}  (${tab.xLabel}: ${Number(d.x).toFixed(1)}, ${tab.yLabel}: ${Number(d.y).toFixed(2)})  ← クリックで詳細`;
             },
           },
           backgroundColor: '#1a1a24',
@@ -532,11 +751,15 @@ function render() {
           title: { display: true, text: tab.xLabel, color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0' },
+          min: xMin - xPad,
+          max: xMax + xPad,
         },
         y: {
           title: { display: true, text: tab.yLabel, color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0' },
+          min: yMin - yPad,
+          max: yMax + yPad,
         },
       },
     },
@@ -551,8 +774,8 @@ function buildAllCorrTable() {
   tbody.innerHTML = '';
 
   TABS.forEach((tab, i) => {
-    let pts = allStudents.map(s=>({
-      x: s[tab.xKey], y: s[tab.yKey], login: s.login,
+    const pts = allStudents.map(s=>({
+      x: s[tab.xKey], y: s[tab.yKey],
     })).filter(p=>p.x!=null&&p.y!=null&&!isNaN(p.x)&&!isNaN(p.y));
 
     const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
