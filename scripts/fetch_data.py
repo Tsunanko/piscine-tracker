@@ -332,7 +332,21 @@ def main():
             user_jsons[login] = user_json
 
         except Exception as e:
-            print(f"  [WARN] {login}: {e}")
+            print(f"  [ERROR] {login}: {type(e).__name__}: {e}")
+            # fetch失敗をNoneでマーク（0と区別する）
+            students[login]["total_hours"] = None
+            students[login]["fetch_failed"] = True
+            # リトライは1回だけ実施
+            time.sleep(2)
+            try:
+                print(f"  [RETRY] {login}...")
+                stats = api_get(token, f"/v2/users/{login}/locations_stats", loc_params)
+                total_hours_from_stats = sum(parse_duration(dur) for dur in stats.values())
+                students[login]["total_hours"] = round(total_hours_from_stats, 2)
+                students[login]["fetch_failed"] = False
+                print(f"  [RETRY OK] {login}: {students[login]['total_hours']:.1f}h")
+            except Exception as e2:
+                print(f"  [RETRY FAIL] {login}: {e2}")
 
         if (i + 1) % 20 == 0 or (i + 1) == len(login_list):
             print(f"  {i + 1}/{len(login_list)} done")
@@ -410,17 +424,19 @@ def main():
     for s in all_students:
         login = s["login"]
         # dashboardに必要なフィールドのみ（dailyは除く）
+        failed = s.get("fetch_failed", False)
         entry = {
             "login": s["login"],
             "display_name": s["display_name"],
             "image_small": s["image_small"],
-            "total_hours": s["total_hours"],
+            "total_hours": None if failed else s["total_hours"],  # 取得失敗はNoneで区別
             "level": s["level"],
-            "level_deviation": s.get("level_deviation", 50.0),
-            "hours_deviation": s.get("hours_deviation", 50.0),
-            "review_deviation": s.get("review_deviation", 50.0),
-            "composite_deviation": s.get("composite_deviation", 50.0),
-            "review_given": s.get("review_given", 0),
+            "level_deviation": None if failed else s.get("level_deviation", 50.0),
+            "hours_deviation": None if failed else s.get("hours_deviation", 50.0),
+            "review_deviation": None if failed else s.get("review_deviation", 50.0),
+            "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
+            "review_given": None if failed else s.get("review_given", 0),
+            "fetch_failed": failed,
         }
         if login in online_logins:
             loc = active_map[login]
@@ -428,8 +444,8 @@ def main():
         else:
             offline.append(entry)
 
-    online.sort(key=lambda x: x.get("total_hours", 0), reverse=True)
-    offline.sort(key=lambda x: x.get("total_hours", 0), reverse=True)
+    online.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
+    offline.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
 
     dashboard = {
         "online": online,
