@@ -231,6 +231,105 @@
   .summary-value.highlight-x { color: var(--orange); }
   .summary-value.highlight-y { color: var(--green); }
 
+  /* ── 象限分析 ── */
+  .quadrant-section {
+    margin-top: 18px;
+  }
+  .quadrant-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .quadrant-axis-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .quadrant-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .quadrant-y-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    transform: rotate(180deg);
+  }
+  .quadrant-cells {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 6px;
+  }
+  .quadrant-cell {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+  .quadrant-cell.me {
+    border-width: 2px;
+    background: #1e1e2e;
+  }
+  .qc-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 4px;
+  }
+  .qc-icon { font-size: 14px; }
+  .qc-name {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .qc-count {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 3px;
+  }
+  .qc-sub {
+    font-size: 9px;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+  .qc-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+  .qc-me-tag {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--red);
+  }
+  .qc-passrate {
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+
   /* ── 全ペアサマリーテーブル ── */
   .all-corr {
     background: var(--surface);
@@ -515,6 +614,74 @@ function render() {
   const xPad = (xMax - xMin) * 0.05;
   const yPad = (yMax - yMin) * 0.05;
 
+  // ── 象限分析 ──────────────────────────────────
+  // 右上(ru)=高x高y / 左上(lu)=低x高y / 左下(lb)=低x低y / 右下(rb)=高x低y
+  const qBuckets = { ru: [], lu: [], lb: [], rb: [] };
+  for (const p of pts) {
+    const qx = p.x >= xMean ? 'r' : 'l';
+    const qy = p.y >= yMean ? 'u' : 'b';
+    qBuckets[qx + qy].push(p);
+  }
+  // 象限ごとの合否率（hasPassData時）
+  function qPassRate(bucket) {
+    if (!hasPassData) return null;
+    const known = bucket.filter(p => passes[p.login] !== undefined);
+    if (known.length === 0) return null;
+    const passed = known.filter(p => passes[p.login] === 'pass').length;
+    return { passed, total: known.length, pct: Math.round(passed / known.length * 100) };
+  }
+  // ハイライト中の学生がどの象限か
+  const matchedInQuad = searchLogin
+    ? (allStudents.find(s => s.login.toLowerCase() === searchLogin)?.login || null)
+    : null;
+  function meQuad(bucket) {
+    return matchedInQuad ? bucket.some(p => p.login === matchedInQuad) : false;
+  }
+  // 各象限の定義（タブ別）
+  const qInfo = {
+    total_hours: {
+      level:        { ru: {icon:'🌟',name:'優秀',   sub:'高時間・高Level', color:'#00cec9', badge:'合格有利'},
+                      lu: {icon:'⚡',name:'効率型',  sub:'低時間・高Level', color:'#fdcb6e', badge:''},
+                      lb: {icon:'💧',name:'苦戦中',  sub:'低時間・低Level', color:'#ff7675', badge:''},
+                      rb: {icon:'💪',name:'努力型',  sub:'高時間・低Level', color:'#a29bfe', badge:''} },
+      review_given: { ru: {icon:'📚',name:'活発',   sub:'高時間・多レビュー', color:'#00cec9', badge:''},
+                      lu: {icon:'⚡',name:'効率型',  sub:'低時間・多レビュー', color:'#fdcb6e', badge:''},
+                      lb: {icon:'💧',name:'苦戦中',  sub:'低時間・少レビュー', color:'#ff7675', badge:''},
+                      rb: {icon:'📖',name:'黙々型',  sub:'高時間・少レビュー', color:'#a29bfe', badge:''} },
+    },
+    level: {
+      review_given: { ru: {icon:'🌟',name:'優秀',   sub:'高Level・多レビュー', color:'#00cec9', badge:''},
+                      lu: {icon:'📚',name:'支援型',  sub:'低Level・多レビュー', color:'#fdcb6e', badge:''},
+                      lb: {icon:'💧',name:'苦戦中',  sub:'低Level・少レビュー', color:'#ff7675', badge:''},
+                      rb: {icon:'🎯',name:'集中型',  sub:'高Level・少レビュー', color:'#a29bfe', badge:''} },
+    },
+  };
+  const qi = (qInfo[tab.xKey] || {})[tab.yKey] || {
+    ru: {icon:'↗',name:'高x高y', sub:'', color:'#00cec9', badge:''},
+    lu: {icon:'↖',name:'低x高y', sub:'', color:'#fdcb6e', badge:''},
+    lb: {icon:'↙',name:'低x低y', sub:'', color:'#ff7675', badge:''},
+    rb: {icon:'↘',name:'高x低y', sub:'', color:'#a29bfe', badge:''},
+  };
+
+  function quadCell(key, topRow) {
+    const info = qi[key];
+    const bucket = qBuckets[key];
+    const pr = qPassRate(bucket);
+    const isMe = meQuad(bucket);
+    const cellStyle = `border-color:${info.color}40${isMe ? ';border-color:'+info.color+';border-width:2px' : ''}`;
+    return `<div class="quadrant-cell${isMe ? ' me' : ''}" style="${cellStyle}">
+      ${isMe ? `<div class="qc-me-tag">● あなた</div>` : ''}
+      <div class="qc-header">
+        <span class="qc-icon">${info.icon}</span>
+        <span class="qc-name" style="color:${info.color}">${info.name}</span>
+      </div>
+      <div class="qc-count">${bucket.length}<span style="font-size:12px;font-weight:400;color:var(--text-dim)">人</span></div>
+      <div class="qc-sub">${info.sub}</div>
+      ${info.badge ? `<div class="qc-badge" style="background:${info.color}20;color:${info.color}">${info.badge}</div>` : ''}
+      ${pr ? `<div class="qc-passrate" style="color:${info.color}">合格率 ${pr.pct}% <span style="font-size:9px;color:var(--text-dim)">(${pr.passed}/${pr.total})</span></div>` : ''}
+    </div>`;
+  }
+
   document.getElementById('mainCard').innerHTML = `
     <div class="corr-header">
       <div class="corr-title">${tab.label}</div>
@@ -572,6 +739,21 @@ function render() {
       <div class="summary-item">
         <div class="summary-label">決定係数 r²</div>
         <div class="summary-value">${(r*r).toFixed(3)}</div>
+      </div>
+    </div>
+
+    <!-- 象限分析 -->
+    <div class="quadrant-section">
+      <div class="quadrant-title">象限分析 <span style="font-size:10px;font-weight:400">平均値で4分割</span></div>
+      <div class="quadrant-axis-label">${tab.xLabel}：少 ←───────────────────────────→ 多</div>
+      <div class="quadrant-row">
+        <div class="quadrant-y-label">${tab.yLabel}：少 ↓ 多</div>
+        <div class="quadrant-cells">
+          ${quadCell('lu', true)}
+          ${quadCell('ru', true)}
+          ${quadCell('lb', false)}
+          ${quadCell('rb', false)}
+        </div>
       </div>
     </div>`;
 
