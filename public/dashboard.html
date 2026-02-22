@@ -234,33 +234,54 @@
     margin-top: 2px;
   }
 
-  .student-hours {
+  /* 時間(左) + Level(右) 横並び */
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    width: 100%;
+    padding: 0 6px;
+    margin-top: 3px;
+    gap: 2px;
+  }
+  .metric-hours {
     font-size: 11px;
     font-weight: 700;
     color: var(--accent-light);
-    margin-top: 3px;
   }
-  .student-hours.high { color: var(--green); }
-  .student-hours.low { color: var(--red); }
-
-  .student-level {
+  .metric-hours.high { color: var(--green); }
+  .metric-hours.low { color: var(--red); }
+  .metric-level {
     font-size: 10px;
     color: var(--accent-light);
-    margin-top: 2px;
     font-weight: 600;
   }
+
+  /* 偏差値セクション (トグル対象) */
+  .dev-section { width: 100%; }
   .dev-label {
     font-size: 8px;
     color: var(--text-dim);
     letter-spacing: 0.5px;
     margin-top: 4px;
+    text-align: center;
     opacity: 0.7;
   }
-  .student-dev {
-    font-size: 9px;
+  .dev-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0 6px;
     margin-top: 1px;
+  }
+  .dev-val {
+    font-size: 9px;
     font-weight: 600;
   }
+
+  /* 偏差値トグルOFF時 */
+  .student-grid.hide-dev .dev-section { display: none; }
 
   .student-rank {
     font-size: 9px;
@@ -423,8 +444,9 @@
 let dashboardData = null;
 let currentFilter = 'all';
 let searchQuery = '';
-let currentSort = 'hours'; // 'hours', 'level', 'name'
+let currentSort = 'hours'; // 'hours', 'level', 'composite', 'name'
 let isComposing = false;
+let showDev = localStorage.getItem('showDev') !== 'false'; // default: ON
 
 function sortStudents(arr) {
   const sorted = [...arr];
@@ -435,11 +457,27 @@ function sortStudents(arr) {
     case 'level':
       sorted.sort((a, b) => (b.level || 0) - (a.level || 0));
       break;
+    case 'composite':
+      sorted.sort((a, b) => (b.composite_deviation || 50) - (a.composite_deviation || 50));
+      break;
     case 'name':
       sorted.sort((a, b) => a.login.localeCompare(b.login));
       break;
   }
   return sorted;
+}
+
+function toggleDev() {
+  showDev = !showDev;
+  localStorage.setItem('showDev', String(showDev));
+  applyDisplayState();
+  const btn = document.getElementById('toggleDevBtn');
+  if (btn) btn.classList.toggle('active', showDev);
+}
+
+function applyDisplayState() {
+  const grid = document.querySelector('.student-grid');
+  if (grid) grid.classList.toggle('hide-dev', !showDev);
 }
 
 function formatHours(h, loading) {
@@ -485,8 +523,8 @@ function renderDashboard() {
   // Apply sort
   allStudents = sortStudents(allStudents);
 
-  // Build global rank (before filters, all students sorted by hours)
-  const allForRank = [...d.online, ...d.offline].sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0));
+  // Build rank based on current sort (全学生対象・フィルター前)
+  const allForRank = sortStudents([...d.online, ...d.offline]);
   const rankMap = {};
   allForRank.forEach((s, i) => { rankMap[s.login] = i + 1; });
 
@@ -506,8 +544,9 @@ function renderDashboard() {
 
   // Build sort buttons
   const sortBtns = [
-    { key: 'hours', label: 'Hours' },
+    { key: 'hours', label: '時間' },
     { key: 'level', label: 'Level' },
+    { key: 'composite', label: '総合' },
     { key: 'name', label: 'Name' },
   ].map(s =>
     `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
@@ -532,24 +571,24 @@ function renderDashboard() {
                           : v >= 55 ? 'var(--green)'
                           : v >= 45 ? 'var(--text-dim)'
                           : 'var(--red)';
-    // 偏差値セクション: ラベル → 時間・Lv の順で表示
     const hStr = hDev != null ? hDev : '-';
     const lStr = lDev != null ? lDev : '-';
-    const devBadge = `
-      <div class="dev-label">偏差値</div>
-      <div class="student-dev" style="display:flex;gap:5px;justify-content:center">
-        <span style="color:${devColor(hDev)}">時${hStr}</span>
-        <span style="color:var(--border)">|</span>
-        <span style="color:${devColor(lDev)}">Lv${lStr}</span>
-      </div>`;
     return `
       <div class="student-card ${cls}" onclick="goToStudent('${student.login}')">
         <div class="student-rank">#${rank}</div>
         ${avatar}
         <div class="student-login" title="${student.display_name || student.login}">${student.login}</div>
-        <div class="student-hours ${hoursClass(hours)}">${formatHours(hours, false)}</div>
-        <div class="student-level">Lv ${level}</div>
-        ${devBadge}
+        <div class="metric-row">
+          <span class="metric-hours ${hoursClass(hours)}">${formatHours(hours, false)}</span>
+          <span class="metric-level">Lv ${level}</span>
+        </div>
+        <div class="dev-section">
+          <div class="dev-label">偏差値</div>
+          <div class="dev-row">
+            <span class="dev-val" style="color:${devColor(hDev)}">時${hStr}</span>
+            <span class="dev-val" style="color:${devColor(lDev)}">Lv${lStr}</span>
+          </div>
+        </div>
         ${seat}
       </div>`;
   }
@@ -589,6 +628,8 @@ function renderDashboard() {
     <div class="sort-bar fade-in">
       <label>Sort:</label>
       ${sortBtns}
+      <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+      <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
     </div>
 
     <div class="section-header fade-in">
@@ -602,6 +643,9 @@ function renderDashboard() {
       Updated: ${new Date(d.cached_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
     </div>
   `;
+
+  // Apply display toggles (CSSクラスで偏差値表示/非表示)
+  applyDisplayState();
 
   // Restore focus on search input
   const input = document.getElementById('searchInput');

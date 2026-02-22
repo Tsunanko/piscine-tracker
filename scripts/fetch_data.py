@@ -382,13 +382,16 @@ def main():
         level_dev = calc_deviation(level, level_mean, level_std)
         hours_dev = calc_deviation(hours, hours_mean, hours_std)
         review_dev = calc_deviation(reviews, review_mean, review_std)
+        composite_dev = round((level_dev + hours_dev + review_dev) / 3, 1)
         uj["level_deviation"] = level_dev
         uj["hours_deviation"] = hours_dev
         uj["review_deviation"] = review_dev
+        uj["composite_deviation"] = composite_dev
         # dashboard JSON 生成で使うためstudentsにも保存
         students[login]["level_deviation"] = level_dev
         students[login]["hours_deviation"] = hours_dev
         students[login]["review_deviation"] = review_dev
+        students[login]["composite_deviation"] = composite_dev
         students[login]["review_given"] = reviews
 
     # 5. 個人JSONファイルを一括書き込み
@@ -416,6 +419,7 @@ def main():
             "level_deviation": s.get("level_deviation", 50.0),
             "hours_deviation": s.get("hours_deviation", 50.0),
             "review_deviation": s.get("review_deviation", 50.0),
+            "composite_deviation": s.get("composite_deviation", 50.0),
             "review_given": s.get("review_given", 0),
         }
         if login in online_logins:
