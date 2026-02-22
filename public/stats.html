@@ -312,7 +312,7 @@
   <!-- 検索バー -->
   <div class="search-bar">
     <input type="text" class="search-input" id="searchInput"
-      placeholder="ログイン名で検索してハイライト... (例: yuichika)"
+      placeholder="ログイン名でハイライト"
       oninput="onSearch(this.value)" />
     <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     <div class="search-result" id="searchResult"></div>
@@ -763,14 +763,14 @@ function renderChart(cached) {
           title: { display: true, text: tab.xLabel, color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0' },
-          min: xMin - xPad,
+          min: Math.max(0, xMin - xPad),
           max: xMax + xPad,
         },
         y: {
           title: { display: true, text: tab.yLabel, color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0' },
-          min: yMin - yPad,
+          min: Math.max(0, yMin - yPad),
           max: yMax + yPad,
         },
       },
