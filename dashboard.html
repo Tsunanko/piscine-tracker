@@ -243,6 +243,18 @@
   .student-hours.high { color: var(--green); }
   .student-hours.low { color: var(--red); }
 
+  .student-level {
+    font-size: 10px;
+    color: var(--accent-light);
+    margin-top: 2px;
+    font-weight: 600;
+  }
+  .student-dev {
+    font-size: 9px;
+    margin-top: 1px;
+    font-weight: 600;
+  }
+
   .student-rank {
     font-size: 9px;
     color: var(--text-dim);
@@ -404,7 +416,7 @@
 let dashboardData = null;
 let currentFilter = 'all';
 let searchQuery = '';
-let currentSort = 'hours'; // 'hours', 'name'
+let currentSort = 'hours'; // 'hours', 'level', 'name'
 let isComposing = false;
 
 function sortStudents(arr) {
@@ -412,6 +424,9 @@ function sortStudents(arr) {
   switch (currentSort) {
     case 'hours':
       sorted.sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0));
+      break;
+    case 'level':
+      sorted.sort((a, b) => (b.level || 0) - (a.level || 0));
       break;
     case 'name':
       sorted.sort((a, b) => a.login.localeCompare(b.login));
@@ -485,6 +500,7 @@ function renderDashboard() {
   // Build sort buttons
   const sortBtns = [
     { key: 'hours', label: 'Hours' },
+    { key: 'level', label: 'Level' },
     { key: 'name', label: 'Name' },
   ].map(s =>
     `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
@@ -502,13 +518,31 @@ function renderDashboard() {
       : '';
     const hours = student.total_hours || 0;
     const rank = rankMap[student.login] || '-';
-    const isLoading = d.hours_loading;
+    const level = student.level != null ? student.level.toFixed(1) : '-';
+    const hDev = student.hours_deviation != null ? Math.round(student.hours_deviation) : null;
+    const lDev = student.level_deviation != null ? Math.round(student.level_deviation) : null;
+    const rDev = student.review_deviation != null ? Math.round(student.review_deviation) : null;
+    const rGiven = student.review_given != null ? student.review_given : null;
+    const devColor = (v) => v == null ? 'var(--text-dim)'
+                          : v >= 55 ? 'var(--green)'
+                          : v >= 45 ? 'var(--text-dim)'
+                          : 'var(--red)';
+    // 偏差値2行: 時間・Lv + レビュー
+    const devBadge = (hDev != null || lDev != null) ? `
+      <div class="student-dev" style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
+        ${hDev != null ? `<span style="color:${devColor(hDev)}">時:${hDev}</span>` : ''}
+        ${lDev != null ? `<span style="color:${devColor(lDev)}">Lv:${lDev}</span>` : ''}
+      </div>
+      ${(rGiven != null) ? `<div class="student-dev" style="color:${devColor(rDev)}">R:${rGiven}回(${rDev ?? '-'})</div>` : ''}
+    ` : '';
     return `
       <div class="student-card ${cls}" onclick="goToStudent('${student.login}')">
-            <div class="student-rank">#${rank}</div>
+        <div class="student-rank">#${rank}</div>
         ${avatar}
         <div class="student-login" title="${student.display_name || student.login}">${student.login}</div>
         <div class="student-hours ${hoursClass(hours)}">${formatHours(hours, false)}</div>
+        <div class="student-level">Lv ${level}</div>
+        ${devBadge}
         ${seat}
       </div>`;
   }
