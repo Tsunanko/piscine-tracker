@@ -405,6 +405,7 @@ let dashboardData = null;
 let currentFilter = 'all';
 let searchQuery = '';
 let currentSort = 'hours'; // 'hours', 'name'
+let isComposing = false;
 
 function sortStudents(arr) {
   const sorted = [...arr];
@@ -534,7 +535,10 @@ function renderDashboard() {
     </div>
 
     <div class="search-wrap fade-in">
-      <input type="text" class="search-input" id="searchInput" placeholder="Search by login..." value="${searchQuery}" oninput="onSearch(this.value)">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search by login..." value="${searchQuery}"
+        oncompositionstart="isComposing=true"
+        oncompositionend="isComposing=false; onSearch(this.value)"
+        oninput="if(!isComposing) onSearch(this.value)">
     </div>
 
     <div class="filter-bar fade-in">
@@ -555,17 +559,6 @@ function renderDashboard() {
 
     <div class="updated">
       Updated: ${new Date(d.cached_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
-      ${(() => {
-        const ageMin = (Date.now() - new Date(d.cached_at).getTime()) / 60000;
-        if (ageMin > 60) {
-          return `<br><a href="https://github.com/Tsunanko/piscine-tracker/actions/workflows/update-data.yml"
-            target="_blank"
-            style="color:var(--orange);font-size:11px;text-decoration:none;">
-            ⚠️ ${Math.floor(ageMin)}分前のデータ — GitHubで手動更新 →
-          </a>`;
-        }
-        return '';
-      })()}
     </div>
   `;
 
