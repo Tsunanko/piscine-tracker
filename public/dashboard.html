@@ -563,7 +563,12 @@ function renderDashboard() {
       ? `<div class="student-seat">${student.host.split('.')[0]}</div>`
       : '';
     const hours = student.total_hours || 0;
-    const rank = rankMap[student.login] || '-';
+    const rankNum = rankMap[student.login] || '-';
+    const rankPrefix = currentSort === 'hours' ? '時'
+                     : currentSort === 'level' ? 'Lv'
+                     : currentSort === 'composite' ? '総'
+                     : '';
+    const rank = `${rankPrefix}#${rankNum}`;
     const level = student.level != null ? student.level.toFixed(2) : '-';
     const hDev = student.hours_deviation != null ? Math.round(student.hours_deviation) : null;
     const lDev = student.level_deviation != null ? Math.round(student.level_deviation) : null;
@@ -575,7 +580,7 @@ function renderDashboard() {
     const lStr = lDev != null ? lDev : '-';
     return `
       <div class="student-card ${cls}" onclick="goToStudent('${student.login}')">
-        <div class="student-rank">#${rank}</div>
+        <div class="student-rank">${rank}</div>
         ${avatar}
         <div class="student-login" title="${student.display_name || student.login}">${student.login}</div>
         <div class="metric-row">
