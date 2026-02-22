@@ -638,7 +638,7 @@ function renderDashboard() {
     </div>
 
     <div class="section-header fade-in">
-      ALL STUDENTS <span class="section-count">(${allStudents.length})</span>
+      ${{hours:'時間ランキング', level:'Level ランキング', composite:'総合ランキング', name:'全学生'}[currentSort] || '全学生'} <span class="section-count">(${allStudents.length}人)</span>
     </div>
     ${allStudents.length > 0
       ? `<div class="student-grid fade-in">${cards}</div>`
