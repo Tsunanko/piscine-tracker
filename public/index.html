@@ -467,6 +467,7 @@ function render(d) {
     <a href="dashboard.html" class="back-link">← Dashboard</a>
     <div class="header fade-in">
       <div class="header-label">Piscine Commitment Tracker</div>
+      ${d.image_small ? `<img src="${d.image_small}" alt="${d.login}" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--accent);object-fit:cover;display:block;margin:0 auto 10px">` : ''}
       <h1>${d.login}</h1>
       <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
     </div>
@@ -554,19 +555,29 @@ function render(d) {
       </div>
     </div>
 
+    <!-- Projects -->
+    ${d.projects && d.projects.length > 0 ? `
+    <div class="card fade-in">
+      <div class="card-title">Projects</div>
+      ${d.projects.map(p => {
+        const color = p.status === 'in_progress' ? 'var(--orange)'
+                    : p.status === 'waiting_for_correction' ? 'var(--accent-light)'
+                    : p.validated ? 'var(--green)'
+                    : 'var(--text-dim)';
+        const label = p.status === 'in_progress' ? '進行中'
+                    : p.status === 'waiting_for_correction' ? '採点待ち'
+                    : p.validated ? '✓ ' + (p.final_mark ?? '')
+                    : p.final_mark != null ? '✗ ' + p.final_mark
+                    : '-';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
+             + '<span style="font-size:13px;color:var(--text)">' + p.name + '</span>'
+             + '<span style="font-size:12px;font-weight:600;color:' + color + '">' + label + '</span>'
+             + '</div>';
+      }).join('')}
+    </div>` : ''}
+
     <div class="updated">
       Updated: ${new Date(d.updated_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
-      ${(() => {
-        const ageMin = (Date.now() - new Date(d.updated_at).getTime()) / 60000;
-        if (ageMin > 60) {
-          return `<br><a href="https://github.com/Tsunanko/piscine-tracker/actions/workflows/update-data.yml"
-            target="_blank"
-            style="color:var(--orange);font-size:11px;text-decoration:none;">
-            ⚠️ ${Math.floor(ageMin)}分前のデータ — GitHubで手動更新 →
-          </a>`;
-        }
-        return '';
-      })()}
     </div>
   `;
 }

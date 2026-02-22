@@ -256,6 +256,44 @@ def main():
                 "updated_at": now.isoformat(),
             }
 
+            # プロジェクト取得
+            try:
+                projects_raw = api_get(token, f"/v2/users/{login}/projects_users", {
+                    "filter[cursus_id]": PISCINE_CURSUS_ID,
+                    "page[size]": 50,
+                })
+                projects = []
+                for p in projects_raw:
+                    proj_name = p.get("project", {}).get("name", "")
+                    proj_slug = p.get("project", {}).get("slug", "")
+                    status = p.get("status", "")
+                    validated = p.get("validated?", False)
+                    final_mark = p.get("final_mark")
+                    if proj_name:
+                        projects.append({
+                            "name": proj_name,
+                            "slug": proj_slug,
+                            "status": status,
+                            "validated": validated,
+                            "final_mark": final_mark,
+                        })
+                # in_progress → waiting_for_correction → validated → others の順でソート
+                def proj_sort_key(p):
+                    if p["status"] == "in_progress":
+                        return (0, p["name"])
+                    elif p["status"] == "waiting_for_correction":
+                        return (1, p["name"])
+                    elif p["validated"]:
+                        return (2, p["name"])
+                    else:
+                        return (3, p["name"])
+                projects.sort(key=proj_sort_key)
+            except Exception as e:
+                print(f"  [WARN] {login} projects failed: {e}")
+                projects = []
+
+            user_json["projects"] = projects
+
             with open(f"{OUTPUT_DIR}/data/{login}.json", "w") as f:
                 json.dump(user_json, f, ensure_ascii=False)
 
