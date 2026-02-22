@@ -365,17 +365,31 @@ def main():
         hours_mean, hours_std = 0.0, 1.0
     print(f"  Hours (active {len(active_hours_list)} students): mean={hours_mean:.1f}h, std={hours_std:.1f}h")
 
+    # レビュー偏差値: データが取れた全学生を母集団（0回を含む）
+    all_reviews = [uj.get("review_given", 0) for uj in user_jsons.values()]
+    if len(all_reviews) >= 2:
+        review_mean = statistics.mean(all_reviews)
+        review_std = statistics.stdev(all_reviews) if statistics.stdev(all_reviews) > 0 else 1
+    else:
+        review_mean, review_std = 0.0, 1.0
+    print(f"  Review: mean={review_mean:.1f}, std={review_std:.1f}, n={len(all_reviews)}")
+
     # 各学生に偏差値を付与
     for login, uj in user_jsons.items():
         level = students[login].get("level", 0)
         hours = students[login].get("total_hours", 0)
+        reviews = uj.get("review_given", 0)
         level_dev = calc_deviation(level, level_mean, level_std)
         hours_dev = calc_deviation(hours, hours_mean, hours_std)
+        review_dev = calc_deviation(reviews, review_mean, review_std)
         uj["level_deviation"] = level_dev
         uj["hours_deviation"] = hours_dev
+        uj["review_deviation"] = review_dev
         # dashboard JSON 生成で使うためstudentsにも保存
         students[login]["level_deviation"] = level_dev
         students[login]["hours_deviation"] = hours_dev
+        students[login]["review_deviation"] = review_dev
+        students[login]["review_given"] = reviews
 
     # 5. 個人JSONファイルを一括書き込み
     print(f"\n[5] Writing {len(user_jsons)} per-user JSON files...")
@@ -401,6 +415,8 @@ def main():
             "level": s["level"],
             "level_deviation": s.get("level_deviation", 50.0),
             "hours_deviation": s.get("hours_deviation", 50.0),
+            "review_deviation": s.get("review_deviation", 50.0),
+            "review_given": s.get("review_given", 0),
         }
         if login in online_logins:
             loc = active_map[login]

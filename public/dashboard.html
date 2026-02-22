@@ -520,12 +520,21 @@ function renderDashboard() {
     const rank = rankMap[student.login] || '-';
     const level = student.level != null ? student.level.toFixed(1) : '-';
     const hDev = student.hours_deviation != null ? Math.round(student.hours_deviation) : null;
-    const devColor = hDev == null ? 'var(--text-dim)'
-                   : hDev >= 55 ? 'var(--green)'
-                   : hDev >= 45 ? 'var(--text-dim)'
-                   : 'var(--red)';
-    const devBadge = hDev != null
-      ? `<div class="student-dev" style="color:${devColor}">偏差値${hDev}</div>` : '';
+    const lDev = student.level_deviation != null ? Math.round(student.level_deviation) : null;
+    const rDev = student.review_deviation != null ? Math.round(student.review_deviation) : null;
+    const rGiven = student.review_given != null ? student.review_given : null;
+    const devColor = (v) => v == null ? 'var(--text-dim)'
+                          : v >= 55 ? 'var(--green)'
+                          : v >= 45 ? 'var(--text-dim)'
+                          : 'var(--red)';
+    // 偏差値2行: 時間・Lv + レビュー
+    const devBadge = (hDev != null || lDev != null) ? `
+      <div class="student-dev" style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
+        ${hDev != null ? `<span style="color:${devColor(hDev)}">時:${hDev}</span>` : ''}
+        ${lDev != null ? `<span style="color:${devColor(lDev)}">Lv:${lDev}</span>` : ''}
+      </div>
+      ${(rGiven != null) ? `<div class="student-dev" style="color:${devColor(rDev)}">R:${rGiven}回(${rDev ?? '-'})</div>` : ''}
+    ` : '';
     return `
       <div class="student-card ${cls}" onclick="goToStudent('${student.login}')">
         <div class="student-rank">#${rank}</div>
