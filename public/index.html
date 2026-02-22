@@ -489,6 +489,28 @@ function render(d) {
       </div>
     </div>
 
+    <!-- Level + 偏差値バッジ -->
+    <div style="display:flex;justify-content:center;gap:10px;margin-bottom:4px" class="fade-in">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 16px;text-align:center">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Level</div>
+        <div style="font-size:20px;font-weight:800;color:var(--accent-light)">${(d.level ?? 0).toFixed(2)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 16px;text-align:center">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">偏差値(時間)</div>
+        <div style="font-size:20px;font-weight:800;color:${
+          (d.hours_deviation ?? 50) >= 55 ? 'var(--green)' :
+          (d.hours_deviation ?? 50) >= 45 ? 'var(--text)' : 'var(--red)'
+        }">${d.hours_deviation != null ? Math.round(d.hours_deviation) : '-'}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 16px;text-align:center">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">偏差値(Lv)</div>
+        <div style="font-size:20px;font-weight:800;color:${
+          (d.level_deviation ?? 50) >= 55 ? 'var(--green)' :
+          (d.level_deviation ?? 50) >= 45 ? 'var(--text)' : 'var(--red)'
+        }">${d.level_deviation != null ? Math.round(d.level_deviation) : '-'}</div>
+      </div>
+    </div>
+
     <div style="text-align:center" class="fade-in">
       ${d.is_active ? `<div class="status-badge on-track" style="margin-bottom:6px">
         <span class="status-dot" style="animation:pulse 1.5s infinite"></span>
@@ -521,6 +543,11 @@ function render(d) {
           <div class="stat-value" style="color:var(--text)">${d.remaining_days}<span class="stat-suffix"> days</span></div>
         </div>
       </div>
+      ${d.review_given != null ? `
+      <div style="margin-top:10px;background:var(--surface2);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;color:var(--text-dim)">レビュー回数（評価した回数）</div>
+        <div style="font-size:20px;font-weight:700;color:var(--accent-light)">${d.review_given}<span style="font-size:12px;font-weight:400;color:var(--text-dim)"> 回</span></div>
+      </div>` : ''}
     </div>
 
     <!-- Remaining Required -->
