@@ -454,18 +454,6 @@ async function loadData() {
     `全${allStudents.length}人` + (hasPassData ? ' · 合否データあり' : '');
 
   buildAllCorrTable();
-
-  // URL パラメータ ?login=XXX があれば自動ハイライト
-  const urlLogin = new URLSearchParams(window.location.search).get('login');
-  if (urlLogin) {
-    searchLogin = urlLogin.toLowerCase();
-    const input = document.getElementById('searchInput');
-    if (input) {
-      input.value = urlLogin;
-      document.getElementById('searchClear').style.display = 'block';
-    }
-  }
-
   render();
 }
 
@@ -732,7 +720,7 @@ function renderChart(cached) {
         const el = elements.find(e => e.datasetIndex === 0);
         if (el) {
           const login = pts[el.index].login;
-          window.location.href = `index.html?login=${encodeURIComponent(login)}`;
+          window.location.href = `${login}.html`;
         }
       },
       onHover(event, elements) {

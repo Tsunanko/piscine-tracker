@@ -387,10 +387,7 @@
 </head>
 <body>
   <div class="container" id="app">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
-      <a id="statsLinkInit" href="stats.html" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
-    </div>
+    <a href="dashboard.html" class="back-link">← Dashboard</a>
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <div class="loading-text">Loading location data...</div>
@@ -417,10 +414,6 @@
 const CIRCUMFERENCE = 2 * Math.PI * 85;
 const params = new URLSearchParams(window.location.search);
 const LOGIN = params.get('login') || 'yuichika';
-
-// 初期表示の統計リンクにもloginを付ける
-const initStatsLink = document.getElementById('statsLinkInit');
-if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}`;
 
 function render(d) {
   const app = document.getElementById('app');
@@ -471,10 +464,7 @@ function render(d) {
   const offset = CIRCUMFERENCE - (d.progress_pct / 100) * CIRCUMFERENCE;
 
   app.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
-      <a href="stats.html?login=${encodeURIComponent(d.login)}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
-    </div>
+    <a href="dashboard.html" class="back-link">← Dashboard</a>
     <div class="header fade-in">
       <div class="header-label">Piscine Commitment Tracker</div>
       ${d.image_small ? `<img src="${d.image_small}" alt="${d.login}" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--accent);object-fit:cover;display:block;margin:0 auto 10px">` : ''}
