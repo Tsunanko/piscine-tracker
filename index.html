@@ -482,6 +482,8 @@ function render(d) {
       <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
       <a href="stats.html?login=${encodeURIComponent(d.login)}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
     </div>
+
+    <!-- ヘッダー -->
     <div class="header fade-in">
       <div class="header-label">Piscine Commitment Tracker</div>
       ${d.image_small ? `<img src="${d.image_small}" alt="${d.login}" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--accent);object-fit:cover;display:block;margin:0 auto 10px">` : ''}
@@ -489,25 +491,8 @@ function render(d) {
       <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
     </div>
 
-    <!-- Progress Ring -->
-    <div class="progress-ring-wrap fade-in">
-      <div class="progress-ring-container">
-        <svg class="progress-ring" width="200" height="200" viewBox="0 0 200 200">
-          <circle class="progress-ring-bg" cx="100" cy="100" r="85"/>
-          <circle class="progress-ring-fill" cx="100" cy="100" r="85"
-            stroke-dasharray="${CIRCUMFERENCE}"
-            stroke-dashoffset="${offset}"/>
-        </svg>
-        <div class="progress-ring-center">
-          <div class="progress-big-num">${d.progress_pct.toFixed(1)}%</div>
-          <div class="progress-unit">達成率</div>
-          <div class="progress-sub">${d.total_logged_hours}h / ${d.total_target_hours}h</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Level + 偏差値バッジ (2×2グリッド) -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;max-width:340px;margin-left:auto;margin-right:auto" class="fade-in">
+    <!-- 偏差値 2×2グリッド -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;max-width:340px;margin-left:auto;margin-right:auto" class="fade-in">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;text-align:center">
         <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Level</div>
         <div style="font-size:22px;font-weight:800;color:var(--accent-light)">${(d.level ?? 0).toFixed(2)}</div>
@@ -536,6 +521,43 @@ function render(d) {
       </div>
     </div>
 
+    <!-- 全体での位置（ミニ散布図）-->
+    <div class="card fade-in" style="padding:16px 14px 14px;margin-bottom:12px">
+      <div class="card-title">全体での位置（時間 × Level）</div>
+      <div style="font-size:11px;color:var(--text-dim);text-align:center;margin-bottom:6px">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff7675;margin-right:4px;vertical-align:middle"></span>${d.login}
+        &nbsp;&nbsp;
+        <span style="display:inline-block;border-top:2px dashed rgba(253,203,110,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>時間平均
+        &nbsp;&nbsp;
+        <span style="display:inline-block;border-top:2px dashed rgba(0,206,201,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>Level平均
+      </div>
+      <div style="position:relative;height:200px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}'">
+        <canvas id="miniScatterCanvas"></canvas>
+      </div>
+      <div style="text-align:center;margin-top:8px">
+        <a href="stats.html?login=${encodeURIComponent(d.login)}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
+      </div>
+    </div>
+
+    <!-- 目標達成率（プログレスリング）-->
+    <div class="progress-ring-wrap fade-in">
+      <div class="progress-ring-container">
+        <svg class="progress-ring" width="200" height="200" viewBox="0 0 200 200">
+          <circle class="progress-ring-bg" cx="100" cy="100" r="85"/>
+          <circle class="progress-ring-fill" cx="100" cy="100" r="85"
+            stroke-dasharray="${CIRCUMFERENCE}"
+            stroke-dashoffset="${offset}"/>
+        </svg>
+        <div class="progress-ring-center">
+          <div class="progress-big-num">${d.progress_pct.toFixed(1)}%</div>
+          <div class="progress-unit">目標達成率</div>
+          <div class="progress-sub" style="font-size:10px">1日8h × ${d.piscine_days}日 基準</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${d.total_logged_hours}h / ${d.total_target_hours}h</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ステータスバッジ -->
     <div style="text-align:center" class="fade-in">
       ${d.is_active ? `<div class="status-badge on-track" style="margin-bottom:6px">
         <span class="status-dot" style="animation:pulse 1.5s infinite"></span>
@@ -547,76 +569,68 @@ function render(d) {
       </div>
     </div>
 
-    <!-- Key Stats -->
+    <!-- 現在の状況 -->
     <div class="card fade-in" style="margin-top:16px">
-      <div class="card-title">Current Stats</div>
+      <div class="card-title">現在の状況</div>
       <div class="stat-grid">
         <div class="stat-item">
-          <div class="stat-label">Total Hours</div>
+          <div class="stat-label">累計ログイン時間</div>
           <div class="stat-value accent">${d.total_logged_hours}<span class="stat-suffix">h</span></div>
         </div>
         <div class="stat-item">
-          <div class="stat-label">Avg / Day</div>
-          <div class="stat-value ${d.avg_hours_per_day >= 8 ? 'green' : d.avg_hours_per_day >= 6 ? 'orange' : 'red'}">${d.avg_hours_per_day}<span class="stat-suffix">h</span></div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Elapsed</div>
-          <div class="stat-value" style="color:var(--text)">${d.elapsed_days}<span class="stat-suffix"> days</span></div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Remaining</div>
-          <div class="stat-value" style="color:var(--text)">${d.remaining_days}<span class="stat-suffix"> days</span></div>
+          <div class="stat-label">目標まで残り</div>
+          <div class="stat-value ${d.remaining_hours_needed > 0 ? (d.remaining_hours_needed > 40 ? 'red' : 'orange') : 'green'}">${Math.max(0, d.remaining_hours_needed)}<span class="stat-suffix">h</span></div>
         </div>
       </div>
       ${d.review_given != null ? `
       <div style="margin-top:10px;background:var(--surface2);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:11px;color:var(--text-dim)">レビュー回数（評価した回数）</div>
+        <div style="font-size:11px;color:var(--text-dim)">レビュー回数（評価してあげた回数）</div>
         <div style="display:flex;align-items:baseline;gap:10px">
           <div style="font-size:20px;font-weight:700;color:var(--accent-light)">${d.review_given}<span style="font-size:12px;font-weight:400;color:var(--text-dim)"> 回</span></div>
           ${d.review_deviation != null ? `<div style="font-size:13px;font-weight:600;color:${
             d.review_deviation >= 55 ? 'var(--green)' :
             d.review_deviation >= 45 ? 'var(--text-dim)' : 'var(--red)'
-          }">偏差値${Math.round(d.review_deviation)}</div>` : ''}
+          }">偏差値 ${Math.round(d.review_deviation)}</div>` : ''}
         </div>
       </div>` : ''}
     </div>
 
-    <!-- Remaining Required -->
+    <!-- 残り必要ペース -->
     ${d.remaining_days > 0 ? `
     <div class="remaining-card fade-in">
-      <div class="remaining-title">Required Avg for Remaining Days</div>
-      <div class="remaining-value ${reqAvgClass}">${d.required_avg_remaining}<span class="stat-suffix"> h/day</span></div>
+      <div class="remaining-title">残り ${d.remaining_days} 日間の必要ペース</div>
+      <div class="remaining-value ${reqAvgClass}">${d.required_avg_remaining}<span class="stat-suffix"> h/日</span></div>
       <div class="remaining-desc">
-        Remaining ${d.remaining_hours_needed}h in ${d.remaining_days} days to reach ${d.target_hours_per_day}h/day target
+        目標達成まで残り ${d.remaining_hours_needed}h（1日 ${d.target_hours_per_day}h × ${d.piscine_days}日 = ${d.total_target_hours}h 基準）
       </div>
     </div>` : ''}
 
-    <!-- Daily Chart -->
+    <!-- 日別チャート -->
     <div class="card fade-in">
-      <div class="card-title">Daily Breakdown (Feb)</div>
+      <div class="card-title">日別ログイン時間（2月）</div>
       <div class="chart-container" style="position:relative">
         <div class="chart">
           ${bars}
         </div>
         <div class="chart-target-line" style="bottom:calc(${targetPct}% * 90 / 100 + 24px)"></div>
       </div>
-      <div style="margin-top:8px; display:flex; gap:12px; justify-content:center">
+      <div style="margin-top:8px;display:flex;gap:12px;justify-content:center">
         <span style="font-size:10px;color:var(--text-dim)">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);vertical-align:middle;margin-right:3px"></span>8h+
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);vertical-align:middle;margin-right:3px"></span>8h以上
         </span>
         <span style="font-size:10px;color:var(--text-dim)">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent-light);vertical-align:middle;margin-right:3px"></span>&lt;8h
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent-light);vertical-align:middle;margin-right:3px"></span>8h未満
         </span>
         <span style="font-size:10px;color:var(--text-dim)">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;border:1px dashed var(--red);vertical-align:middle;margin-right:3px;opacity:0.5"></span>Target 8h
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;border:1px dashed var(--red);vertical-align:middle;margin-right:3px;opacity:0.5"></span>8h目標ライン
         </span>
       </div>
     </div>
 
-    <!-- Projects -->
+    <!-- 課題の進捗（最下部）-->
     ${d.projects && d.projects.length > 0 ? `
     <div class="card fade-in">
-      <div class="card-title">Projects</div>
+      <div class="card-title">課題の進捗</div>
       ${d.projects.map(p => {
         const color = p.status === 'in_progress' ? 'var(--orange)'
                     : p.status === 'waiting_for_correction' ? 'var(--accent-light)'
@@ -633,24 +647,6 @@ function render(d) {
              + '</div>';
       }).join('')}
     </div>` : ''}
-
-    <!-- ミニ散布図：全体での位置 -->
-    <div class="card fade-in" style="padding:16px 14px 14px">
-      <div class="card-title">全体での位置 (時間 × Level)</div>
-      <div style="font-size:11px;color:var(--text-dim);text-align:center;margin-bottom:6px">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff7675;margin-right:4px;vertical-align:middle"></span>あなた
-        &nbsp;&nbsp;
-        <span style="display:inline-block;border-top:2px dashed rgba(253,203,110,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>時間平均
-        &nbsp;&nbsp;
-        <span style="display:inline-block;border-top:2px dashed rgba(0,206,201,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>Level平均
-      </div>
-      <div style="position:relative;height:220px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}'">
-        <canvas id="miniScatterCanvas"></canvas>
-      </div>
-      <div style="text-align:center;margin-top:8px">
-        <a href="stats.html?login=${encodeURIComponent(d.login)}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
-      </div>
-    </div>
 
     <div class="updated">
       Updated: ${new Date(d.updated_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
