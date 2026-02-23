@@ -494,6 +494,15 @@ let isComposing = false;
 let showDev = localStorage.getItem('showDev') !== 'false';
 let loggedInUser = null; // ログイン中ユーザー情報
 
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function sortStudents(arr) {
   const sorted = [...arr];
   switch (currentSort) {
@@ -605,7 +614,7 @@ function renderDashboard() {
   clusters.forEach(c => {
     const count = d.online.filter(s => s.cluster === c).length;
     filterBtns.push(
-      `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${c}')">${c} (${count})</button>`
+      `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${esc(c)}')">${esc(c)} (${count})</button>`
     );
   });
   document.getElementById('filterBar').innerHTML = filterBtns.join('');
@@ -642,10 +651,10 @@ function renderDashboard() {
     const isOnline = student._isOnline;
     const cls = isOnline ? 'online' : '';
     const avatar = student.image_small
-      ? `<img class="student-avatar" src="${student.image_small}" alt="${student.login}" onerror="this.outerHTML='<div class=\\'avatar-placeholder\\'>${student.login[0].toUpperCase()}</div>'">`
-      : `<div class="avatar-placeholder">${student.login[0].toUpperCase()}</div>`;
+      ? `<img class="student-avatar" src="${esc(student.image_small)}" alt="${esc(student.login)}" onerror="this.outerHTML='<div class=\\'avatar-placeholder\\'>${esc(student.login[0].toUpperCase())}</div>'">`
+      : `<div class="avatar-placeholder">${esc(student.login[0].toUpperCase())}</div>`;
     const seat = isOnline && student.host
-      ? `<div class="student-seat">${student.host.split('.')[0]}</div>`
+      ? `<div class="student-seat">${esc(student.host.split('.')[0])}</div>`
       : '';
     const hours = student.total_hours || 0;
     const rankNum = rankMap[student.login] || '-';
@@ -666,10 +675,10 @@ function renderDashboard() {
     const cDev = student.composite_deviation != null ? Math.round(student.composite_deviation) : null;
     const cStr = cDev != null ? cDev : '-';
     return `
-      <div class="student-card ${cls}" onclick="goToStudent('${student.login}')">
+      <div class="student-card ${cls}" onclick="goToStudent('${esc(student.login)}')">
         <div class="student-rank">${rank}</div>
         ${avatar}
-        <div class="student-login" title="${student.display_name || student.login}">${student.login}</div>
+        <div class="student-login" title="${esc(student.display_name || student.login)}">${esc(student.login)}</div>
         <div class="metric-row">
           <span class="metric-hours ${hoursClass(hours)}">${formatHours(hours, false)}</span>
           <span class="metric-level">Lv ${level}</span>
@@ -763,7 +772,10 @@ function sendConsentSilently(user) {
   const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
   fetch('https://piscine-tracker.tsunanko.workers.dev/api/consent', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
     body: JSON.stringify({ login: user.login, consentedAt, method }),
   }).catch(() => {}); // エラーは無視（ユーザーへの影響なし）
 }

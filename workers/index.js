@@ -169,6 +169,18 @@ async function handleConsent(request, env) {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }
+    // piscine:login トークンの場合、login と一致するか確認
+    const auth = request.headers.get('Authorization') || '';
+    const bearerToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (bearerToken.startsWith('piscine:')) {
+      const tokenLogin = bearerToken.slice(8); // 'piscine:'.length
+      if (tokenLogin !== login) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+    }
     // 既に記録済みなら上書きしない（初回の同意日時を保持）
     const existing = await env.LOGIN_LOGS.get(`consent:${login}`);
     if (existing) {
