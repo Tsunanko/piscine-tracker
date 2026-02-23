@@ -440,7 +440,7 @@
       <div class="loading-text">Loading piscine data...</div>
     </div>
 
-    <!-- ダッシュボード本体（初期は非表示、検索入力は永続DOM要素） -->
+    <!-- ダッシュボード本体 -->
     <div id="dashContent" style="display:none">
       <div class="header fade-in">
         <div class="header-label">42 Tokyo</div>
@@ -457,7 +457,6 @@
           <div class="summary-value accent" id="totalCount">0</div>
         </div>
       </div>
-      <!-- 検索入力欄: innerHTML 再構築の対象外（Safari IME対策） -->
       <div class="search-wrap">
         <input type="text" class="search-input" id="searchInput" placeholder="Search by login...">
       </div>
@@ -492,8 +491,7 @@ let currentFilter = 'all';
 let searchQuery = '';
 let currentSort = 'hours'; // 'hours', 'level', 'composite', 'name'
 let isComposing = false;
-// suppressInput は不要（検索入力欄が永続DOM要素になったため）
-let showDev = localStorage.getItem('showDev') !== 'false'; // default: ON
+let showDev = localStorage.getItem('showDev') !== 'false';
 let loggedInUser = null; // ログイン中ユーザー情報
 
 function sortStudents(arr) {
@@ -528,7 +526,6 @@ function applyDisplayState() {
   if (grid) grid.classList.toggle('hide-dev', !showDev);
 }
 
-// 検索入力のイベントハンドラを一度だけ登録（永続DOM要素）
 function initSearchInput() {
   const input = document.getElementById('searchInput');
   if (!input) return;
@@ -692,7 +689,7 @@ function renderDashboard() {
       </div>`;
   }
 
-  // Update student grid（検索入力欄は触らない）
+  // 学生グリッドを更新
   const grid = document.getElementById('studentGrid');
   const emptyState = document.getElementById('emptyState');
   if (allStudents.length > 0) {
@@ -738,7 +735,7 @@ async function loadDashboard() {
   btn.classList.add('spinning');
 
   try {
-    // GitHub Pages: read from static JSON (cache-busted with timestamp)
+    // データ取得
     const resp = await fetch(`data.json?t=${Date.now()}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
@@ -760,7 +757,6 @@ function showError(msg) {
   document.getElementById('errorContent').style.display = '';
 }
 
-// 同意記録を補完（ログイン済みセッション継続ユーザー向け・バックグラウンド実行）
 function sendConsentSilently(user) {
   const token = sessionStorage.getItem('piscine_42_token') || '';
   const method = token.startsWith('piscine:') ? 'passphrase' : 'oauth';
@@ -777,7 +773,7 @@ requireAuth().then(user => {
   if (!user) return;
   loggedInUser = user; // 管理者リンク表示判定に使用
   initSearchInput(); // 検索入力欄のイベントを一度だけ登録
-  sendConsentSilently(user); // 同意記録の補完（未記録ユーザーのみ Worker 側で判定）
+  sendConsentSilently(user);
   loadDashboard();
   setInterval(loadDashboard, 5 * 60 * 1000);
 });
