@@ -418,7 +418,9 @@
   <div class="search-bar">
     <input type="text" class="search-input" id="searchInput"
       placeholder="ログイン名でハイライト"
-      oninput="onSearch(this.value)" />
+      oncompositionstart="isComposing=true"
+      oncompositionend="isComposing=false; onSearch(this.value)"
+      oninput="if(!isComposing) onSearch(this.value)" />
     <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     <div class="search-result" id="searchResult"></div>
   </div>
@@ -463,6 +465,7 @@ let chartInstance = null;
 let hasPassData = false;
 let hasReviewData = false;
 let searchLogin = '';   // 検索中のログイン名
+let isComposing = false; // IME composition中フラグ（スマホ2重入力防止）
 
 // ─────────────────────────────────────────────
 // 象限ラベル定義（タブ別・グローバル）
