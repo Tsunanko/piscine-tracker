@@ -2,18 +2,17 @@
  * Cloudflare Workers - 42 Intra OAuth認証プロキシ
  *
  * 動作：
- * 1. 未ログイン → ログイン画面を表示
- * 2. 42 Intra でログイン → campus_id が 42 Tokyo (26) かチェック
- * 3. OK なら GitHub Pages の dashboard.html にリダイレクト
- * 4. NG (他キャンパス) → アクセス拒否画面
- * 5. セッションは Cookie で24時間維持
+ * 1. /login → 42 Intra の Authorization Code Flow を開始
+ * 2. /auth/callback → codeをトークンに交換、campus_id チェック（42 Tokyo = 26）
+ * 3. OK → GitHub Pages の auth-callback.html に access_token をハッシュで渡す
+ * 4. NG（他キャンパス）→ アクセス拒否画面
+ *
+ * KV不要・Cookie管理不要（トークンはクライアント側のsessionStorageで管理）
  */
 
 const GITHUB_PAGES_URL = 'https://tsunanko.github.io/piscine-tracker';
-const CAMPUS_ID_TOKYO = 26;
-const SESSION_TTL_SEC = 60 * 60 * 24; // 24時間
+const CAMPUS_ID_TOKYO  = 26;
 
-// 42 Intra OAuth エンドポイント
 const AUTH_URL     = 'https://api.intra.42.fr/oauth/authorize';
 const TOKEN_URL    = 'https://api.intra.42.fr/oauth/token';
 const USERINFO_URL = 'https://api.intra.42.fr/v2/me';
@@ -22,36 +21,20 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // --- /auth/callback: 42からのコールバック ---
+    // CORS ヘッダー（GitHub Pages からのリダイレクト対応）
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204 });
+    }
+
     if (url.pathname === '/auth/callback') {
       return handleCallback(request, env, url);
     }
 
-    // --- /logout ---
-    if (url.pathname === '/logout') {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': '/',
-          'Set-Cookie': `session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`,
-        },
-      });
-    }
-
-    // --- セッション確認 ---
-    const session = await getSession(request, env);
-    if (session) {
-      // ログイン済み → GitHub Pages へリダイレクト（またはプロキシ）
-      const target = url.searchParams.get('redirect') || '/dashboard.html';
-      return Response.redirect(`${GITHUB_PAGES_URL}${target}`, 302);
-    }
-
-    // --- 未ログイン → ログイン画面 ---
     if (url.pathname === '/login') {
-      return startOAuth(env, url);
+      return startOAuth(env);
     }
 
-    // --- ルート (/) → ログイン画面 ---
+    // ルート (/) → ログイン画面
     return loginPage();
   }
 };
@@ -81,29 +64,23 @@ function loginPage() {
     border-radius: 20px; padding: 48px 40px; text-align: center;
     max-width: 360px; width: 90%;
   }
-  .logo {
-    font-size: 48px; margin-bottom: 16px;
-  }
+  .logo { font-size: 48px; margin-bottom: 16px; }
   h1 {
     font-size: 22px; font-weight: 700; margin-bottom: 8px;
     background: var(--gradient);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  p {
-    font-size: 13px; color: var(--text-dim); margin-bottom: 32px; line-height: 1.6;
-  }
+  p { font-size: 13px; color: var(--text-dim); margin-bottom: 32px; line-height: 1.6; }
   .btn {
     display: inline-block; padding: 14px 32px;
     background: var(--gradient); color: white;
     border-radius: 12px; text-decoration: none;
     font-size: 15px; font-weight: 600;
-    transition: opacity 0.2s; border: none; cursor: pointer; width: 100%;
+    transition: opacity 0.2s; width: 100%; text-align: center;
   }
   .btn:hover { opacity: 0.85; }
-  .note {
-    margin-top: 20px; font-size: 11px; color: var(--text-dim);
-  }
+  .note { margin-top: 20px; font-size: 11px; color: var(--text-dim); }
 </style>
 </head>
 <body>
@@ -119,8 +96,8 @@ function loginPage() {
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-/** OAuth 開始: 42 Intra の認証ページへリダイレクト */
-function startOAuth(env, url) {
+/** OAuth 開始: state生成 → 42 Intra の認証ページへリダイレクト */
+function startOAuth(env) {
   const state = crypto.randomUUID();
   const params = new URLSearchParams({
     client_id:     env.FORTY_TWO_CLIENT_ID,
@@ -133,7 +110,7 @@ function startOAuth(env, url) {
     status: 302,
     headers: {
       'Location': `${AUTH_URL}?${params}`,
-      // state を Cookie に保存（CSRF対策）
+      // CSRF対策: stateをCookieに保存（workers.devドメイン内のみ）
       'Set-Cookie': `oauth_state=${state}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`,
     },
   });
@@ -147,10 +124,10 @@ async function handleCallback(request, env, url) {
   // CSRF チェック
   const cookieState = getCookie(request, 'oauth_state');
   if (!code || !state || state !== cookieState) {
-    return errorPage('認証エラー', 'Invalid state parameter. Please try again.');
+    return errorPage('認証エラー', 'セキュリティチェックに失敗しました。もう一度ログインしてください。');
   }
 
-  // トークン取得
+  // Authorization Code → Access Token に交換
   const tokenResp = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -162,10 +139,17 @@ async function handleCallback(request, env, url) {
       redirect_uri:  env.REDIRECT_URI,
     }),
   });
+
   if (!tokenResp.ok) {
-    return errorPage('認証失敗', 'トークン取得に失敗しました。');
+    const errText = await tokenResp.text().catch(() => '');
+    return errorPage('認証失敗', `トークン取得に失敗しました。\n${errText}`);
   }
-  const { access_token } = await tokenResp.json();
+
+  const tokenData = await tokenResp.json();
+  const access_token = tokenData.access_token;
+  if (!access_token) {
+    return errorPage('認証失敗', 'アクセストークンが取得できませんでした。');
+  }
 
   // ユーザー情報取得
   const userResp = await fetch(USERINFO_URL, {
@@ -176,46 +160,25 @@ async function handleCallback(request, env, url) {
   }
   const user = await userResp.json();
 
-  // Campus チェック: 42 Tokyo (26) のみ許可
-  const campusIds = (user.campus || []).map(c => c.id);
+  // Campus チェック: 42 Tokyo (id=26) のみ許可
+  const campusIds   = (user.campus || []).map(c => c.id);
+  const campusNames = (user.campus || []).map(c => c.name).join(', ') || '不明';
   if (!campusIds.includes(CAMPUS_ID_TOKYO)) {
     return errorPage(
       'アクセス拒否',
-      `このサービスは 42 Tokyo の学生専用です。\n(あなたのキャンパス: ${(user.campus || []).map(c => c.name).join(', ') || '不明'})`
+      `このサービスは 42 Tokyo の学生専用です。\nあなたのキャンパス: ${campusNames}`
     );
   }
 
-  // セッション作成 (KVに保存)
-  const sessionId = crypto.randomUUID();
-  const sessionData = {
-    login:      user.login,
-    campus_ids: campusIds,
-    created_at: Date.now(),
-  };
-  await env.SESSIONS.put(sessionId, JSON.stringify(sessionData), {
-    expirationTtl: SESSION_TTL_SEC,
-  });
-
-  // ダッシュボードへリダイレクト
+  // 成功 → GitHub Pages の auth-callback.html にトークンをハッシュで渡す
+  // auth-callback.html が sessionStorage に保存してダッシュボードへ誘導する
   return new Response(null, {
     status: 302,
     headers: {
-      'Location': `${GITHUB_PAGES_URL}/dashboard.html`,
-      'Set-Cookie': [
-        `session=${sessionId}; Path=/; Max-Age=${SESSION_TTL_SEC}; HttpOnly; Secure; SameSite=Lax`,
-        `oauth_state=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`,
-      ].join(', '),
+      'Location': `${GITHUB_PAGES_URL}/auth-callback.html#access_token=${access_token}`,
+      'Set-Cookie': `oauth_state=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`,
     },
   });
-}
-
-/** セッション確認 */
-async function getSession(request, env) {
-  const sessionId = getCookie(request, 'session');
-  if (!sessionId) return null;
-  const data = await env.SESSIONS.get(sessionId);
-  if (!data) return null;
-  return JSON.parse(data);
 }
 
 /** Cookie 取得ヘルパー */
@@ -235,7 +198,7 @@ function errorPage(title, message) {
 <title>${title}</title>
 <style>
   body { font-family: system-ui; background: #0f0f14; color: #e8e8f0;
-         display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+         display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
   .card { background: #1a1a24; border: 1px solid #ff767530; border-radius: 20px;
           padding: 40px; text-align: center; max-width: 360px; width: 90%; }
   h1 { color: #ff7675; margin-bottom: 12px; font-size: 20px; }
