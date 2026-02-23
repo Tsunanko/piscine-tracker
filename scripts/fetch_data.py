@@ -202,7 +202,7 @@ def main():
                 try:
                     begin = datetime.fromisoformat(begin_str.replace("Z", "+00:00"))
                     active_extra_hours = max(0, (now.astimezone(timezone.utc) - begin).total_seconds() / 3600)
-                    total_hours = round(total_hours + active_extra_hours, 2)
+                    # locations_stats は進行中セッションを含むため total_hours への加算不要
                 except Exception:
                     pass
 
@@ -239,9 +239,6 @@ def main():
             while d < PISCINE_END:
                 key = d.strftime("%Y-%m-%d")
                 h = round(daily_hours.get(key, 0), 2)
-                # 当日のみ：進行中セッションの時間を加算（バーグラフに反映）
-                if key == today_str and is_active and active_extra_hours > 0:
-                    h = round(h + active_extra_hours, 2)
                 daily.append({
                     "date": key,
                     "weekday": d.strftime("%a"),
