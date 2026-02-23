@@ -578,6 +578,10 @@ function render(d) {
           <div class="stat-value accent">${d.total_logged_hours}<span class="stat-suffix">h</span></div>
         </div>
         <div class="stat-item">
+          <div class="stat-label">1日平均</div>
+          <div class="stat-value ${d.avg_hours_per_day >= 8 ? 'green' : d.avg_hours_per_day >= 6 ? 'orange' : 'red'}">${d.avg_hours_per_day}<span class="stat-suffix">h</span></div>
+        </div>
+        <div class="stat-item">
           <div class="stat-label">目標まで残り</div>
           <div class="stat-value ${d.remaining_hours_needed > 0 ? (d.remaining_hours_needed > 40 ? 'red' : 'orange') : 'green'}">${Math.max(0, d.remaining_hours_needed)}<span class="stat-suffix">h</span></div>
         </div>
