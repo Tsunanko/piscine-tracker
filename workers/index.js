@@ -153,7 +153,7 @@ async function handleGetLogs(request, env) {
   });
 }
 
-/** 同意記録を保存（login単位で最新を上書き）*/
+/** 同意記録を保存（初回のみ記録・上書きしない）*/
 async function handleConsent(request, env) {
   try {
     const body = await request.json();
@@ -164,9 +164,13 @@ async function handleConsent(request, env) {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }
+    // 既に記録済みなら上書きしない（初回の同意日時を保持）
+    const existing = await env.LOGIN_LOGS.get(`consent:${login}`);
+    if (existing) {
+      return new Response('OK', { status: 200, headers: CORS_HEADERS });
+    }
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     const entry = { login, consentedAt: consentedAt || new Date().toISOString(), method: method || 'unknown', ip };
-    // login単位でキーを固定（最新の同意で上書き）
     await env.LOGIN_LOGS.put(`consent:${login}`, JSON.stringify(entry));
     return new Response('OK', { status: 200, headers: CORS_HEADERS });
   } catch (e) {
