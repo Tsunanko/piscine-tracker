@@ -20,8 +20,40 @@ const USERINFO_URL = 'https://api.intra.42.fr/v2/me';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://tsunanko.github.io',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Secret',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Secret, Authorization',
 };
+
+/** 管理者かどうか検証する（2つの認証方式をサポート）
+ *  1. X-Admin-Secret ヘッダー（curl等の直接アクセス向け）
+ *  2. Authorization: Bearer <token>（ブラウザログイン済みijoja向け）
+ *     - 'piscine:ijoja' → simple loginのijoja
+ *     - 42 access token → 42 APIで検証してloginがijojaか確認
+ */
+async function isAdmin(request, env) {
+  // 1. X-Admin-Secret による認証
+  const secret = request.headers.get('X-Admin-Secret');
+  if (env.ADMIN_SECRET && secret === env.ADMIN_SECRET) return true;
+
+  // 2. Authorization: Bearer による認証
+  const auth = request.headers.get('Authorization');
+  if (!auth) return false;
+  const token = auth.replace(/^Bearer\s+/, '');
+
+  // simple login の ijoja
+  if (token === 'piscine:ijoja') return true;
+
+  // 42 OAuth token → 42 API で検証
+  try {
+    const res = await fetch(USERINFO_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const user = await res.json();
+      return user.login === 'ijoja';
+    }
+  } catch {}
+  return false;
+}
 
 export default {
   async fetch(request, env) {
@@ -90,10 +122,9 @@ async function handleLog(request, env) {
   }
 }
 
-/** ログ一覧を返す（管理者トークン必須）- JSON形式 */
+/** ログ一覧を返す（管理者のみ）- JSON形式 */
 async function handleGetLogs(request, env) {
-  const secret = request.headers.get('X-Admin-Secret');
-  if (!env.ADMIN_SECRET || secret !== env.ADMIN_SECRET) {
+  if (!await isAdmin(request, env)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -146,10 +177,9 @@ async function handleConsent(request, env) {
   }
 }
 
-/** 同意記録一覧を返す（管理者トークン必須）*/
+/** 同意記録一覧を返す（管理者のみ）*/
 async function handleGetConsents(request, env) {
-  const secret = request.headers.get('X-Admin-Secret');
-  if (!env.ADMIN_SECRET || secret !== env.ADMIN_SECRET) {
+  if (!await isAdmin(request, env)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
