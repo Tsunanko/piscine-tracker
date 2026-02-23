@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>認証中... - Piscine Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0e0e16;
+      color: #e8e8f0;
+      font-family: "Noto Sans JP", system-ui, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #2a2a3a;
+      border-top-color: #6c5ce7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg { font-size: 14px; color: #8888a0; }
+  </style>
+</head>
+<body>
+  <div class="spinner"></div>
+  <div class="msg" id="msg">認証中...</div>
+
+<script src="auth.js"></script>
+<script>
+(function() {
+  // 42 Implicit Flow: トークンは URL の # フラグメントに入ってくる
+  // 例: #access_token=xxx&token_type=bearer&expires_in=7200&...
+  const hash   = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+
+  const token = params.get('access_token');
+  const error = params.get('error');
+
+  if (error) {
+    window.location.replace('login.html?error=' + encodeURIComponent(error));
+    return;
+  }
+
+  if (!token) {
+    window.location.replace('login.html?error=no_token');
+    return;
+  }
+
+  // トークンを保存してダッシュボードへ
+  sessionStorage.setItem('piscine_42_token', token);
+  document.getElementById('msg').textContent = 'ログイン成功！ダッシュボードへ移動中...';
+  window.location.replace('dashboard.html');
+})();
+</script>
+</body>
+</html>

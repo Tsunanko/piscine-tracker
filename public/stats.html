@@ -390,8 +390,14 @@
     vertical-align: middle;
   }
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
+<script>
+  if (!sessionStorage.getItem('piscine_42_token')) {
+    window.location.replace('login.html');
+  }
+</script>
 <div class="container">
 
   <!-- ヘッダー -->
@@ -457,6 +463,34 @@ let chartInstance = null;
 let hasPassData = false;
 let hasReviewData = false;
 let searchLogin = '';   // 検索中のログイン名
+
+// ─────────────────────────────────────────────
+// 象限ラベル定義（タブ別・グローバル）
+// ─────────────────────────────────────────────
+const QUAD_INFO = {
+  total_hours: {
+    level:        { ru: {icon:'🌟',name:'優秀',   sub:'高時間・高Level', color:'#00cec9', badge:'合格有利'},
+                    lu: {icon:'⚡',name:'効率型',  sub:'低時間・高Level', color:'#fdcb6e', badge:''},
+                    lb: {icon:'💧',name:'苦戦中',  sub:'低時間・低Level', color:'#ff7675', badge:''},
+                    rb: {icon:'💪',name:'努力型',  sub:'高時間・低Level', color:'#a29bfe', badge:''} },
+    review_given: { ru: {icon:'📚',name:'活発',   sub:'高時間・多レビュー', color:'#00cec9', badge:''},
+                    lu: {icon:'⚡',name:'効率型',  sub:'低時間・多レビュー', color:'#fdcb6e', badge:''},
+                    lb: {icon:'💧',name:'苦戦中',  sub:'低時間・少レビュー', color:'#ff7675', badge:''},
+                    rb: {icon:'📖',name:'黙々型',  sub:'高時間・少レビュー', color:'#a29bfe', badge:''} },
+  },
+  level: {
+    review_given: { ru: {icon:'🌟',name:'優秀',   sub:'高Level・多レビュー', color:'#00cec9', badge:''},
+                    lu: {icon:'📚',name:'支援型',  sub:'低Level・多レビュー', color:'#fdcb6e', badge:''},
+                    lb: {icon:'💧',name:'苦戦中',  sub:'低Level・少レビュー', color:'#ff7675', badge:''},
+                    rb: {icon:'🎯',name:'集中型',  sub:'高Level・少レビュー', color:'#a29bfe', badge:''} },
+  },
+};
+const QUAD_FALLBACK = {
+  ru: {icon:'↗',name:'高x高y', sub:'', color:'#00cec9', badge:''},
+  lu: {icon:'↖',name:'低x高y', sub:'', color:'#fdcb6e', badge:''},
+  lb: {icon:'↙',name:'低x低y', sub:'', color:'#ff7675', badge:''},
+  rb: {icon:'↘',name:'高x低y', sub:'', color:'#a29bfe', badge:''},
+};
 
 // ─────────────────────────────────────────────
 // ユーティリティ
@@ -637,31 +671,8 @@ function render() {
   function meQuad(bucket) {
     return matchedInQuad ? bucket.some(p => p.login === matchedInQuad) : false;
   }
-  // 各象限の定義（タブ別）
-  const qInfo = {
-    total_hours: {
-      level:        { ru: {icon:'🌟',name:'優秀',   sub:'高時間・高Level', color:'#00cec9', badge:'合格有利'},
-                      lu: {icon:'⚡',name:'効率型',  sub:'低時間・高Level', color:'#fdcb6e', badge:''},
-                      lb: {icon:'💧',name:'苦戦中',  sub:'低時間・低Level', color:'#ff7675', badge:''},
-                      rb: {icon:'💪',name:'努力型',  sub:'高時間・低Level', color:'#a29bfe', badge:''} },
-      review_given: { ru: {icon:'📚',name:'活発',   sub:'高時間・多レビュー', color:'#00cec9', badge:''},
-                      lu: {icon:'⚡',name:'効率型',  sub:'低時間・多レビュー', color:'#fdcb6e', badge:''},
-                      lb: {icon:'💧',name:'苦戦中',  sub:'低時間・少レビュー', color:'#ff7675', badge:''},
-                      rb: {icon:'📖',name:'黙々型',  sub:'高時間・少レビュー', color:'#a29bfe', badge:''} },
-    },
-    level: {
-      review_given: { ru: {icon:'🌟',name:'優秀',   sub:'高Level・多レビュー', color:'#00cec9', badge:''},
-                      lu: {icon:'📚',name:'支援型',  sub:'低Level・多レビュー', color:'#fdcb6e', badge:''},
-                      lb: {icon:'💧',name:'苦戦中',  sub:'低Level・少レビュー', color:'#ff7675', badge:''},
-                      rb: {icon:'🎯',name:'集中型',  sub:'高Level・少レビュー', color:'#a29bfe', badge:''} },
-    },
-  };
-  const qi = (qInfo[tab.xKey] || {})[tab.yKey] || {
-    ru: {icon:'↗',name:'高x高y', sub:'', color:'#00cec9', badge:''},
-    lu: {icon:'↖',name:'低x高y', sub:'', color:'#fdcb6e', badge:''},
-    lb: {icon:'↙',name:'低x低y', sub:'', color:'#ff7675', badge:''},
-    rb: {icon:'↘',name:'高x低y', sub:'', color:'#a29bfe', badge:''},
-  };
+  // 各象限の定義（グローバル QUAD_INFO から取得）
+  const qi = (QUAD_INFO[tab.xKey] || {})[tab.yKey] || QUAD_FALLBACK;
 
   function quadCell(key, topRow) {
     const info = qi[key];
@@ -670,7 +681,7 @@ function render() {
     const isMe = meQuad(bucket);
     const cellStyle = `border-color:${info.color}40${isMe ? ';border-color:'+info.color+';border-width:2px' : ''}`;
     return `<div class="quadrant-cell${isMe ? ' me' : ''}" style="${cellStyle}">
-      ${isMe ? `<div class="qc-me-tag">● あなた</div>` : ''}
+      ${isMe ? `<div class="qc-me-tag">● ${matchedInQuad}</div>` : ''}
       <div class="qc-header">
         <span class="qc-icon">${info.icon}</span>
         <span class="qc-name" style="color:${info.color}">${info.name}</span>
@@ -758,7 +769,7 @@ function render() {
     </div>`;
 
   // Chart を描画（変数を closure で渡す）
-  renderChart({ pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab });
+  renderChart({ pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi });
 }
 
 // ─────────────────────────────────────────────
@@ -781,10 +792,11 @@ function renderChart(cached) {
     const xMean = mean(xs), yMean = mean(ys);
     const xPad = (xMax - xMin)*0.05, yPad = (yMax - yMin)*0.05;
     const reg = linearRegLine(xs, ys);
-    cached = { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab };
+    const qi = (QUAD_INFO[tab.xKey] || {})[tab.yKey] || QUAD_FALLBACK;
+    cached = { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi };
   }
 
-  const { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab } = cached;
+  const { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi } = cached;
 
   // 検索マッチ判定
   const hasSearch = searchLogin.length > 0;
@@ -849,8 +861,37 @@ function renderChart(cached) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
+  // Chart.js インラインプラグイン: 象限ラベルをチャート上に描画
+  const quadrantLabelPlugin = {
+    id: 'quadrantLabels',
+    afterDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom }, scales: { x, y } } = chart;
+      const xMeanPx = x.getPixelForValue(xMean);
+      const yMeanPx = y.getPixelForValue(yMean);
+      ctx.save();
+      ctx.font = 'bold 11px "Noto Sans JP", system-ui, sans-serif';
+
+      const draw = (info, tx, ty, hAlign, vAlign) => {
+        ctx.globalAlpha = 0.38;
+        ctx.fillStyle = info.color;
+        ctx.textAlign = hAlign;
+        ctx.textBaseline = vAlign;
+        ctx.fillText(`${info.icon} ${info.name}`, tx, ty);
+      };
+
+      const pad = 10;
+      draw(qi.ru, right  - pad, top    + pad, 'right',  'top');     // 右上
+      draw(qi.lu, left   + pad, top    + pad, 'left',   'top');     // 左上
+      draw(qi.lb, left   + pad, bottom - pad, 'left',   'bottom');  // 左下
+      draw(qi.rb, right  - pad, bottom - pad, 'right',  'bottom');  // 右下
+
+      ctx.restore();
+    }
+  };
+
   chartInstance = new Chart(ctx, {
     type: 'scatter',
+    plugins: [quadrantLabelPlugin],
     data: {
       datasets: [
         // ① 学生の点（通常 or ハイライト）
@@ -1000,9 +1041,12 @@ function buildAllCorrTable() {
 // ─────────────────────────────────────────────
 // 起動
 // ─────────────────────────────────────────────
-loadData().catch(e => {
-  document.getElementById('mainCard').innerHTML =
-    `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
+requireAuth().then(user => {
+  if (!user) return;
+  loadData().catch(e => {
+    document.getElementById('mainCard').innerHTML =
+      `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
+  });
 });
 </script>
 </body>

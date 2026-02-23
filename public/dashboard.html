@@ -424,8 +424,15 @@
   .search-input::placeholder { color: var(--text-dim); }
   .search-input:focus { border-color: var(--accent); }
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
+<script>
+  // 同期ガード：トークンがなければ即リダイレクト（コンテンツのチラつき防止）
+  if (!sessionStorage.getItem('piscine_42_token')) {
+    window.location.replace('login.html');
+  }
+</script>
   <div class="container" id="app">
     <div class="loading" id="loading">
       <div class="spinner"></div>
@@ -721,9 +728,12 @@ function showError(msg) {
   `;
 }
 
-loadDashboard();
-// Auto refresh every 5 minutes
-setInterval(loadDashboard, 5 * 60 * 1000);
+// 認証確認後にダッシュボード読み込み
+requireAuth().then(user => {
+  if (!user) return;
+  loadDashboard();
+  setInterval(loadDashboard, 5 * 60 * 1000);
+});
 </script>
 </body>
 </html>
