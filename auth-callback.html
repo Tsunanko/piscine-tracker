@@ -53,8 +53,18 @@
     return;
   }
 
-  // トークンを保存してダッシュボードへ
+  // トークンを保存
   sessionStorage.setItem('piscine_42_token', token);
+
+  // Worker から渡されたユーザー情報をキャッシュ（CORS 回避のため）
+  const userStr = params.get('user');
+  if (userStr) {
+    try {
+      const userObj = JSON.parse(decodeURIComponent(userStr));
+      sessionStorage.setItem('piscine_42_user', JSON.stringify(userObj));
+    } catch {}
+  }
+
   document.getElementById('msg').textContent = 'ログイン成功！ダッシュボードへ移動中...';
   window.location.replace('dashboard.html');
 })();
