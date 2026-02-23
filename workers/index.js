@@ -17,13 +17,19 @@ const AUTH_URL     = 'https://api.intra.42.fr/oauth/authorize';
 const TOKEN_URL    = 'https://api.intra.42.fr/oauth/token';
 const USERINFO_URL = 'https://api.intra.42.fr/v2/me';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'https://tsunanko.github.io',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Secret',
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // CORS ヘッダー（GitHub Pages からのリダイレクト対応）
+    // CORS プリフライト
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204 });
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
     if (url.pathname === '/auth/callback') {
@@ -34,10 +40,91 @@ export default {
       return startOAuth(env);
     }
 
+    // ─── ログイン記録 API ───────────────────────────
+    if (url.pathname === '/api/log' && request.method === 'POST') {
+      return handleLog(request, env);
+    }
+
+    // ─── ログ閲覧 API（管理者のみ）────────────────
+    if (url.pathname === '/api/logs' && request.method === 'GET') {
+      return handleGetLogs(request, env);
+    }
+
     // ルート (/) → ログイン画面
     return loginPage();
   }
 };
+
+/** ログイン記録を KV に保存 */
+async function handleLog(request, env) {
+  try {
+    const body = await request.json();
+    const { login, method } = body;
+    if (!login || !method) {
+      return new Response('Bad Request', { status: 400, headers: CORS_HEADERS });
+    }
+
+    const jst = new Date(Date.now() + 9 * 3600 * 1000);
+    const ts  = jst.toISOString().replace('T', ' ').slice(0, 19) + ' JST';
+    const ip  = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ua  = request.headers.get('User-Agent') || '';
+
+    const entry = { login, method, ts, ip, ua };
+    // KV key: log:YYYYMMDD_HHMMSS_login（時系列でソート可能）
+    const key = `log:${jst.toISOString().replace(/[^0-9]/g, '').slice(0, 14)}_${login}`;
+    await env.LOGIN_LOGS.put(key, JSON.stringify(entry), { expirationTtl: 60 * 60 * 24 * 90 }); // 90日保持
+
+    return new Response('OK', { status: 200, headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response('Error', { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+/** ログ一覧を返す（管理者トークン必須）*/
+async function handleGetLogs(request, env) {
+  const secret = request.headers.get('X-Admin-Secret');
+  if (!env.ADMIN_SECRET || secret !== env.ADMIN_SECRET) {
+    return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+  }
+
+  const list = await env.LOGIN_LOGS.list({ prefix: 'log:' });
+  const entries = await Promise.all(
+    list.keys.map(async k => {
+      const val = await env.LOGIN_LOGS.get(k.name);
+      try { return JSON.parse(val); } catch { return null; }
+    })
+  );
+  const logs = entries.filter(Boolean).reverse(); // 新しい順
+
+  const html = `<!DOCTYPE html><html lang="ja">
+<head><meta charset="UTF-8"><title>Login Logs</title>
+<style>
+  body { font-family: monospace; background:#0e0e16; color:#e8e8f0; padding:20px; }
+  h1 { color:#a29bfe; }
+  table { border-collapse: collapse; width:100%; font-size:13px; }
+  th { background:#1a1a24; color:#8888a0; padding:8px 12px; text-align:left; }
+  td { padding:7px 12px; border-bottom:1px solid #2a2a3a; }
+  .method-oauth { color:#00cec9; } .method-simple { color:#fdcb6e; }
+</style></head>
+<body>
+<h1>🏊 Piscine Tracker - Login Logs (${logs.length}件)</h1>
+<table>
+  <tr><th>日時(JST)</th><th>ログイン名</th><th>方法</th><th>IP</th><th>UA</th></tr>
+  ${logs.map(e => `
+  <tr>
+    <td>${e.ts}</td>
+    <td><strong>${e.login}</strong></td>
+    <td class="method-${e.method}">${e.method === 'oauth' ? '🔑 42 OAuth' : '🔐 合言葉'}</td>
+    <td>${e.ip}</td>
+    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${e.ua}</td>
+  </tr>`).join('')}
+</table>
+</body></html>`;
+
+  return new Response(html, {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
 
 /** ログイン画面HTML */
 function loginPage() {
@@ -174,6 +261,16 @@ async function handleCallback(request, env, url) {
   // auth-callback.html が sessionStorage に保存してダッシュボードへ誘導する
   // ※ ブラウザから api.intra.42.fr を直接呼ぶと CORS 問題が起きるため、
   //    Worker 側で取得済みのユーザー情報をここで渡してキャッシュさせる
+  // OAuth ログインをKVに記録
+  try {
+    const jst = new Date(Date.now() + 9 * 3600 * 1000);
+    const ts  = jst.toISOString().replace('T', ' ').slice(0, 19) + ' JST';
+    const ip  = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ua  = request.headers.get('User-Agent') || '';
+    const key = `log:${jst.toISOString().replace(/[^0-9]/g, '').slice(0, 14)}_${user.login}`;
+    await env.LOGIN_LOGS.put(key, JSON.stringify({ login: user.login, method: 'oauth', ts, ip, ua }), { expirationTtl: 60 * 60 * 24 * 90 });
+  } catch {}
+
   const userMin = {
     login:  user.login,
     campus: user.campus,

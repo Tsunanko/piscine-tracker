@@ -6,3 +6,8 @@ compatibility_date = "2024-01-01"
 # - FORTY_TWO_CLIENT_ID     : 42 OAuthアプリのUID
 # - FORTY_TWO_CLIENT_SECRET : 42 OAuthアプリのSecret
 # - REDIRECT_URI            : https://piscine-tracker.tsunanko.workers.dev/auth/callback
+# - ADMIN_SECRET            : ログ閲覧用の管理者トークン（任意の文字列）
+
+[[kv_namespaces]]
+binding = "LOGIN_LOGS"
+id = "4a572047419946679f20b8082b99ce4d"
