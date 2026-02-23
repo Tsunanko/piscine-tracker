@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン - Piscine Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0e0e16;
+      --surface:  #14141f;
+      --border:   #2a2a3a;
+      --accent:   #6c5ce7;
+      --accent2:  #a29bfe;
+      --text:     #e8e8f0;
+      --text-dim: #8888a0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Noto Sans JP", system-ui, -apple-system, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+      padding: 24px 20px;
+      text-align: center;
+    }
+
+    .logo-ring {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent) 0%, #00cec9 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 32px;
+      box-shadow: 0 0 32px rgba(108,92,231,0.35);
+    }
+
+    .app-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      margin-bottom: 6px;
+    }
+
+    .app-sub {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 36px;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 24px;
+    }
+
+    .login-desc {
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+
+    .btn-42 {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+      box-shadow: 0 4px 16px rgba(108,92,231,0.35);
+      font-family: inherit;
+      letter-spacing: 0.03em;
+    }
+    .btn-42:hover {
+      background: #7d6ef0;
+      box-shadow: 0 6px 20px rgba(108,92,231,0.5);
+    }
+    .btn-42:active { transform: scale(0.98); }
+
+    .btn-42-logo {
+      font-size: 18px;
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: -0.05em;
+    }
+
+    .error-msg {
+      margin-top: 16px;
+      padding: 10px 14px;
+      background: rgba(255,118,117,0.12);
+      border: 1px solid rgba(255,118,117,0.3);
+      border-radius: 8px;
+      color: #ff7675;
+      font-size: 12px;
+      display: none;
+    }
+
+    .footer-note {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #444460;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="logo-ring">🏊</div>
+  <div class="app-name">Piscine Tracker</div>
+  <div class="app-sub">42 Tokyo · Feb 2026</div>
+
+  <div class="login-card">
+    <div class="login-desc">
+      42 アカウントでログインすると<br>Piscine の進捗データを確認できます。
+    </div>
+
+    <button class="btn-42" onclick="loginWith42()">
+      <span class="btn-42-logo">42</span>
+      42 アカウントでログイン
+    </button>
+
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <div class="footer-note">
+    このサービスは 42 の非公式ツールです。<br>
+    42 Tokyo Piscine 参加者のみ利用できます。
+  </div>
+</div>
+
+<script src="auth.js"></script>
+<script>
+  // すでにログイン済みならダッシュボードへ
+  if (sessionStorage.getItem('piscine_42_token')) {
+    window.location.replace('dashboard.html');
+  }
+
+  // エラーメッセージ表示
+  const errParam = new URLSearchParams(location.search).get('error');
+  if (errParam) {
+    const el = document.getElementById('errorMsg');
+    el.style.display = 'block';
+    el.textContent =
+      errParam === 'access_denied' ? '認証がキャンセルされました。' :
+      errParam === 'no_token'      ? 'トークンの取得に失敗しました。再度お試しください。' :
+      '認証エラーが発生しました。再度お試しください。';
+  }
+</script>
+</body>
+</html>
