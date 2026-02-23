@@ -453,7 +453,6 @@ let currentFilter = 'all';
 let searchQuery = '';
 let currentSort = 'hours'; // 'hours', 'level', 'composite', 'name'
 let isComposing = false;
-let suppressInput = false; // 再レンダリング後の誤発火を防ぐフラグ
 let showDev = localStorage.getItem('showDev') !== 'false'; // default: ON
 
 function sortStudents(arr) {
@@ -637,7 +636,7 @@ function renderDashboard() {
       <input type="text" class="search-input" id="searchInput" placeholder="Search by login..." value="${searchQuery}"
         oncompositionstart="isComposing=true"
         oncompositionend="isComposing=false; onSearch(this.value)"
-        oninput="if(!isComposing && !suppressInput) onSearch(this.value)">
+        oninput="if(!isComposing) onSearch(this.value)">
     </div>
 
     <div class="filter-bar fade-in">
@@ -690,10 +689,6 @@ function setSort(sortKey) {
 function onSearch(value) {
   searchQuery = value;
   renderDashboard();
-  // 再レンダリング後、スマホIMEが新しいinput要素に文字を再送することがある。
-  // 80ms間だけ入力を抑制してその誤発火を防ぐ。
-  suppressInput = true;
-  setTimeout(() => { suppressInput = false; }, 80);
 }
 
 function goToStudent(login) {
