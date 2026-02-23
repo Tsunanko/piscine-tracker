@@ -385,8 +385,14 @@
     50% { opacity: 0.3; }
   }
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
+<script>
+  if (!sessionStorage.getItem('piscine_42_token')) {
+    window.location.replace('login.html');
+  }
+</script>
   <div class="container" id="app">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
@@ -770,9 +776,11 @@ function showError(msg) {
   `;
 }
 
-loadData();
-// Auto refresh every 5 minutes
-setInterval(loadData, 5 * 60 * 1000);
+requireAuth().then(user => {
+  if (!user) return;
+  loadData();
+  setInterval(loadData, 5 * 60 * 1000);
+});
 </script>
 </body>
 </html>
