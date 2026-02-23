@@ -92,6 +92,11 @@ export default {
       return handleGetConsents(request, env);
     }
 
+    // ─── 合言葉認証 API ──────────────────────────
+    if (url.pathname === '/api/simple-login' && request.method === 'POST') {
+      return handleSimpleLogin(request, env);
+    }
+
     // ルート (/) → ログイン画面
     return loginPage();
   }
@@ -409,4 +414,33 @@ function errorPage(title, message) {
     status: 403,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
+}
+
+/** 合言葉認証（ハッシュをWorker Secretと照合）*/
+async function handleSimpleLogin(request, env) {
+  try {
+    const { passHash } = await request.json();
+    if (!passHash) {
+      return new Response(JSON.stringify({ ok: false }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+    const validHashes = [env.PASS_HASH_1, env.PASS_HASH_2].filter(Boolean);
+    if (validHashes.includes(passHash)) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ ok: false }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
 }

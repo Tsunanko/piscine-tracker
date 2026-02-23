@@ -233,11 +233,15 @@ def main():
             diff = total_hours - expected_hours
 
             # 日別データ（偏差値計算用にstudentsにも保存）
+            today_str = now.strftime("%Y-%m-%d")  # JST の今日
             daily = []
             d = PISCINE_START
             while d < PISCINE_END:
                 key = d.strftime("%Y-%m-%d")
                 h = round(daily_hours.get(key, 0), 2)
+                # 当日のみ：進行中セッションの時間を加算（バーグラフに反映）
+                if key == today_str and is_active and active_extra_hours > 0:
+                    h = round(h + active_extra_hours, 2)
                 daily.append({
                     "date": key,
                     "weekday": d.strftime("%a"),
