@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Piscine Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0e0e16;
+      --surface:   #14141f;
+      --surface2:  #1a1a28;
+      --border:    #2a2a3a;
+      --accent:    #6c5ce7;
+      --accent2:   #a29bfe;
+      --green:     #00cec9;
+      --orange:    #fdcb6e;
+      --red:       #ff7675;
+      --text:      #e8e8f0;
+      --text-dim:  #8888a0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Noto Sans JP", system-ui, -apple-system, sans-serif;
+      min-height: 100dvh;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px 16px 60px;
+    }
+
+    /* ─── Header ─── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 0 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .header-icon { font-size: 28px; }
+    .header-title {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+    .back-link {
+      margin-left: auto;
+      color: var(--accent2);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    /* ─── Secret input ─── */
+    .secret-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 24px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .secret-wrap label { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+    .secret-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .secret-input:focus { border-color: var(--accent); }
+    .btn-load {
+      padding: 10px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .btn-load:hover { background: #7d6ef0; }
+    .btn-load:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ─── Stats bar ─── */
+    .stats-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 18px;
+      text-align: center;
+    }
+    .stat-chip-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+    .stat-chip-value { font-size: 22px; font-weight: 800; margin-top: 2px; }
+    .stat-chip-value.accent { color: var(--accent2); }
+    .stat-chip-value.green  { color: var(--green); }
+    .stat-chip-value.orange { color: var(--orange); }
+
+    /* ─── Tabs ─── */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-dim);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* ─── Search ─── */
+    .search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .table-search {
+      flex: 1;
+      padding: 9px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .table-search:focus { border-color: var(--accent); }
+    .table-search::placeholder { color: var(--text-dim); }
+
+    /* ─── Table ─── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .data-table th {
+      background: var(--surface2);
+      color: var(--text-dim);
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      white-space: nowrap;
+    }
+    .data-table td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(108,92,231,0.05); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-oauth  { background: rgba(0,206,201,0.15); color: var(--green); }
+    .badge-simple { background: rgba(253,203,110,0.15); color: var(--orange); }
+
+    .login-name {
+      font-weight: 700;
+      color: var(--accent2);
+    }
+
+    .ip-text { font-family: monospace; color: var(--text-dim); font-size: 12px; }
+    .ua-text { color: var(--text-dim); font-size: 11px; max-width: 280px;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ts-text  { font-family: monospace; font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+
+    .empty-msg {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    /* ─── Error / Loading ─── */
+    .msg-box {
+      padding: 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .msg-error   { background: rgba(255,118,117,0.1); border: 1px solid rgba(255,118,117,0.3); color: var(--red); }
+    .msg-loading { background: rgba(108,92,231,0.1); border: 1px solid rgba(108,92,231,0.3); color: var(--accent2); }
+
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Refresh btn ─── */
+    .btn-refresh {
+      padding: 9px 16px;
+      background: transparent;
+      color: var(--accent2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">🔐</div>
+    <div>
+      <div class="header-title">Admin Panel</div>
+      <div class="header-sub">Piscine Tracker · 管理者専用</div>
+    </div>
+    <a href="dashboard.html" class="back-link">← ダッシュボードへ</a>
+  </div>
+
+  <!-- Secret input -->
+  <div class="secret-wrap" id="secretWrap">
+    <label>Admin Secret:</label>
+    <input type="password" class="secret-input" id="secretInput"
+      placeholder="管理者シークレットを入力"
+      onkeydown="if(event.key==='Enter') loadAll()" />
+    <button class="btn-load" id="loadBtn" onclick="loadAll()">読み込む</button>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat-chip">
+      <div class="stat-chip-label">ログイン履歴</div>
+      <div class="stat-chip-value accent" id="statLogs">-</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-label">42 OAuth</div>
+      <div class="stat-chip-value green" id="statOauth">-</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-label">合言葉ログイン</div>
+      <div class="stat-chip-value orange" id="statSimple">-</div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-label">同意済みユーザ</div>
+      <div class="stat-chip-value accent" id="statConsents">-</div>
+    </div>
+  </div>
+
+  <!-- Message area -->
+  <div id="msgArea"></div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabsArea" style="display:none">
+    <button class="tab-btn active" onclick="showTab('logs')" id="tabLogs">📋 ログイン履歴</button>
+    <button class="tab-btn" onclick="showTab('consents')" id="tabConsents">✅ 同意記録</button>
+  </div>
+
+  <!-- Search + Refresh row -->
+  <div class="search-row" id="searchRow" style="display:none">
+    <input type="text" class="table-search" id="tableSearch"
+      placeholder="ログイン名で検索..."
+      oninput="renderTable()" />
+    <button class="btn-refresh" onclick="loadAll()">🔄 更新</button>
+  </div>
+
+  <!-- Table area -->
+  <div id="tableArea"></div>
+</div>
+
+<script>
+  const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
+  const ADMIN_KEY = 'piscine_admin_secret';
+
+  let allLogs     = [];
+  let allConsents = [];
+  let currentTab  = 'logs';
+
+  // ─── 認証ガード ───────────────────────────────────
+  // admin_user のみアクセス可能
+  const token    = sessionStorage.getItem('piscine_42_token');
+  const userJson = sessionStorage.getItem('piscine_42_user');
+  if (!token) {
+    window.location.replace('login.html');
+  } else {
+    try {
+      const u = JSON.parse(userJson);
+      if (u.login !== 'admin_user') {
+        // admin_user 以外はダッシュボードへ
+        window.location.replace('dashboard.html');
+      }
+    } catch {
+      window.location.replace('login.html');
+    }
+  }
+
+  // ─── シークレット自動入力 ─────────────────────────
+  const savedSecret = sessionStorage.getItem(ADMIN_KEY);
+  if (savedSecret) {
+    document.getElementById('secretInput').value = savedSecret;
+  }
+
+  // ─── データ読み込み ───────────────────────────────
+  async function loadAll() {
+    const secret = document.getElementById('secretInput').value.trim();
+    if (!secret) {
+      showMsg('シークレットを入力してください。', 'error');
+      return;
+    }
+
+    // sessionStorage に保存（ページ内で使い回す）
+    sessionStorage.setItem(ADMIN_KEY, secret);
+
+    document.getElementById('loadBtn').disabled = true;
+    showMsg('<span class="spinner"></span>データを読み込み中...', 'loading');
+
+    try {
+      const [logsRes, consentsRes] = await Promise.all([
+        fetch(`${WORKER}/api/logs`,     { headers: { 'X-Admin-Secret': secret } }),
+        fetch(`${WORKER}/api/consents`, { headers: { 'X-Admin-Secret': secret } }),
+      ]);
+
+      if (logsRes.status === 401 || consentsRes.status === 401) {
+        showMsg('❌ シークレットが正しくありません。', 'error');
+        sessionStorage.removeItem(ADMIN_KEY);
+        document.getElementById('loadBtn').disabled = false;
+        return;
+      }
+      if (!logsRes.ok || !consentsRes.ok) {
+        throw new Error('API error');
+      }
+
+      allLogs     = await logsRes.json();
+      allConsents = await consentsRes.json();
+
+      clearMsg();
+      updateStats();
+      showControls();
+      renderTable();
+
+    } catch (e) {
+      showMsg('❌ データの取得に失敗しました: ' + e.message, 'error');
+    } finally {
+      document.getElementById('loadBtn').disabled = false;
+    }
+  }
+
+  // ─── 統計更新 ─────────────────────────────────────
+  function updateStats() {
+    const oauthCount  = allLogs.filter(l => l.method === 'oauth').length;
+    const simpleCount = allLogs.filter(l => l.method === 'simple').length;
+    document.getElementById('statLogs').textContent    = allLogs.length;
+    document.getElementById('statOauth').textContent   = oauthCount;
+    document.getElementById('statSimple').textContent  = simpleCount;
+    document.getElementById('statConsents').textContent = allConsents.length;
+    document.getElementById('statsBar').style.display = 'flex';
+  }
+
+  // ─── コントロール表示 ─────────────────────────────
+  function showControls() {
+    document.getElementById('tabsArea').style.display  = 'flex';
+    document.getElementById('searchRow').style.display = 'flex';
+  }
+
+  // ─── タブ切り替え ─────────────────────────────────
+  function showTab(tab) {
+    currentTab = tab;
+    document.getElementById('tabLogs').classList.toggle('active', tab === 'logs');
+    document.getElementById('tabConsents').classList.toggle('active', tab === 'consents');
+    const ph = tab === 'logs' ? 'ログイン名・IPで検索...' : 'ログイン名で検索...';
+    document.getElementById('tableSearch').placeholder = ph;
+    renderTable();
+  }
+
+  // ─── テーブル描画 ────────────────────────────────
+  function renderTable() {
+    const q = document.getElementById('tableSearch').value.trim().toLowerCase();
+
+    if (currentTab === 'logs') {
+      renderLogs(q);
+    } else {
+      renderConsents(q);
+    }
+  }
+
+  function renderLogs(q) {
+    const filtered = q
+      ? allLogs.filter(l => l.login.toLowerCase().includes(q) || (l.ip || '').includes(q))
+      : allLogs;
+
+    if (filtered.length === 0) {
+      document.getElementById('tableArea').innerHTML = `<div class="table-wrap"><div class="empty-msg">該当するログがありません</div></div>`;
+      return;
+    }
+
+    const rows = filtered.map(e => `
+      <tr>
+        <td class="ts-text">${e.ts || '-'}</td>
+        <td class="login-name">${esc(e.login)}</td>
+        <td>
+          <span class="badge badge-${e.method}">
+            ${e.method === 'oauth' ? '🔑 42 OAuth' : '🔐 合言葉'}
+          </span>
+        </td>
+        <td class="ip-text">${esc(e.ip || '-')}</td>
+        <td><div class="ua-text" title="${esc(e.ua || '')}">${esc(e.ua || '-')}</div></td>
+      </tr>
+    `).join('');
+
+    document.getElementById('tableArea').innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>日時 (JST)</th>
+              <th>ログイン名</th>
+              <th>方法</th>
+              <th>IPアドレス</th>
+              <th>User Agent</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-dim);text-align:right">
+        ${filtered.length} / ${allLogs.length} 件表示
+      </div>
+    `;
+  }
+
+  function renderConsents(q) {
+    const filtered = q
+      ? allConsents.filter(c => c.login.toLowerCase().includes(q))
+      : allConsents;
+
+    if (filtered.length === 0) {
+      document.getElementById('tableArea').innerHTML = `<div class="table-wrap"><div class="empty-msg">該当する同意記録がありません</div></div>`;
+      return;
+    }
+
+    const rows = filtered.map(e => {
+      // consentedAt はISO文字列 → JST表示
+      let consentedAtJst = '-';
+      if (e.consentedAt) {
+        try {
+          consentedAtJst = new Date(e.consentedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+        } catch {}
+      }
+      return `
+        <tr>
+          <td class="login-name">${esc(e.login)}</td>
+          <td>
+            <span class="badge badge-${e.method}">
+              ${e.method === 'oauth' ? '🔑 42 OAuth' : '🔐 合言葉'}
+            </span>
+          </td>
+          <td class="ts-text">${consentedAtJst}</td>
+          <td class="ip-text">${esc(e.ip || '-')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    document.getElementById('tableArea').innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ログイン名</th>
+              <th>ログイン方法</th>
+              <th>同意日時 (JST)</th>
+              <th>IPアドレス</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-dim);text-align:right">
+        ${filtered.length} / ${allConsents.length} 件表示
+      </div>
+    `;
+  }
+
+  // ─── メッセージ ───────────────────────────────────
+  function showMsg(html, type) {
+    document.getElementById('msgArea').innerHTML =
+      `<div class="msg-box msg-${type}">${html}</div>`;
+  }
+  function clearMsg() {
+    document.getElementById('msgArea').innerHTML = '';
+  }
+
+  // ─── XSS対策 ─────────────────────────────────────
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ─── シークレット保存済みなら自動読み込み ────────
+  if (savedSecret) {
+    loadAll();
+  }
+</script>
+</body>
+</html>
