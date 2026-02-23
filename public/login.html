@@ -343,7 +343,7 @@
   }
 
   // ─── ログイン名＋合言葉ログイン（Piscine生向け）
-  const PASS_HASH = 'f43eaf18e5b14b563e21e2adb640e9ee848953ec48e33e6585f744de8b2c1f08'; // SHA-256 of passphrase
+  const PASS_HASH = '1f4028e3d5e77206d5a77faa591e6b9ab4a7b7566b049c85f489413e401e3a2a'; // SHA-256 of passphrase
 
   async function sha256(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
