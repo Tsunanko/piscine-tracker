@@ -56,7 +56,7 @@
   // トークンを保存
   sessionStorage.setItem('piscine_42_token', token);
 
-  // Worker から渡されたユーザー情報をキャッシュ（CORS 回避のため）
+  // ユーザー情報をキャッシュ
   const userStr = params.get('user');
   let userLogin = null;
   if (userStr) {
