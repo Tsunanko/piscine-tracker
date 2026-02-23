@@ -123,60 +123,6 @@
       color: #444460;
       line-height: 1.6;
     }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin: 20px 0 16px;
-      color: #444460;
-      font-size: 11px;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .simple-login-desc {
-      font-size: 12px;
-      color: var(--text-dim);
-      margin-bottom: 10px;
-      text-align: left;
-    }
-
-    .simple-login-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    .login-input {
-      flex: 1;
-      padding: 11px 14px;
-      background: #0e0e16;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .login-input:focus { border-color: var(--accent); }
-    .login-input::placeholder { color: #444460; }
-
-    .btn-name {
-      padding: 11px 16px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-name:hover { background: #7d6ef0; }
   </style>
 </head>
 <body>
@@ -196,22 +142,6 @@
       42 アカウントでログイン
     </button>
 
-    <div class="divider">
-      <span>または</span>
-    </div>
-
-    <div class="simple-login">
-      <div class="simple-login-desc">Piscine生はログイン名を直接入力</div>
-      <div class="simple-login-row">
-        <input type="text" id="loginInput" class="login-input"
-          placeholder="例: ytsunanko"
-          onkeydown="if(event.key==='Enter') loginWithName()"
-          autocomplete="off" autocapitalize="none" spellcheck="false" />
-        <button class="btn-name" onclick="loginWithName()">→</button>
-      </div>
-      <div class="error-msg" id="nameErrorMsg"></div>
-    </div>
-
     <div class="error-msg" id="errorMsg"></div>
   </div>
 
@@ -226,50 +156,6 @@
   // すでにログイン済みならダッシュボードへ
   if (sessionStorage.getItem('piscine_42_token')) {
     window.location.replace('dashboard.html');
-  }
-
-  // ログイン名直接入力（Piscine生向け）
-  async function loginWithName() {
-    const input = document.getElementById('loginInput');
-    const errEl = document.getElementById('nameErrorMsg');
-    const login = input.value.trim().toLowerCase();
-    if (!login) return;
-
-    input.disabled = true;
-    errEl.style.display = 'none';
-    errEl.textContent = '';
-
-    try {
-      const resp = await fetch('data.json?t=' + Date.now());
-      if (!resp.ok) throw new Error('data.json fetch failed');
-      const data = await resp.json();
-
-      const all = [...(data.online || []), ...(data.offline || [])];
-      const student = all.find(s => s.login === login);
-
-      if (!student) {
-        errEl.style.display = 'block';
-        errEl.textContent = `"${login}" はPiscine生リストに見つかりません。`;
-        input.disabled = false;
-        return;
-      }
-
-      // sessionStorage にユーザー情報を保存（OAuthフローと同じキー）
-      sessionStorage.setItem('piscine_42_token', 'piscine:' + login);
-      sessionStorage.setItem('piscine_42_user', JSON.stringify({
-        login: student.login,
-        campus: [{ id: 26, name: 'Tokyo' }],
-        image: {
-          versions: { small: student.image_small || '' },
-          link: student.image_small || '',
-        },
-      }));
-      window.location.replace('dashboard.html');
-    } catch (e) {
-      errEl.style.display = 'block';
-      errEl.textContent = 'データ取得に失敗しました。再度お試しください。';
-      input.disabled = false;
-    }
   }
 
   // エラーメッセージ表示
