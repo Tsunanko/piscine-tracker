@@ -61,47 +61,6 @@
     }
     .back-link:hover { text-decoration: underline; }
 
-    /* ─── Secret input ─── */
-    .secret-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 24px;
-      margin-bottom: 24px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-    .secret-wrap label { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
-    .secret-input {
-      flex: 1;
-      padding: 10px 14px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: monospace;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .secret-input:focus { border-color: var(--accent); }
-    .btn-load {
-      padding: 10px 20px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.15s;
-      font-family: inherit;
-      white-space: nowrap;
-    }
-    .btn-load:hover { background: #7d6ef0; }
-    .btn-load:disabled { opacity: 0.5; cursor: not-allowed; }
-
     /* ─── Stats bar ─── */
     .stats-bar {
       display: flex;
@@ -271,15 +230,6 @@
     <a href="dashboard.html" class="back-link">← ダッシュボードへ</a>
   </div>
 
-  <!-- Secret input -->
-  <div class="secret-wrap" id="secretWrap">
-    <label>Admin Secret:</label>
-    <input type="password" class="secret-input" id="secretInput"
-      placeholder="管理者シークレットを入力"
-      onkeydown="if(event.key==='Enter') loadAll()" />
-    <button class="btn-load" id="loadBtn" onclick="loadAll()">読み込む</button>
-  </div>
-
   <!-- Stats bar -->
   <div class="stats-bar" id="statsBar" style="display:none">
     <div class="stat-chip">
@@ -323,7 +273,6 @@
 
 <script>
   const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
-  const ADMIN_KEY = 'piscine_admin_secret';
 
   let allLogs     = [];
   let allConsents = [];
@@ -339,7 +288,6 @@
     try {
       const u = JSON.parse(userJson);
       if (u.login !== 'ijoja') {
-        // ijoja 以外はダッシュボードへ
         window.location.replace('dashboard.html');
       }
     } catch {
@@ -347,36 +295,20 @@
     }
   }
 
-  // ─── シークレット自動入力 ─────────────────────────
-  const savedSecret = sessionStorage.getItem(ADMIN_KEY);
-  if (savedSecret) {
-    document.getElementById('secretInput').value = savedSecret;
-  }
-
-  // ─── データ読み込み ───────────────────────────────
+  // ─── データ読み込み（ログイン済みトークンで自動認証）────
   async function loadAll() {
-    const secret = document.getElementById('secretInput').value.trim();
-    if (!secret) {
-      showMsg('シークレットを入力してください。', 'error');
-      return;
-    }
-
-    // sessionStorage に保存（ページ内で使い回す）
-    sessionStorage.setItem(ADMIN_KEY, secret);
-
-    document.getElementById('loadBtn').disabled = true;
     showMsg('<span class="spinner"></span>データを読み込み中...', 'loading');
+
+    const authHeader = { 'Authorization': `Bearer ${token}` };
 
     try {
       const [logsRes, consentsRes] = await Promise.all([
-        fetch(`${WORKER}/api/logs`,     { headers: { 'X-Admin-Secret': secret } }),
-        fetch(`${WORKER}/api/consents`, { headers: { 'X-Admin-Secret': secret } }),
+        fetch(`${WORKER}/api/logs`,     { headers: authHeader }),
+        fetch(`${WORKER}/api/consents`, { headers: authHeader }),
       ]);
 
       if (logsRes.status === 401 || consentsRes.status === 401) {
-        showMsg('❌ シークレットが正しくありません。', 'error');
-        sessionStorage.removeItem(ADMIN_KEY);
-        document.getElementById('loadBtn').disabled = false;
+        showMsg('❌ 認証に失敗しました。再ログインしてください。', 'error');
         return;
       }
       if (!logsRes.ok || !consentsRes.ok) {
@@ -393,8 +325,6 @@
 
     } catch (e) {
       showMsg('❌ データの取得に失敗しました: ' + e.message, 'error');
-    } finally {
-      document.getElementById('loadBtn').disabled = false;
     }
   }
 
@@ -551,10 +481,8 @@
       .replace(/"/g, '&quot;');
   }
 
-  // ─── シークレット保存済みなら自動読み込み ────────
-  if (savedSecret) {
-    loadAll();
-  }
+  // ─── ページ表示時に自動読み込み ─────────────────
+  loadAll();
 </script>
 </body>
 </html>
