@@ -637,7 +637,7 @@ function renderDashboard() {
     <div class="search-wrap fade-in">
       <input type="text" class="search-input" id="searchInput" placeholder="Search by login..." value="${searchQuery}"
         oncompositionstart="isComposing=true"
-        oncompositionend="isComposing=false; onSearch(this.value)"
+        oncompositionend="isComposing=false; if(!suppressInput) onSearch(this.value)"
         oninput="if(!isComposing && !suppressInput) onSearch(this.value)">
     </div>
 
@@ -698,7 +698,7 @@ function onSearch(value) {
   // 再レンダリング後、スマホIMEが新しいinput要素に文字を再送することがある。
   // 80ms間だけ入力を抑制してその誤発火を防ぐ。
   suppressInput = true;
-  setTimeout(() => { suppressInput = false; }, 80);
+  setTimeout(() => { suppressInput = false; }, 200); // 80ms→200ms（低速端末でも誤発火を防ぐ）
 }
 
 function goToStudent(login) {
