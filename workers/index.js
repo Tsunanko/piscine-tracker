@@ -170,12 +170,20 @@ async function handleCallback(request, env, url) {
     );
   }
 
-  // 成功 → GitHub Pages の auth-callback.html にトークンをハッシュで渡す
+  // 成功 → GitHub Pages の auth-callback.html にトークン＋ユーザー情報をハッシュで渡す
   // auth-callback.html が sessionStorage に保存してダッシュボードへ誘導する
+  // ※ ブラウザから api.intra.42.fr を直接呼ぶと CORS 問題が起きるため、
+  //    Worker 側で取得済みのユーザー情報をここで渡してキャッシュさせる
+  const userMin = {
+    login:  user.login,
+    campus: user.campus,
+    image:  user.image,
+  };
+  const userEncoded = encodeURIComponent(JSON.stringify(userMin));
   return new Response(null, {
     status: 302,
     headers: {
-      'Location': `${GITHUB_PAGES_URL}/auth-callback.html#access_token=${access_token}`,
+      'Location': `${GITHUB_PAGES_URL}/auth-callback.html#access_token=${access_token}&user=${userEncoded}`,
       'Set-Cookie': `oauth_state=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`,
     },
   });
