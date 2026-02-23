@@ -455,6 +455,7 @@ let currentSort = 'hours'; // 'hours', 'level', 'composite', 'name'
 let isComposing = false;
 let suppressInput = false; // 再レンダリング後の誤発火を防ぐフラグ
 let showDev = localStorage.getItem('showDev') !== 'false'; // default: ON
+let loggedInUser = null; // ログイン中ユーザー情報
 
 function sortStudents(arr) {
   const sorted = [...arr];
@@ -651,6 +652,10 @@ function renderDashboard() {
       <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
       <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
       <a href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
+      ${loggedInUser && loggedInUser.login === 'ijoja'
+        ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+           <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
+        : ''}
     </div>
 
     <div class="section-header fade-in">
@@ -736,6 +741,7 @@ function showError(msg) {
 // 認証確認後にダッシュボード読み込み
 requireAuth().then(user => {
   if (!user) return;
+  loggedInUser = user; // 管理者リンク表示判定に使用
   loadDashboard();
   setInterval(loadDashboard, 5 * 60 * 1000);
 });
