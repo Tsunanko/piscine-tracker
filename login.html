@@ -146,6 +146,12 @@
       text-align: left;
     }
 
+    .simple-login-col {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     .simple-login-row {
       display: flex;
       gap: 8px;
@@ -177,9 +183,76 @@
       transition: background 0.15s;
     }
     .btn-name:hover { background: #7d6ef0; }
+
+    /* 同意モーダル */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; padding: 16px;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 24px;
+      max-width: 400px; width: 100%;
+      max-height: 80vh; overflow-y: auto;
+    }
+    .modal-title {
+      font-size: 16px; font-weight: 700;
+      margin-bottom: 16px; color: var(--accent2);
+    }
+    .modal-body {
+      font-size: 12px; line-height: 1.8;
+      color: var(--text-dim); margin-bottom: 20px;
+    }
+    .modal-body strong { color: var(--text); }
+    .modal-check {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin-bottom: 20px; cursor: pointer;
+    }
+    .modal-check input[type=checkbox] { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; }
+    .modal-check span { font-size: 13px; color: var(--text); }
+    .btn-agree {
+      width: 100%; padding: 13px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-agree:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-agree:not(:disabled):hover { background: #7d6ef0; }
   </style>
 </head>
 <body>
+
+<!-- 利用同意モーダル -->
+<div class="modal-overlay hidden" id="consentModal">
+  <div class="modal">
+    <div class="modal-title">📋 Piscine Tracker 利用規約</div>
+    <div class="modal-body">
+      このサービスは <strong>42 Tokyo Piscine 参加者向け</strong> の非公式ツールです。<br><br>
+      <strong>取得・表示するデータ</strong><br>
+      ・42 Intra に記録された在籍時間・Levelなどの学習データ<br>
+      ・ログイン履歴（日時・ログイン名・IPアドレス）<br><br>
+      <strong>利用条件</strong><br>
+      ・自分および他のPiscine生のデータを <strong>悪用・転載しないこと</strong><br>
+      ・他の学生へのハラスメントや不正な目的に使用しないこと<br>
+      ・ログイン情報は管理者が不正利用の調査目的で確認する場合があること<br><br>
+      <strong>免責事項</strong><br>
+      本サービスは 42 の公式ツールではありません。データの正確性は保証されません。
+    </div>
+    <label class="modal-check">
+      <input type="checkbox" id="agreeCheck" onchange="document.getElementById('agreeBtn').disabled=!this.checked">
+      <span>上記の内容を確認し、利用規約に同意します</span>
+    </label>
+    <button class="btn-agree" id="agreeBtn" disabled onclick="acceptConsent()">
+      同意してログイン画面へ
+    </button>
+  </div>
+</div>
 
 <div class="login-wrap">
   <div class="logo-ring">🏊</div>
@@ -201,13 +274,19 @@
     </div>
 
     <div class="simple-login">
-      <div class="simple-login-desc">Piscine生はログイン名を直接入力</div>
-      <div class="simple-login-row">
+      <div class="simple-login-desc">Piscine生はログイン名と合言葉を入力</div>
+      <div class="simple-login-col">
         <input type="text" id="loginInput" class="login-input"
-          placeholder="例: ytsunanko"
-          onkeydown="if(event.key==='Enter') loginWithName()"
+          placeholder="ログイン名（例: ytsunanko）"
+          onkeydown="if(event.key==='Enter') document.getElementById('passInput').focus()"
           autocomplete="off" autocapitalize="none" spellcheck="false" />
-        <button class="btn-name" onclick="loginWithName()">→</button>
+        <div class="simple-login-row">
+          <input type="password" id="passInput" class="login-input"
+            placeholder="合言葉"
+            onkeydown="if(event.key==='Enter') loginWithName()"
+            autocomplete="off" />
+          <button class="btn-name" onclick="loginWithName()">→</button>
+        </div>
       </div>
       <div class="error-msg" id="nameErrorMsg"></div>
     </div>
@@ -228,14 +307,59 @@
     window.location.replace('dashboard.html');
   }
 
-  // ログイン名直接入力（Piscine生向け）
+  const LOG_ENDPOINT = 'https://piscine-tracker.tsunanko.workers.dev/api/log';
+
+  // ─── 同意管理 ──────────────────────────────
+  function acceptConsent() {
+    localStorage.setItem('piscine_agreed', '1');
+    document.getElementById('consentModal').classList.add('hidden');
+  }
+
+  // 同意済みでなければモーダル表示
+  if (!localStorage.getItem('piscine_agreed')) {
+    document.getElementById('consentModal').classList.remove('hidden');
+  }
+
+  // ─── ログ送信（fire-and-forget）────────────
+  function sendLog(login, method) {
+    fetch(LOG_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, method }),
+    }).catch(() => {}); // エラーは無視
+  }
+
+  // ─── ログイン名＋合言葉ログイン（Piscine生向け）
+  const PASS_HASH = 'f43eaf18e5b14b563e21e2adb640e9ee848953ec48e33e6585f744de8b2c1f08'; // SHA-256 of passphrase
+
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
   async function loginWithName() {
-    const input = document.getElementById('loginInput');
-    const errEl = document.getElementById('nameErrorMsg');
-    const login = input.value.trim().toLowerCase();
-    if (!login) return;
+    const input   = document.getElementById('loginInput');
+    const passEl  = document.getElementById('passInput');
+    const errEl   = document.getElementById('nameErrorMsg');
+    const login   = input.value.trim().toLowerCase();
+    const passVal = passEl.value;
+
+    if (!login || !passVal) {
+      errEl.style.display = 'block';
+      errEl.textContent = 'ログイン名と合言葉を入力してください。';
+      return;
+    }
+
+    // 合言葉チェック
+    const inputHash = await sha256(passVal);
+    if (inputHash !== PASS_HASH) {
+      errEl.style.display = 'block';
+      errEl.textContent = '合言葉が違います。';
+      return;
+    }
 
     input.disabled = true;
+    passEl.disabled = true;
     errEl.style.display = 'none';
     errEl.textContent = '';
 
@@ -255,6 +379,7 @@
       }
 
       // sessionStorage にユーザー情報を保存（OAuthフローと同じキー）
+      sendLog(login, 'simple');
       sessionStorage.setItem('piscine_42_token', 'piscine:' + login);
       sessionStorage.setItem('piscine_42_user', JSON.stringify({
         login: student.login,
