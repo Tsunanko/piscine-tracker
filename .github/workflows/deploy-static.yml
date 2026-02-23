@@ -19,12 +19,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Restore latest data.json from gh-pages
+      - name: Restore latest data from gh-pages
         run: |
           git fetch origin gh-pages || true
           git show origin/gh-pages:data.json > public/data.json 2>/dev/null \
             && echo "data.json restored from gh-pages" \
             || echo "No data.json on gh-pages yet, using existing"
+          mkdir -p public/data
+          git archive origin/gh-pages data/ 2>/dev/null \
+            | tar -x -C public/ \
+            && echo "data/*.json restored from gh-pages" \
+            || echo "No data/ on gh-pages yet, using existing"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
