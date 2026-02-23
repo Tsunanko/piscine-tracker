@@ -434,9 +434,48 @@
   }
 </script>
   <div class="container" id="app">
+    <!-- ローディング -->
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <div class="loading-text">Loading piscine data...</div>
+    </div>
+
+    <!-- ダッシュボード本体（初期は非表示、検索入力は永続DOM要素） -->
+    <div id="dashContent" style="display:none">
+      <div class="header fade-in">
+        <div class="header-label">42 Tokyo</div>
+        <h1>Piscine Dashboard</h1>
+        <div class="header-sub" id="headerSub"></div>
+      </div>
+      <div class="summary fade-in">
+        <div class="summary-item">
+          <div class="summary-label">Online</div>
+          <div class="summary-value green" id="onlineCount">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Total</div>
+          <div class="summary-value accent" id="totalCount">0</div>
+        </div>
+      </div>
+      <!-- 検索入力欄: innerHTML 再構築の対象外（Safari IME対策） -->
+      <div class="search-wrap">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search by login...">
+      </div>
+      <div class="filter-bar fade-in" id="filterBar"></div>
+      <div class="sort-bar fade-in" id="sortBar"></div>
+      <div class="section-header fade-in" id="sectionHeader"></div>
+      <div class="student-grid fade-in" id="studentGrid"></div>
+      <div class="empty-state fade-in" id="emptyState" style="display:none">No students found</div>
+      <div class="updated" id="updatedText"></div>
+    </div>
+
+    <!-- エラー表示 -->
+    <div id="errorContent" style="display:none">
+      <div class="header">
+        <div class="header-label">42 Tokyo</div>
+        <h1>Piscine Dashboard</h1>
+      </div>
+      <div class="error-card" id="errorCard"></div>
     </div>
   </div>
 
@@ -453,7 +492,7 @@ let currentFilter = 'all';
 let searchQuery = '';
 let currentSort = 'hours'; // 'hours', 'level', 'composite', 'name'
 let isComposing = false;
-let suppressInput = false; // 再レンダリング後の誤発火を防ぐフラグ
+// suppressInput は不要（検索入力欄が永続DOM要素になったため）
 let showDev = localStorage.getItem('showDev') !== 'false'; // default: ON
 let loggedInUser = null; // ログイン中ユーザー情報
 
@@ -485,8 +524,22 @@ function toggleDev() {
 }
 
 function applyDisplayState() {
-  const grid = document.querySelector('.student-grid');
+  const grid = document.getElementById('studentGrid');
   if (grid) grid.classList.toggle('hide-dev', !showDev);
+}
+
+// 検索入力のイベントハンドラを一度だけ登録（永続DOM要素）
+function initSearchInput() {
+  const input = document.getElementById('searchInput');
+  if (!input) return;
+  input.addEventListener('compositionstart', () => { isComposing = true; });
+  input.addEventListener('compositionend', () => {
+    isComposing = false;
+    onSearch(input.value);
+  });
+  input.addEventListener('input', () => {
+    if (!isComposing) onSearch(input.value);
+  });
 }
 
 function formatHours(h, loading) {
@@ -503,7 +556,11 @@ function hoursClass(h) {
 
 function renderDashboard() {
   const d = dashboardData;
-  const app = document.getElementById('app');
+
+  // ローディング非表示・ダッシュボード表示
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('errorContent').style.display = 'none';
+  document.getElementById('dashContent').style.display = '';
 
   // Build online lookup
   const onlineSet = new Set(d.online.map(s => s.login));
@@ -513,12 +570,11 @@ function renderDashboard() {
   // Merge all students into a single list
   let allStudents = [...d.online, ...d.offline].map(s => ({
     ...s,
-    // Ensure online students have location info merged
     ...(onlineMap[s.login] || {}),
     _isOnline: onlineSet.has(s.login),
   }));
 
-  // Apply cluster filter (only show students currently in that cluster)
+  // Apply cluster filter
   if (currentFilter !== 'all') {
     allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
   }
@@ -532,15 +588,20 @@ function renderDashboard() {
   // Apply sort
   allStudents = sortStudents(allStudents);
 
-  // Build rank based on current sort (全学生対象・フィルター前)
+  // Build rank
   const allForRank = sortStudents([...d.online, ...d.offline]);
   const rankMap = {};
   allForRank.forEach((s, i) => { rankMap[s.login] = i + 1; });
 
-  // Collect available clusters from online data
+  // Clusters
   const clusters = [...new Set(d.online.map(s => s.cluster).filter(Boolean))].sort();
 
-  // Build filter buttons
+  // Update header
+  document.getElementById('headerSub').textContent = 'Feb 2 - Feb 27, 2026';
+  document.getElementById('onlineCount').textContent = d.total_online;
+  document.getElementById('totalCount').textContent = d.total_students;
+
+  // Update filter bar
   const filterBtns = [
     `<button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" onclick="setFilter('all')">All</button>`
   ];
@@ -550,9 +611,10 @@ function renderDashboard() {
       `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${c}')">${c} (${count})</button>`
     );
   });
+  document.getElementById('filterBar').innerHTML = filterBtns.join('');
 
-  // Build sort buttons
-  const sortBtns = [
+  // Update sort bar
+  const sortBtnsHTML = [
     { key: 'hours', label: '時間' },
     { key: 'level', label: 'Level' },
     { key: 'composite', label: '総合' },
@@ -560,6 +622,23 @@ function renderDashboard() {
   ].map(s =>
     `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
   ).join('');
+  const adminLink = loggedInUser && loggedInUser.login === 'ijoja'
+    ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+       <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
+    : '';
+  document.getElementById('sortBar').innerHTML = `
+    <label>Sort:</label>
+    ${sortBtnsHTML}
+    <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+    <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
+    <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+    <a href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
+    ${adminLink}
+  `;
+
+  // Update section header
+  document.getElementById('sectionHeader').innerHTML =
+    `${{hours:'時間ランキング', level:'Level ランキング', composite:'総合ランキング', name:'全学生'}[currentSort] || '全学生'} <span class="section-count">(${allStudents.length}人)</span>`;
 
   // Build student cards
   function makeCard(student) {
@@ -613,73 +692,26 @@ function renderDashboard() {
       </div>`;
   }
 
-  const cards = allStudents.map(s => makeCard(s)).join('');
-  const onlineInView = allStudents.filter(s => s._isOnline).length;
-
-  app.innerHTML = `
-    <div class="header fade-in">
-      <div class="header-label">42 Tokyo</div>
-      <h1>Piscine Dashboard</h1>
-      <div class="header-sub">Feb 2 - Feb 27, 2026</div>
-    </div>
-
-    <div class="summary fade-in">
-      <div class="summary-item">
-        <div class="summary-label">Online</div>
-        <div class="summary-value green">${d.total_online}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Total</div>
-        <div class="summary-value accent">${d.total_students}</div>
-      </div>
-    </div>
-
-    <div class="search-wrap fade-in">
-      <input type="text" class="search-input" id="searchInput" placeholder="Search by login..." value="${searchQuery}"
-        oncompositionstart="isComposing=true"
-        oncompositionend="isComposing=false; if(!suppressInput) onSearch(this.value)"
-        oninput="if(!isComposing && !suppressInput) onSearch(this.value)">
-    </div>
-
-    <div class="filter-bar fade-in">
-      ${filterBtns.join('')}
-    </div>
-
-    <div class="sort-bar fade-in">
-      <label>Sort:</label>
-      ${sortBtns}
-      <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
-      <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
-      <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
-      <a href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
-      ${loggedInUser && loggedInUser.login === 'ijoja'
-        ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
-           <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
-        : ''}
-    </div>
-
-    <div class="section-header fade-in">
-      ${{hours:'時間ランキング', level:'Level ランキング', composite:'総合ランキング', name:'全学生'}[currentSort] || '全学生'} <span class="section-count">(${allStudents.length}人)</span>
-    </div>
-    ${allStudents.length > 0
-      ? `<div class="student-grid fade-in">${cards}</div>`
-      : `<div class="empty-state fade-in">No students found</div>`}
-
-    <div class="updated">
-      Updated: ${new Date(d.cached_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
-      &nbsp;·&nbsp;<a href="stats.html" style="color:var(--accent-light);text-decoration:none;font-size:11px">📊 統計分析</a>
-    </div>
-  `;
-
-  // Apply display toggles (CSSクラスで偏差値表示/非表示)
-  applyDisplayState();
-
-  // Restore focus on search input
-  const input = document.getElementById('searchInput');
-  if (input && searchQuery) {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+  // Update student grid（検索入力欄は触らない）
+  const grid = document.getElementById('studentGrid');
+  const emptyState = document.getElementById('emptyState');
+  if (allStudents.length > 0) {
+    grid.innerHTML = allStudents.map(s => makeCard(s)).join('');
+    grid.style.display = '';
+    emptyState.style.display = 'none';
+  } else {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    emptyState.style.display = '';
   }
+
+  // Update footer
+  document.getElementById('updatedText').innerHTML =
+    `Updated: ${new Date(d.cached_at).toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'})}
+    &nbsp;·&nbsp;<a href="stats.html" style="color:var(--accent-light);text-decoration:none;font-size:11px">📊 統計分析</a>`;
+
+  // Apply dev toggles
+  applyDisplayState();
 }
 
 function setFilter(cluster) {
@@ -695,10 +727,6 @@ function setSort(sortKey) {
 function onSearch(value) {
   searchQuery = value;
   renderDashboard();
-  // 再レンダリング後、スマホIMEが新しいinput要素に文字を再送することがある。
-  // 80ms間だけ入力を抑制してその誤発火を防ぐ。
-  suppressInput = true;
-  setTimeout(() => { suppressInput = false; }, 200); // 80ms→200ms（低速端末でも誤発火を防ぐ）
 }
 
 function goToStudent(login) {
@@ -725,23 +753,18 @@ async function loadDashboard() {
 }
 
 function showError(msg) {
-  document.getElementById('app').innerHTML = `
-    <div class="header">
-      <div class="header-label">42 Tokyo</div>
-      <h1>Piscine Dashboard</h1>
-    </div>
-    <div class="error-card">
-      <h3>Error</h3>
-      <p>${msg}</p>
-      <p style="margin-top:12px;font-size:11px">Data is updated every 5 minutes via GitHub Actions</p>
-    </div>
-  `;
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('dashContent').style.display = 'none';
+  document.getElementById('errorCard').innerHTML =
+    `<h3>Error</h3><p>${msg}</p><p style="margin-top:12px;font-size:11px">Data is updated every 5 minutes via GitHub Actions</p>`;
+  document.getElementById('errorContent').style.display = '';
 }
 
 // 認証確認後にダッシュボード読み込み
 requireAuth().then(user => {
   if (!user) return;
   loggedInUser = user; // 管理者リンク表示判定に使用
+  initSearchInput(); // 検索入力欄のイベントを一度だけ登録
   loadDashboard();
   setInterval(loadDashboard, 5 * 60 * 1000);
 });
