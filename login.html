@@ -307,14 +307,11 @@
     window.location.replace('dashboard.html');
   }
 
-  const LOG_ENDPOINT     = 'https://piscine-tracker.tsunanko.workers.dev/api/log';
-  const CONSENT_ENDPOINT = 'https://piscine-tracker.tsunanko.workers.dev/api/consent';
+  const LOG_ENDPOINT = 'https://piscine-tracker.tsunanko.workers.dev/api/log';
 
   // ─── 同意管理 ──────────────────────────────
   function acceptConsent() {
-    const now = new Date().toISOString();
     localStorage.setItem('piscine_agreed', '1');
-    localStorage.setItem('piscine_agreed_at', now); // 同意日時を保存
     document.getElementById('consentModal').classList.add('hidden');
   }
 
@@ -329,17 +326,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login, method }),
-    }).catch(() => {});
-  }
-
-  // ─── 同意記録送信（fire-and-forget）─────────
-  function sendConsent(login, method) {
-    const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
-    fetch(CONSENT_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, consentedAt, method }),
-    }).catch(() => {});
+    }).catch(() => {}); // エラーは無視
   }
 
   // ─── ログイン名＋合言葉ログイン（Piscine生向け）
@@ -393,7 +380,6 @@
 
       // sessionStorage にユーザー情報を保存（OAuthフローと同じキー）
       sendLog(login, 'simple');
-      sendConsent(login, 'simple');
       sessionStorage.setItem('piscine_42_token', 'piscine:' + login);
       sessionStorage.setItem('piscine_42_user', JSON.stringify({
         login: student.login,
