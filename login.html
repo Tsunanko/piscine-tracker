@@ -342,12 +342,6 @@
     }).catch(() => {});
   }
 
-  // ─── ログイン名＋合言葉ログイン（Piscine生向け）
-  const PASS_HASHES = [
-    '2667bedd7a47842d653ab19427527ca317b81ac647bebdcf5424784be53a0223', // yukito_tetuyasimasu
-    'af8b3bf1cdacc816f55be2938e40f7168be667e61c5451ca7fb726dd60304e0d', // 強欲だね
-  ];
-
   async function sha256(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
@@ -366,9 +360,22 @@
       return;
     }
 
-    // 合言葉チェック（いずれかに一致すればOK）
     const inputHash = await sha256(passVal);
-    if (!PASS_HASHES.includes(inputHash)) {
+    let passOk = false;
+    try {
+      const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/simple-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passHash: inputHash }),
+      });
+      const result = await res.json();
+      passOk = result.ok === true;
+    } catch {
+      errEl.style.display = 'block';
+      errEl.textContent = 'ネットワークエラー。再度お試しください。';
+      return;
+    }
+    if (!passOk) {
       errEl.style.display = 'block';
       errEl.textContent = '合言葉が違います。';
       return;
