@@ -1,6 +1,13 @@
 /**
- * 42 OAuth Implicit Flow - 共通認証モジュール
+ * 42 OAuth 認証モジュール
  * Piscine Tracker (GitHub Pages 用)
+ *
+ * 認証フロー:
+ *   login.html → Cloudflare Workers /login
+ *   → 42 OAuth (Authorization Code Flow)
+ *   → Workers /auth/callback (campus確認)
+ *   → auth-callback.html#access_token=xxx
+ *   → sessionStorage保存 → dashboard.html
  */
 
 const AUTH_TOKEN_KEY = 'piscine_42_token';
@@ -68,8 +75,10 @@ async function requireAuth() {
 }
 
 // ─── ログイン ─────────────────────────────────
+// Cloudflare Workers経由でAuthorization Code Flowを開始
+// （42はImplicit Flowを非対応のため Workers でトークン交換を行う）
 function loginWith42() {
-  window.location.href = OAUTH_URL;
+  window.location.href = 'https://piscine-tracker.tsunanko.workers.dev/login';
 }
 
 // ─── ログアウト ───────────────────────────────
