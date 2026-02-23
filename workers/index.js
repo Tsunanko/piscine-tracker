@@ -45,9 +45,19 @@ export default {
       return handleLog(request, env);
     }
 
+    // ─── 同意記録 API ────────────────────────────
+    if (url.pathname === '/api/consent' && request.method === 'POST') {
+      return handleConsent(request, env);
+    }
+
     // ─── ログ閲覧 API（管理者のみ）────────────────
     if (url.pathname === '/api/logs' && request.method === 'GET') {
       return handleGetLogs(request, env);
+    }
+
+    // ─── 同意記録一覧 API（管理者のみ）────────────
+    if (url.pathname === '/api/consents' && request.method === 'GET') {
+      return handleGetConsents(request, env);
     }
 
     // ルート (/) → ログイン画面
@@ -72,7 +82,7 @@ async function handleLog(request, env) {
     const entry = { login, method, ts, ip, ua };
     // KV key: log:YYYYMMDD_HHMMSS_login（時系列でソート可能）
     const key = `log:${jst.toISOString().replace(/[^0-9]/g, '').slice(0, 14)}_${login}`;
-    await env.LOGIN_LOGS.put(key, JSON.stringify(entry), { expirationTtl: 60 * 60 * 24 * 90 }); // 90日保持
+    await env.LOGIN_LOGS.put(key, JSON.stringify(entry)); // 無期限保持
 
     return new Response('OK', { status: 200, headers: CORS_HEADERS });
   } catch (e) {
@@ -80,49 +90,90 @@ async function handleLog(request, env) {
   }
 }
 
-/** ログ一覧を返す（管理者トークン必須）*/
+/** ログ一覧を返す（管理者トークン必須）- JSON形式 */
 async function handleGetLogs(request, env) {
   const secret = request.headers.get('X-Admin-Secret');
   if (!env.ADMIN_SECRET || secret !== env.ADMIN_SECRET) {
-    return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
   }
 
-  const list = await env.LOGIN_LOGS.list({ prefix: 'log:' });
+  // KVのlistは最大1000件。大量になった場合は cursor で続きを取得
+  const allKeys = [];
+  let cursor = undefined;
+  do {
+    const result = await env.LOGIN_LOGS.list({ prefix: 'log:', cursor });
+    allKeys.push(...result.keys);
+    cursor = result.list_complete ? undefined : result.cursor;
+  } while (cursor);
+
   const entries = await Promise.all(
-    list.keys.map(async k => {
+    allKeys.map(async k => {
       const val = await env.LOGIN_LOGS.get(k.name);
       try { return JSON.parse(val); } catch { return null; }
     })
   );
   const logs = entries.filter(Boolean).reverse(); // 新しい順
 
-  const html = `<!DOCTYPE html><html lang="ja">
-<head><meta charset="UTF-8"><title>Login Logs</title>
-<style>
-  body { font-family: monospace; background:#0e0e16; color:#e8e8f0; padding:20px; }
-  h1 { color:#a29bfe; }
-  table { border-collapse: collapse; width:100%; font-size:13px; }
-  th { background:#1a1a24; color:#8888a0; padding:8px 12px; text-align:left; }
-  td { padding:7px 12px; border-bottom:1px solid #2a2a3a; }
-  .method-oauth { color:#00cec9; } .method-simple { color:#fdcb6e; }
-</style></head>
-<body>
-<h1>🏊 Piscine Tracker - Login Logs (${logs.length}件)</h1>
-<table>
-  <tr><th>日時(JST)</th><th>ログイン名</th><th>方法</th><th>IP</th><th>UA</th></tr>
-  ${logs.map(e => `
-  <tr>
-    <td>${e.ts}</td>
-    <td><strong>${e.login}</strong></td>
-    <td class="method-${e.method}">${e.method === 'oauth' ? '🔑 42 OAuth' : '🔐 合言葉'}</td>
-    <td>${e.ip}</td>
-    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${e.ua}</td>
-  </tr>`).join('')}
-</table>
-</body></html>`;
+  return new Response(JSON.stringify(logs), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
 
-  return new Response(html, {
-    headers: { ...CORS_HEADERS, 'Content-Type': 'text/html; charset=utf-8' },
+/** 同意記録を保存（login単位で最新を上書き）*/
+async function handleConsent(request, env) {
+  try {
+    const body = await request.json();
+    const { login, consentedAt, method } = body;
+    if (!login) {
+      return new Response(JSON.stringify({ error: 'Bad Request' }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const entry = { login, consentedAt: consentedAt || new Date().toISOString(), method: method || 'unknown', ip };
+    // login単位でキーを固定（最新の同意で上書き）
+    await env.LOGIN_LOGS.put(`consent:${login}`, JSON.stringify(entry));
+    return new Response('OK', { status: 200, headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Error' }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/** 同意記録一覧を返す（管理者トークン必須）*/
+async function handleGetConsents(request, env) {
+  const secret = request.headers.get('X-Admin-Secret');
+  if (!env.ADMIN_SECRET || secret !== env.ADMIN_SECRET) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const allKeys = [];
+  let cursor = undefined;
+  do {
+    const result = await env.LOGIN_LOGS.list({ prefix: 'consent:', cursor });
+    allKeys.push(...result.keys);
+    cursor = result.list_complete ? undefined : result.cursor;
+  } while (cursor);
+
+  const entries = await Promise.all(
+    allKeys.map(async k => {
+      const val = await env.LOGIN_LOGS.get(k.name);
+      try { return JSON.parse(val); } catch { return null; }
+    })
+  );
+  const consents = entries.filter(Boolean).sort((a, b) => a.login.localeCompare(b.login));
+
+  return new Response(JSON.stringify(consents), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 }
 
@@ -268,7 +319,7 @@ async function handleCallback(request, env, url) {
     const ip  = request.headers.get('CF-Connecting-IP') || 'unknown';
     const ua  = request.headers.get('User-Agent') || '';
     const key = `log:${jst.toISOString().replace(/[^0-9]/g, '').slice(0, 14)}_${user.login}`;
-    await env.LOGIN_LOGS.put(key, JSON.stringify({ login: user.login, method: 'oauth', ts, ip, ua }), { expirationTtl: 60 * 60 * 24 * 90 });
+    await env.LOGIN_LOGS.put(key, JSON.stringify({ login: user.login, method: 'oauth', ts, ip, ua })); // 無期限保持
   } catch {}
 
   const userMin = {

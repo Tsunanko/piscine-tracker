@@ -58,11 +58,23 @@
 
   // Worker から渡されたユーザー情報をキャッシュ（CORS 回避のため）
   const userStr = params.get('user');
+  let userLogin = null;
   if (userStr) {
     try {
       const userObj = JSON.parse(decodeURIComponent(userStr));
       sessionStorage.setItem('piscine_42_user', JSON.stringify(userObj));
+      userLogin = userObj.login || null;
     } catch {}
+  }
+
+  // 同意記録を送信（OAuthログイン時）
+  if (userLogin) {
+    const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
+    fetch('https://piscine-tracker.tsunanko.workers.dev/api/consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: userLogin, consentedAt, method: 'oauth' }),
+    }).catch(() => {});
   }
 
   document.getElementById('msg').textContent = 'ログイン成功！ダッシュボードへ移動中...';
