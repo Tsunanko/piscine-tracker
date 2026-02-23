@@ -419,8 +419,8 @@
     <input type="text" class="search-input" id="searchInput"
       placeholder="ログイン名でハイライト"
       oncompositionstart="isComposing=true"
-      oncompositionend="isComposing=false; onSearch(this.value)"
-      oninput="if(!isComposing) onSearch(this.value)" />
+      oncompositionend="isComposing=false; if(!suppressInput) onSearch(this.value)"
+      oninput="if(!isComposing && !suppressInput) onSearch(this.value)" />
     <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     <div class="search-result" id="searchResult"></div>
   </div>
@@ -465,7 +465,8 @@ let chartInstance = null;
 let hasPassData = false;
 let hasReviewData = false;
 let searchLogin = '';   // 検索中のログイン名
-let isComposing = false; // IME composition中フラグ（スマホ2重入力防止）
+let isComposing   = false; // IME composition中フラグ（スマホ2重入力防止）
+let suppressInput = false; // compositionend直後のinput誤発火を防ぐフラグ
 
 // ─────────────────────────────────────────────
 // 象限ラベル定義（タブ別・グローバル）
@@ -554,6 +555,9 @@ function onSearch(val) {
   searchLogin = val.trim().toLowerCase();
   document.getElementById('searchClear').style.display = searchLogin ? 'block' : 'none';
   renderChart();   // チャートだけ再描画（HTMLは維持）
+  // compositionend直後のinput誤発火を50ms間だけ抑制
+  suppressInput = true;
+  setTimeout(() => { suppressInput = false; }, 50);
 }
 
 function clearSearch() {
