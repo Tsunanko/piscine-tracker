@@ -760,11 +760,24 @@ function showError(msg) {
   document.getElementById('errorContent').style.display = '';
 }
 
+// 同意記録を補完（ログイン済みセッション継続ユーザー向け・バックグラウンド実行）
+function sendConsentSilently(user) {
+  const token = sessionStorage.getItem('piscine_42_token') || '';
+  const method = token.startsWith('piscine:') ? 'passphrase' : 'oauth';
+  const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
+  fetch('https://piscine-tracker.tsunanko.workers.dev/api/consent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: user.login, consentedAt, method }),
+  }).catch(() => {}); // エラーは無視（ユーザーへの影響なし）
+}
+
 // 認証確認後にダッシュボード読み込み
 requireAuth().then(user => {
   if (!user) return;
   loggedInUser = user; // 管理者リンク表示判定に使用
   initSearchInput(); // 検索入力欄のイベントを一度だけ登録
+  sendConsentSilently(user); // 同意記録の補完（未記録ユーザーのみ Worker 側で判定）
   loadDashboard();
   setInterval(loadDashboard, 5 * 60 * 1000);
 });
