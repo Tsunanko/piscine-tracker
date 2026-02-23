@@ -2,12 +2,7 @@ name = "piscine-tracker"
 main = "index.js"
 compatibility_date = "2024-01-01"
 
-# KV namespace for session storage (created after `wrangler kv namespace create SESSIONS`)
-[[kv_namespaces]]
-binding = "SESSIONS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-
-# Secrets (set via: wrangler secret put FORTY_TWO_CLIENT_ID)
-# - FORTY_TWO_CLIENT_ID
-# - FORTY_TWO_CLIENT_SECRET
-# - REDIRECT_URI  (= https://piscine-tracker.tsunanko.workers.dev/auth/callback)
+# Secrets (set via: wrangler secret put <NAME>)
+# - FORTY_TWO_CLIENT_ID     : 42 OAuthアプリのUID
+# - FORTY_TWO_CLIENT_SECRET : 42 OAuthアプリのSecret
+# - REDIRECT_URI            : https://piscine-tracker.tsunanko.workers.dev/auth/callback
