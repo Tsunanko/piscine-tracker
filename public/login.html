@@ -342,9 +342,6 @@
     }).catch(() => {});
   }
 
-  // ─── ログイン名＋合言葉ログイン（Piscine生向け）
-  // ※ 合言葉ハッシュはフロントエンドに置かず、Worker Secret で管理
-
   async function sha256(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
@@ -363,7 +360,6 @@
       return;
     }
 
-    // 合言葉をWorkerで検証（ハッシュ値はサーバー側のSecretにのみ存在）
     const inputHash = await sha256(passVal);
     let passOk = false;
     try {
