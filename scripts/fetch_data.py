@@ -515,6 +515,9 @@ def main():
         login = s["login"]
         # dashboardに必要なフィールドのみ（dailyは除く）
         failed = s.get("fetch_failed", False)
+        # 1時間以上来た日数（1日平均ログイン時間の計算に使用）
+        daily = s.get("daily", [])
+        active_days = len([d for d in daily if d.get("hours", 0) >= 1.0])
         entry = {
             "login": s["login"],
             "display_name": s["display_name"],
@@ -527,6 +530,7 @@ def main():
             "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
             "review_given": None if failed else s.get("review_given", 0),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
+            "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
         }
         if login in online_logins:
