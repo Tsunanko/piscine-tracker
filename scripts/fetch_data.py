@@ -3,11 +3,22 @@
 GitHub Actions用データ取得スクリプト
 42 APIからPiscine生のデータを取得してJSONファイルに保存する
 
-最適化:
-- Step3(locations_stats×147回) を Step4 に統合して重複を排除
-- level を cursus_users レスポンスから抽出（追加API呼び出しゼロ）
-- scale_teams でレビュー回数を取得（Step3削除分と相殺）
-- 偏差値計算をポスト処理で一括実施
+処理の流れ:
+  Step 1: Piscine生一覧取得 (/v2/cursus/9/cursus_users)
+  Step 2: アクティブロケーション取得 (/v2/campus/26/locations)
+  Step 3: 学生ごとの詳細データ取得 (locations_stats + projects + scale_teams)
+  Step 4: 偏差値計算（全員分をまとめて計算）
+  Step 5: 個人JSONファイルを一括書き込み
+  Step 6: 全体ダッシュボード用 data.json を生成
+
+API呼び出し数の最適化:
+  - level を cursus_users レスポンスから直接取得（追加API呼び出しゼロ）
+  - scale_teams でレビュー回数を取得（Piscine期間でフィルタ済み）
+  - 偏差値計算をポスト処理で一括実施（各学生ごとに計算しない）
+
+実行環境:
+  - GitHub Actions (Ubuntu) から1日16回呼び出される
+  - ローカルテスト時は .env ファイルの CLIENT_ID/SECRET を使用
 """
 
 import json
@@ -19,7 +30,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import requests
 
-# Load .env if it exists (for local testing)
+# ─── ローカルテスト用: .env ファイルの読み込み ────────────────────────────
+# GitHub Actions では環境変数 CLIENT_ID/CLIENT_SECRET が Secrets から注入される
+# ローカルでテストする場合は .env ファイルに書いておく（.gitignore で除外済み）
 env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
     with open(env_file) as f:
@@ -27,41 +40,57 @@ if env_file.exists():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, val = line.split("=", 1)
+                # setdefault: すでに環境変数がある場合は上書きしない
                 os.environ.setdefault(key.strip(), val.strip())
 
-# --- Configuration ---
+# ─── 設定値 ──────────────────────────────────────────────────────────────────
 INTRA_API_BASE = "https://api.intra.42.fr"
 TOKEN_URL = f"{INTRA_API_BASE}/oauth/token"
 
-JST = timezone(timedelta(hours=9))
-PISCINE_START = datetime(2026, 2, 2, 0, 0, 0, tzinfo=JST)
-PISCINE_END   = datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST)
-PISCINE_DAYS  = 26
-TARGET_HOURS_PER_DAY = 8
+JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 
-CAMPUS_ID         = 26
-PISCINE_CURSUS_ID = 9
+# Piscine 期間: この値を毎年更新する
+# PISCINE_END は「最終日の翌日 00:00」を指定する（範囲の終端として使うため）
+PISCINE_START = datetime(2026, 2, 2, 0, 0, 0, tzinfo=JST)   # Piscine 初日
+PISCINE_END   = datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST)  # 最終日の翌日
+PISCINE_DAYS  = 26          # 実際の登校日数（土日含む全日数）
+TARGET_HOURS_PER_DAY = 8    # 1日の目標学習時間
 
-OUTPUT_DIR = "public"
+CAMPUS_ID         = 26  # 42 Tokyo のキャンパスID
+PISCINE_CURSUS_ID = 9   # Piscine のカリキュラムID
 
-# 偏差値計算: 時間の母集団フィルタ（直近7日間に1h以上来た学生のみ）
-ACTIVE_DAYS_THRESHOLD = 7
-ACTIVE_HOURS_THRESHOLD = 1.0
+OUTPUT_DIR = "public"  # GitHub Pages で公開するディレクトリ
+
+# 偏差値計算: アクティブ学生の判定条件
+# Piscine終了後は PISCINE_END を基準に使う（終了後7日以上経過で母集団が空になるバグ防止）
+ACTIVE_DAYS_THRESHOLD  = 7    # 直近何日間を見るか
+ACTIVE_HOURS_THRESHOLD = 1.0  # 何時間以上来たら「アクティブ」とみなすか
 
 
 def get_token():
+    """42 API の Client Credentials フローでアクセストークンを取得する。
+
+    Client Credentials フロー: ユーザーの認証なしでサーバー間通信に使うOAuth方式。
+    GitHub Actions（サーバー側）がデータ取得する際はこちらを使う。
+    ユーザーのデータ取得（ブラウザ側）は Authorization Code Flow を使う。
+    """
     client_id     = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
     resp = requests.post(TOKEN_URL, data={
-        "grant_type":    "client_credentials",
+        "grant_type":    "client_credentials",  # サーバー間認証
         "client_id":     client_id,
         "client_secret": client_secret,
     })
-    resp.raise_for_status()
+    resp.raise_for_status()  # エラー時は HTTPError を raise
     return resp.json()["access_token"]
 
 
 def api_get(token, path, params=None):
+    """42 API に GET リクエストを送る。
+
+    Authorization: Bearer {token} ヘッダーを付けてリクエストする。
+    42 API はページネーション（page[size], page[number]）を使う。
+    """
     headers = {"Authorization": f"Bearer {token}"}
     resp = requests.get(f"{INTRA_API_BASE}{path}", headers=headers, params=params)
     resp.raise_for_status()
@@ -69,44 +98,78 @@ def api_get(token, path, params=None):
 
 
 def fetch_all_pages(token, path, params=None):
-    """全ページを取得して結合する"""
+    """42 API のページネーションを処理して全データを取得する。
+
+    42 API は1回のリクエストで最大100件しか返さない。
+    100件返ってきたら「次のページがある」と判断して繰り返す。
+    最後のページが100件未満なら終了。
+
+    API制限対策として各ページ取得後に0.6秒待つ。
+    """
     results = []
     page = 1
     base_params = dict(params or {})
-    base_params["page[size]"] = 100
+    base_params["page[size]"] = 100  # 1ページあたりの最大件数
     while True:
         base_params["page[number]"] = page
         data = api_get(token, path, base_params)
         results.extend(data)
         print(f"  page {page}: {len(data)} items")
         if len(data) < 100:
-            break
+            break  # 100件未満 = 最終ページ
         page += 1
-        time.sleep(0.6)
+        time.sleep(0.6)  # API レート制限を避けるための待機
     return results
 
 
 def parse_host(host):
+    """座席ホスト名をクラスター番号と座席番号に分解する。
+
+    例: "c1r5s5.42tokyo.jp" → cluster="c1", seat="r5s5"
+        "c2r3s10" → cluster="c2", seat="r3s10"
+        None → (None, None)
+
+    ホスト名のフォーマット: c{クラスター番号}r{行}s{列}
+    """
     if not host:
         return None, None
-    name = host.split(".")[0]
-    m = re.match(r"^(c\d+)(.*)", name)
+    name = host.split(".")[0]  # "c1r5s5.42tokyo.jp" → "c1r5s5"
+    m = re.match(r"^(c\d+)(.*)", name)  # "c1" と "r5s5" に分割
     if m:
         return m.group(1), m.group(2)
     return None, None
 
 
 def parse_duration(s):
+    """42 API の時間文字列を時間（float）に変換する。
+
+    42 API の locations_stats は "HH:MM:SS" 形式で時間を返す。
+    例: "9:30:00" → 9.5 (時間)
+        "1:15:30" → 1.258... (時間)
+        "" or None → 0.0
+    """
     if not s:
         return 0.0
     parts = s.split(":")
     if len(parts) != 3:
         return 0.0
+    # 時間 + 分/60 + 秒/3600 = 小数点付き時間
     return int(parts[0]) + int(parts[1]) / 60 + float(parts[2]) / 3600
 
 
 def calc_deviation(x, mean, std):
-    """偏差値を計算: 50 + 10 * (x - mean) / std"""
+    """偏差値を計算する。
+
+    偏差値の公式: 50 + 10 × (値 - 平均) / 標準偏差
+
+    偏差値の意味:
+      50 = ちょうど平均
+      60 = 平均より 1 標準偏差高い（上位約16%）
+      70 = 平均より 2 標準偏差高い（上位約2%）
+      40 = 平均より 1 標準偏差低い（下位約16%）
+
+    std == 0 の場合（全員同じ値）は 50.0 を返す。
+    """
     if std == 0:
         return 50.0
     return round(50 + 10 * (x - mean) / std, 1)
@@ -194,43 +257,59 @@ def main():
             students[login]["total_hours"] = round(total_hours_from_stats, 2)
             total_hours = students[login]["total_hours"]
 
-            # アクティブセッション考慮
+            # ─── アクティブセッション（現在ログイン中）の処理 ───────────────
+            # is_active: 現在クラスターにいる（Step2 で取得したロケーション情報に存在する）
             is_active = login in active_map
             active_extra_hours = 0.0
             if is_active:
                 begin_str = active_map[login].get("begin_at", "")
                 try:
                     begin = datetime.fromisoformat(begin_str.replace("Z", "+00:00"))
+                    # 現在セッションの経過時間を計算（フロントエンドの「現在のセッション」表示用）
+                    # ※ locations_stats は進行中のセッションを含むため total_hours には加算しない
                     active_extra_hours = max(0, (now.astimezone(timezone.utc) - begin).total_seconds() / 3600)
-                    # locations_stats は進行中セッションを含むため total_hours への加算不要
                 except Exception:
                     pass
 
-            # メトリクス計算
-            total_target = TARGET_HOURS_PER_DAY * PISCINE_DAYS
+            # ─── 進捗メトリクス計算 ───────────────────────────────────────
+            total_target = TARGET_HOURS_PER_DAY * PISCINE_DAYS  # 目標総時間 (8h × 26日 = 208h)
+
+            # 経過時間・経過日数（Piscine期間外の場合はクランプ）
             if now < PISCINE_START:
+                # Piscine 開始前: 0日0時間経過
                 elapsed_days = 0
                 elapsed_hours = 0
             elif now > PISCINE_END:
+                # Piscine 終了後: 最大値（PISCINE_DAYS）で固定
                 elapsed_hours = (PISCINE_END - PISCINE_START).total_seconds() / 3600
                 elapsed_days = PISCINE_DAYS
             else:
+                # 進行中: 開始からの経過時間
                 elapsed_hours = (now - PISCINE_START).total_seconds() / 3600
                 elapsed_days = elapsed_hours / 24
 
+            # 1日あたり平均学習時間 (経過日数が0の場合は0)
             avg_hours_per_day = total_hours / elapsed_days if elapsed_days > 0 else 0
+
+            # 残り必要時間 (マイナスにならないよう max(0, ...) でクランプ)
             remaining_total = max(0, total_target - total_hours)
+
+            # 残り日数・1日あたり必要時間
             if now >= PISCINE_END:
                 remaining_days = 0
                 required_avg = 0
             else:
                 remaining_secs = (PISCINE_END - max(now, PISCINE_START)).total_seconds()
-                remaining_days = remaining_secs / 86400
+                remaining_days = remaining_secs / 86400  # 秒 → 日
                 required_avg = remaining_total / remaining_days if remaining_days > 0 else 0
 
+            # 進捗率 (0〜100%)
             progress_pct = min(100, (total_hours / total_target) * 100) if total_target > 0 else 0
+
+            # 目標との乖離: 実績 - 期待値 (プラスなら目標超過、マイナスなら遅れ)
+            # expected_hours = この時点までに来ているべき時間
             expected_hours = (elapsed_hours / 24) * TARGET_HOURS_PER_DAY if elapsed_hours > 0 else 0
-            diff = total_hours - expected_hours
+            diff = total_hours - expected_hours  # プラス = on track、マイナス = behind
 
             # 日別データ（偏差値計算用にstudentsにも保存）
             today_str = now.strftime("%Y-%m-%d")  # JST の今日
@@ -356,38 +435,48 @@ def main():
     # 4. 偏差値計算（ポスト処理）
     print("\n[4] Calculating deviation scores...")
 
-    # レベル偏差値: 全学生（level > 0）を母集団
-    all_levels = [s["level"] for s in students.values() if s.get("level", 0) > 0]
-    if len(all_levels) >= 2:
-        level_mean = statistics.mean(all_levels)
-        level_std = statistics.stdev(all_levels) if statistics.stdev(all_levels) > 0 else 1
-    else:
-        level_mean, level_std = 0.0, 1.0
-    print(f"  Level: mean={level_mean:.2f}, std={level_std:.2f}, n={len(all_levels)}")
-
-    # 時間偏差値: 直近7日間に{ACTIVE_HOURS_THRESHOLD}h以上来た学生のみを母集団
-    seven_days_ago = (now - timedelta(days=ACTIVE_DAYS_THRESHOLD)).strftime("%Y-%m-%d")
-    active_hours_list = []
+    # ── アクティブ学生の判定 ──────────────────────────────────────────────
+    # Piscine終了後は PISCINE_END を基準にする。
+    # 例: 終了7日後に実行しても「最終週に来た学生」が対象になり母集団が空にならない。
+    reference_time = min(now, PISCINE_END)
+    seven_days_ago = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD)).strftime("%Y-%m-%d")
+    active_logins = set()
     for login, s in students.items():
         daily = s.get("daily", [])
         if any(d["date"] >= seven_days_ago and d["hours"] >= ACTIVE_HOURS_THRESHOLD for d in daily):
-            active_hours_list.append(s["total_hours"])
+            active_logins.add(login)
+    print(f"  Active (ref={reference_time.strftime('%Y-%m-%d')}, last {ACTIVE_DAYS_THRESHOLD}d, {ACTIVE_HOURS_THRESHOLD}h+): {len(active_logins)} students")
 
-    if len(active_hours_list) >= 2:
-        hours_mean = statistics.mean(active_hours_list)
-        hours_std = statistics.stdev(active_hours_list) if statistics.stdev(active_hours_list) > 0 else 1
+    # レベル偏差値: アクティブ学生（level > 0）を母集団
+    active_levels = [s["level"] for login, s in students.items()
+                     if login in active_logins and s.get("level", 0) > 0]
+    if len(active_levels) >= 2:
+        level_mean = statistics.mean(active_levels)
+        level_std = statistics.stdev(active_levels) if statistics.stdev(active_levels) > 0 else 1
+    else:
+        level_mean, level_std = 0.0, 1.0
+    print(f"  Level: mean={level_mean:.2f}, std={level_std:.2f}, n={len(active_levels)}")
+
+    # 時間偏差値: アクティブ学生（total_hours > 0）を母集団
+    active_hours = [s["total_hours"] for login, s in students.items()
+                    if login in active_logins
+                    and s.get("total_hours") is not None and s["total_hours"] > 0]
+    if len(active_hours) >= 2:
+        hours_mean = statistics.mean(active_hours)
+        hours_std = statistics.stdev(active_hours) if statistics.stdev(active_hours) > 0 else 1
     else:
         hours_mean, hours_std = 0.0, 1.0
-    print(f"  Hours (active {len(active_hours_list)} students): mean={hours_mean:.1f}h, std={hours_std:.1f}h")
+    print(f"  Hours: mean={hours_mean:.1f}h, std={hours_std:.1f}h, n={len(active_hours)}")
 
-    # レビュー偏差値: データが取れた全学生を母集団（0回を含む）
-    all_reviews = [uj.get("review_given", 0) for uj in user_jsons.values()]
-    if len(all_reviews) >= 2:
-        review_mean = statistics.mean(all_reviews)
-        review_std = statistics.stdev(all_reviews) if statistics.stdev(all_reviews) > 0 else 1
+    # レビュー偏差値: アクティブ学生を母集団（0回含む）
+    active_reviews = [user_jsons[login].get("review_given", 0)
+                      for login in active_logins if login in user_jsons]
+    if len(active_reviews) >= 2:
+        review_mean = statistics.mean(active_reviews)
+        review_std = statistics.stdev(active_reviews) if statistics.stdev(active_reviews) > 0 else 1
     else:
         review_mean, review_std = 0.0, 1.0
-    print(f"  Review: mean={review_mean:.1f}, std={review_std:.1f}, n={len(all_reviews)}")
+    print(f"  Review: mean={review_mean:.1f}, std={review_std:.1f}, n={len(active_reviews)}")
 
     # 各学生に偏差値を付与
     for login, uj in user_jsons.items():
@@ -437,6 +526,7 @@ def main():
             "review_deviation": None if failed else s.get("review_deviation", 50.0),
             "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
             "review_given": None if failed else s.get("review_given", 0),
+            "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "fetch_failed": failed,
         }
         if login in online_logins:
@@ -453,6 +543,11 @@ def main():
         "offline": offline,
         "total_students": len(all_students),
         "total_online": len(online),
+        "active_count": len(active_logins),          # 偏差値計算の母集団人数
+        "deviation_base": {                           # 偏差値計算条件（stats.html表示用）
+            "active_days": ACTIVE_DAYS_THRESHOLD,
+            "active_hours_threshold": ACTIVE_HOURS_THRESHOLD,
+        },
         "hours_loading": False,
         "cached_at": now.isoformat(),
     }
