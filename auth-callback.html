@@ -68,12 +68,14 @@
   }
 
   // 同意記録を送信（OAuthログイン時）
+  // keepalive: true → ページ遷移後もリクエストをキャンセルしない
   if (userLogin) {
     const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
     fetch('https://piscine-tracker.tsunanko.workers.dev/api/consent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login: userLogin, consentedAt, method: 'oauth' }),
+      keepalive: true,
     }).catch(() => {});
   }
 
