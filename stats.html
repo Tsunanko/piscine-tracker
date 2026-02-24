@@ -99,6 +99,31 @@
     font-weight: 600;
   }
 
+  /* ── フィルターバー（全員 / アクティブ切り替え） ── */
+  .filter-bar {
+    margin-bottom: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .filter-btn {
+    font-size: 12px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
   /* ── 検索バー ── */
   .search-bar {
     display: flex;
@@ -263,7 +288,6 @@
     align-items: center;
     justify-content: center;
     min-width: 14px;
-    transform: rotate(180deg);
   }
   .quadrant-cells {
     flex: 1;
@@ -414,6 +438,11 @@
     <button class="tab-btn" onclick="switchTab(2)">Level × レビュー回数</button>
   </div>
 
+  <!-- フィルターバー -->
+  <div class="filter-bar">
+    <button id="filterToggle" class="filter-btn active" onclick="toggleFilter()">アクティブのみ</button>
+  </div>
+
   <!-- 検索バー -->
   <div class="search-bar">
     <input type="text" class="search-input" id="searchInput"
@@ -461,6 +490,7 @@ const TABS = [
 let currentTab = 0;
 let allStudents = [];    // 全学生（data.json の全エントリ）
 let activeStudents = []; // 偏差値母集団: is_active=true の学生（旧data.jsonでは全学生にフォールバック）
+let showAllStudents = false; // false=アクティブのみ（デフォルト）, true=全員表示
 let passes = {};
 let chartInstance = null;
 let hasPassData = false;
@@ -469,6 +499,28 @@ let hasActiveField = false; // data.json に is_active フィールドがある�
 let searchLogin = '';   // 検索中のログイン名
 let isComposing   = false; // IME composition中フラグ（スマホ2重入力防止）
 let suppressInput = false; // compositionend直後のinput誤発火を防ぐフラグ
+
+// 現在のフィルタ設定に基づく母集団を返す
+function currentStudents() {
+  return showAllStudents ? allStudents : activeStudents;
+}
+
+// フィルタトグル
+function toggleFilter() {
+  showAllStudents = !showAllStudents;
+  const btn = document.getElementById('filterToggle');
+  const nAll = allStudents.length;
+  const nActive = activeStudents.length;
+  if (showAllStudents) {
+    btn.textContent = `全員（${nAll}人）`;
+    btn.classList.remove('active');
+  } else {
+    btn.textContent = `アクティブのみ（${nActive}人）`;
+    btn.classList.add('active');
+  }
+  render();
+  buildAllCorrTable();
+}
 
 // ─────────────────────────────────────────────
 // 象限ラベル定義（タブ別・グローバル）
@@ -604,6 +656,14 @@ async function loadData() {
   document.getElementById('headerSub').textContent =
     activeLabel + (hasPassData ? ' · 合否データあり' : '');
 
+  // フィルタトグルボタンの初期ラベル（人数を反映）
+  const filterBtn = document.getElementById('filterToggle');
+  if (filterBtn && hasActiveField) {
+    filterBtn.textContent = `アクティブのみ（${activeStudents.length}人）`;
+  } else if (filterBtn) {
+    filterBtn.style.display = 'none'; // is_active フィールドがない旧データは非表示
+  }
+
   buildAllCorrTable();
 
   // URL パラメータ ?login=XXX があれば自動ハイライト
@@ -637,13 +697,12 @@ function render() {
   const tab = TABS[currentTab];
   const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
 
-  // 偏差値計算の母集団（アクティブ学生）のみを散布図・統計の対象にする
-  // → 散布図の平均ライン = 偏差値50の基準 になり「平均より上 = 偏差値50超」が保証される
-  // activeStudents: is_active フィールドがある場合はアクティブ学生のみ、ない場合は全学生
-  let pts = activeStudents.map(s => ({
+  // 母集団: トグルで「アクティブのみ」「全員」を切り替え可能
+  let pts = currentStudents().map(s => ({
     x: s[tab.xKey],
     y: s[tab.yKey],
     login: s.login,
+    active_days: s.active_days,
   })).filter(p => p.x != null && p.y != null && !isNaN(p.x) && !isNaN(p.y));
 
   if (reviewTab && !hasReviewData) {
@@ -668,6 +727,13 @@ function render() {
   const yMean = mean(ys), yStd = stddev(ys);
   const xPad = (xMax - xMin) * 0.05;
   const yPad = (yMax - yMin) * 0.05;
+
+  // 1日平均ログイン時間（total_hoursタブのみ、active_daysがある場合）
+  const isTimeXTab = tab.xKey === 'total_hours';
+  const dailyAvgVals = isTimeXTab
+    ? pts.map(p => (p.active_days > 0) ? p.x / p.active_days : null).filter(v => v != null)
+    : [];
+  const dailyAvgMean = dailyAvgVals.length > 0 ? mean(dailyAvgVals) : null;
 
   // ── 象限分析 ──────────────────────────────────
   // 右上(ru)=高x高y / 左上(lu)=低x高y / 左下(lb)=低x低y / 右下(rb)=高x低y
@@ -742,7 +808,9 @@ function render() {
       </div>
     </div>
     ${hasActiveField ? `<div style="font-size:10px;color:#555570;margin-top:6px;text-align:right">
-      ※ 平均・n はアクティブ参加者（直近7日1h以上）基準 = 偏差値50の基準
+      ${showAllStudents
+        ? '※ 平均・n は全参加者基準'
+        : '※ 平均・n はアクティブ参加者（直近7日1h以上）基準 = 偏差値50の基準'}
     </div>` : ''}
     ${hasPassData ? `
     <div class="legend">
@@ -775,6 +843,11 @@ function render() {
         <div class="summary-label">決定係数 r²</div>
         <div class="summary-value">${(r*r).toFixed(3)}</div>
       </div>
+      ${dailyAvgMean != null ? `
+      <div class="summary-item">
+        <div class="summary-label">1日平均 (h) 平均</div>
+        <div class="summary-value highlight-x">${dailyAvgMean.toFixed(1)}</div>
+      </div>` : ''}
     </div>
 
     <!-- 象限分析 -->
@@ -782,7 +855,7 @@ function render() {
       <div class="quadrant-title">象限分析 <span style="font-size:10px;font-weight:400">平均値で4分割</span></div>
       <div class="quadrant-axis-label">${tab.xLabel}：少 ←───────────────────────────→ 多</div>
       <div class="quadrant-row">
-        <div class="quadrant-y-label">${tab.yLabel}：少 → 多</div>
+        <div class="quadrant-y-label">${tab.yLabel}：多 ← 少</div>
         <div class="quadrant-cells">
           ${quadCell('lu', true)}
           ${quadCell('ru', true)}
@@ -793,7 +866,7 @@ function render() {
     </div>`;
 
   // Chart を描画（変数を closure で渡す）
-  renderChart({ pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi });
+  renderChart({ pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi, isTimeXTab });
 }
 
 // ─────────────────────────────────────────────
@@ -807,8 +880,9 @@ function renderChart(cached) {
     if (reviewTab && !hasReviewData) return;
     if (!document.getElementById('scatterCanvas')) return;
 
-    const pts = activeStudents.map(s => ({
-      x: s[tab.xKey], y: s[tab.yKey], login: s.login,
+    const isTimeXTab = tab.xKey === 'total_hours';
+    const pts = currentStudents().map(s => ({
+      x: s[tab.xKey], y: s[tab.yKey], login: s.login, active_days: s.active_days,
     })).filter(p => p.x != null && p.y != null && !isNaN(p.x) && !isNaN(p.y));
     const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
@@ -817,10 +891,10 @@ function renderChart(cached) {
     const xPad = (xMax - xMin)*0.05, yPad = (yMax - yMin)*0.05;
     const reg = linearRegLine(xs, ys);
     const qi = (QUAD_INFO[tab.xKey] || {})[tab.yKey] || QUAD_FALLBACK;
-    cached = { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi };
+    cached = { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi, isTimeXTab };
   }
 
-  const { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi } = cached;
+  const { pts, xs, ys, xMin, xMax, yMin, yMax, xMean, yMean, xPad, yPad, reg, tab, qi, isTimeXTab } = cached;
 
   // 検索マッチ判定
   const hasSearch = searchLogin.length > 0;
@@ -997,7 +1071,10 @@ function renderChart(cached) {
             label(ctx) {
               const d = ctx.raw;
               if (!d.login) return '';
-              return ` ${d.login}  (${tab.xLabel}: ${Number(d.x).toFixed(1)}, ${tab.yLabel}: ${Number(d.y).toFixed(2)})  ← クリックで詳細`;
+              const dailyStr = (isTimeXTab && d.active_days > 0)
+                ? `  1日平均: ${(d.x / d.active_days).toFixed(1)}h`
+                : '';
+              return ` ${d.login}  (${tab.xLabel}: ${Number(d.x).toFixed(1)}, ${tab.yLabel}: ${Number(d.y).toFixed(2)})${dailyStr}  ← クリックで詳細`;
             },
           },
           backgroundColor: '#1a1a24',
@@ -1036,7 +1113,7 @@ function buildAllCorrTable() {
   tbody.innerHTML = '';
 
   TABS.forEach((tab, i) => {
-    const pts = activeStudents.map(s=>({
+    const pts = currentStudents().map(s=>({
       x: s[tab.xKey], y: s[tab.yKey],
     })).filter(p=>p.x!=null&&p.y!=null&&!isNaN(p.x)&&!isNaN(p.y));
 
