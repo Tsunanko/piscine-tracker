@@ -1,14 +1,30 @@
 name: Update Piscine Data
+# ───────────────────────────────────────────────────────────────────────────
+# このワークフローの役割:
+#   42 API から Piscine 生のデータを取得して JSON ファイルを生成し、
+#   GitHub Pages（gh-pages ブランチ）に自動デプロイする。
+#
+# 実行タイミング:
+#   昼間（JST 9:00-21:00）: 毎時1回 → 13回/日
+#   夜間（JST 21:00-9:00）: 3時間ごと → 3回/日
+#   合計: 16回/日 × 約1.5分 = 24分/日（無料枠2000分/月 に余裕あり）
+#
+# 手動実行: GitHub → Actions タブ → "Update Piscine Data" → "Run workflow"
+# ───────────────────────────────────────────────────────────────────────────
 
 on:
   schedule:
-    # Daytime JST 9:00-21:00 (= UTC 0:00-12:00): every hour → 13 runs/day
+    # cron 形式: 分 時 日 月 曜日 (全て UTC 基準)
+    # UTC 0:00〜12:00 = JST 9:00〜21:00（昼間）: 毎時0分に実行
     - cron: '0 0-12 * * *'
-    # Nighttime JST 21:00-9:00 (= UTC 12:00-24:00): every 3 hours → 3 runs/day
+    # UTC 15:00, 18:00, 21:00 = JST 0:00, 3:00, 6:00（夜間は3時間ごと）
     - cron: '0 15,18,21 * * *'
-    # Total: 16 runs/day × ~1.5min = 24min/day ≈ 720min/month (well within 2,000 min limit)
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # 手動実行を許可（GitHub Actions タブの "Run workflow" ボタン）
 
+# ─── 必要な権限 ──────────────────────────────────────────────────────────
+# contents: write   → gh-pages ブランチへの push に必要
+# pages: write      → GitHub Pages への書き込みに必要
+# id-token: write   → OIDC トークン（Cloudflare 等との連携で使う場合）
 permissions:
   contents: write
   pages: write
@@ -16,30 +32,45 @@ permissions:
 
 jobs:
   fetch-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # GitHub が提供する Ubuntu 仮想マシンで実行
 
     steps:
+      # ─── Step 1: リポジトリをチェックアウト ──────────────────────────
+      # main ブランチのコード（scripts/fetch_data.py 等）を取得
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ─── Step 2: Python セットアップ ─────────────────────────────────
+      # Ubuntu にはデフォルトで Python が入っているが、
+      # バージョンを固定するために actions/setup-python を使う
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # ─── Step 3: 依存ライブラリのインストール ────────────────────────
+      # requirements.txt から pip install（主に requests ライブラリ）
       - name: Install dependencies
         run: pip install requests
 
+      # ─── Step 4: データ取得スクリプト実行 ────────────────────────────
+      # secrets.CLIENT_ID / CLIENT_SECRET: GitHub リポジトリの Secrets に登録済み
+      # → Settings → Secrets and variables → Actions → Repository secrets
+      # スクリプトが public/data.json と public/data/*.json を生成する
       - name: Fetch piscine data
         env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}          # 42 Intra OAuth App UID
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}  # 42 Intra OAuth App Secret
         run: python scripts/fetch_data.py
 
+      # ─── Step 5: GitHub Pages へデプロイ ─────────────────────────────
+      # public/ ディレクトリの内容を gh-pages ブランチに push する
+      # peaceiris/actions-gh-pages: GitHub Pages デプロイ用のサードパーティ Action
+      # force_orphan: false → 履歴を保持（true だと毎回履歴をリセット）
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          publish_branch: gh-pages
-          force_orphan: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}  # GitHub が自動で提供するトークン
+          publish_dir: ./public                       # デプロイするディレクトリ
+          publish_branch: gh-pages                   # デプロイ先のブランチ
+          force_orphan: false                        # 履歴を保持する
