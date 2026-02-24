@@ -124,66 +124,6 @@
       line-height: 1.6;
     }
 
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin: 20px 0 16px;
-      color: #444460;
-      font-size: 11px;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .simple-login-desc {
-      font-size: 12px;
-      color: var(--text-dim);
-      margin-bottom: 10px;
-      text-align: left;
-    }
-
-    .simple-login-col {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .simple-login-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    .login-input {
-      flex: 1;
-      padding: 11px 14px;
-      background: #0e0e16;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .login-input:focus { border-color: var(--accent); }
-    .login-input::placeholder { color: #444460; }
-
-    .btn-name {
-      padding: 11px 16px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-name:hover { background: #7d6ef0; }
-
     /* 同意モーダル */
     .modal-overlay {
       position: fixed; inset: 0;
@@ -224,6 +164,37 @@
     }
     .btn-agree:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-agree:not(:disabled):hover { background: #7d6ef0; }
+
+    /* 合言葉ログイン */
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0; color: var(--text-dim); font-size: 11px;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+    .simple-login-group {
+      display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
+    }
+    .simple-login-input {
+      width: 100%; padding: 11px 14px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px;
+      font-family: inherit; outline: none; transition: border-color 0.15s;
+    }
+    .simple-login-input:focus { border-color: var(--accent); }
+    .simple-login-input::placeholder { color: var(--text-dim); }
+    .btn-name {
+      width: 100%; padding: 12px 20px;
+      background: transparent; color: var(--text-dim);
+      border: 1px solid var(--border); border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; font-family: inherit;
+    }
+    .btn-name:hover:not(:disabled) {
+      border-color: var(--accent2); color: var(--accent2);
+    }
+    .btn-name:disabled { opacity: 0.4; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -269,27 +240,30 @@
       42 アカウントでログイン
     </button>
 
-    <div class="divider">
-      <span>または</span>
-    </div>
+    <div class="divider">または</div>
 
-    <div class="simple-login">
-      <div class="simple-login-desc">Piscine生はログイン名と合言葉を入力</div>
-      <div class="simple-login-col">
-        <input type="text" id="loginInput" class="login-input"
-          placeholder="ログイン名（例: ytsunanko）"
-          onkeydown="if(event.key==='Enter') document.getElementById('passInput').focus()"
-          autocomplete="off" autocapitalize="none" spellcheck="false" />
-        <div class="simple-login-row">
-          <input type="password" id="passInput" class="login-input"
-            placeholder="合言葉"
-            onkeydown="if(event.key==='Enter') loginWithName()"
-            autocomplete="off" />
-          <button class="btn-name" onclick="loginWithName()">→</button>
-        </div>
-      </div>
-      <div class="error-msg" id="nameErrorMsg"></div>
+    <div class="simple-login-group">
+      <input
+        class="simple-login-input"
+        type="text"
+        id="loginName"
+        placeholder="42 ログイン名（例: jdoe）"
+        autocomplete="username"
+        oninput="updateNameBtn()"
+      >
+      <input
+        class="simple-login-input"
+        type="password"
+        id="passInput"
+        placeholder="合言葉"
+        autocomplete="current-password"
+        oninput="updateNameBtn()"
+        onkeydown="if(event.key==='Enter')loginWithName()"
+      >
     </div>
+    <button class="btn-name" id="nameBtn" disabled onclick="loginWithName()">
+      合言葉でログイン
+    </button>
 
     <div class="error-msg" id="errorMsg"></div>
   </div>
@@ -307,9 +281,6 @@
     window.location.replace('dashboard.html');
   }
 
-  const LOG_ENDPOINT     = 'https://piscine-tracker.tsunanko.workers.dev/api/log';
-  const CONSENT_ENDPOINT = 'https://piscine-tracker.tsunanko.workers.dev/api/consent';
-
   // ─── 同意管理 ──────────────────────────────
   function acceptConsent() {
     const now = new Date().toISOString();
@@ -323,104 +294,6 @@
     document.getElementById('consentModal').classList.remove('hidden');
   }
 
-  // ─── ログ送信（fire-and-forget）────────────
-  function sendLog(login, method) {
-    fetch(LOG_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, method }),
-    }).catch(() => {});
-  }
-
-  // ─── 同意記録送信（fire-and-forget）─────────
-  function sendConsent(login, method) {
-    const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
-    fetch(CONSENT_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, consentedAt, method }),
-    }).catch(() => {});
-  }
-
-  async function sha256(str) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  }
-
-  async function loginWithName() {
-    const input   = document.getElementById('loginInput');
-    const passEl  = document.getElementById('passInput');
-    const errEl   = document.getElementById('nameErrorMsg');
-    const login   = input.value.trim().toLowerCase();
-    const passVal = passEl.value;
-
-    if (!login || !passVal) {
-      errEl.style.display = 'block';
-      errEl.textContent = 'ログイン名と合言葉を入力してください。';
-      return;
-    }
-
-    const inputHash = await sha256(passVal);
-    let passOk = false;
-    try {
-      const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/simple-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passHash: inputHash }),
-      });
-      const result = await res.json();
-      passOk = result.ok === true;
-    } catch {
-      errEl.style.display = 'block';
-      errEl.textContent = 'ネットワークエラー。再度お試しください。';
-      return;
-    }
-    if (!passOk) {
-      errEl.style.display = 'block';
-      errEl.textContent = '合言葉が違います。';
-      return;
-    }
-
-    input.disabled = true;
-    passEl.disabled = true;
-    errEl.style.display = 'none';
-    errEl.textContent = '';
-
-    try {
-      const resp = await fetch('data.json?t=' + Date.now());
-      if (!resp.ok) throw new Error('data.json fetch failed');
-      const data = await resp.json();
-
-      const all = [...(data.online || []), ...(data.offline || [])];
-      const student = all.find(s => s.login === login);
-
-      if (!student) {
-        errEl.style.display = 'block';
-        errEl.textContent = `"${login}" はPiscine生リストに見つかりません。`;
-        input.disabled = false;
-        return;
-      }
-
-      // sessionStorage にユーザー情報を保存（OAuthフローと同じキー）
-      sendLog(login, 'simple');
-      sendConsent(login, 'simple');
-      sessionStorage.setItem('piscine_42_token', 'piscine:' + login);
-      sessionStorage.setItem('piscine_42_user', JSON.stringify({
-        login: student.login,
-        campus: [{ id: 26, name: 'Tokyo' }],
-        image: {
-          versions: { small: student.image_small || '' },
-          link: student.image_small || '',
-        },
-      }));
-      window.location.replace('dashboard.html');
-    } catch (e) {
-      errEl.style.display = 'block';
-      errEl.textContent = 'データ取得に失敗しました。再度お試しください。';
-      input.disabled = false;
-    }
-  }
-
   // エラーメッセージ表示
   const errParam = new URLSearchParams(location.search).get('error');
   if (errParam) {
@@ -430,6 +303,87 @@
       errParam === 'access_denied' ? '認証がキャンセルされました。' :
       errParam === 'no_token'      ? 'トークンの取得に失敗しました。再度お試しください。' :
       '認証エラーが発生しました。再度お試しください。';
+  }
+
+  // ─── 合言葉ログイン ────────────────────────────────────────────────
+  const LOG_ENDPOINT = 'https://piscine-tracker.tsunanko.workers.dev/api/simple-login';
+
+  /** ボタンの活性/非活性を入力状態に合わせて更新 */
+  function updateNameBtn() {
+    const login = document.getElementById('loginName').value.trim();
+    const pass  = document.getElementById('passInput').value;
+    document.getElementById('nameBtn').disabled = !(login && pass);
+  }
+
+  /** SHA-256 ハッシュを hex 文字列で返す（Web Crypto API）*/
+  async function sha256(text) {
+    const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /** 合言葉ログイン処理 */
+  async function loginWithName() {
+    const login = document.getElementById('loginName').value.trim();
+    const pass  = document.getElementById('passInput').value;
+    if (!login || !pass) return;
+
+    // ログイン名のバリデーション（英数字・ハイフン・アンダースコアのみ）
+    if (!/^[a-zA-Z0-9_-]{1,30}$/.test(login)) {
+      showError('ログイン名は英数字・ハイフン・アンダースコアのみ使用できます。');
+      return;
+    }
+
+    const btn = document.getElementById('nameBtn');
+    btn.disabled = true;
+    btn.textContent = '確認中...';
+
+    try {
+      const passHash = await sha256(pass);
+      const res = await fetch(LOG_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, passHash }),
+      });
+
+      if (res.ok) {
+        // トークンを sessionStorage に保存してダッシュボードへ
+        sessionStorage.setItem('piscine_42_token', 'piscine:' + login);
+        sessionStorage.setItem('piscine_42_user', JSON.stringify({
+          login,
+          campus: [{ id: 26, name: '42 Tokyo' }],
+          image: { versions: { small: '' } },
+        }));
+
+        // 同意記録を送信（keepalive: ページ遷移後もキャンセルされない）
+        const consentedAt = localStorage.getItem('piscine_agreed_at') || new Date().toISOString();
+        fetch('https://piscine-tracker.tsunanko.workers.dev/api/consent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, consentedAt, method: 'passphrase' }),
+          keepalive: true,
+        }).catch(() => {});
+
+        window.location.replace('dashboard.html');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const msg = res.status === 401 ? '合言葉が違います。' :
+                    res.status === 503 ? '現在合言葉ログインは利用できません。' :
+                    data.error || 'ログインに失敗しました。再度お試しください。';
+        showError(msg);
+        btn.disabled = false;
+        btn.textContent = '合言葉でログイン';
+      }
+    } catch {
+      showError('ネットワークエラーが発生しました。');
+      btn.disabled = false;
+      btn.textContent = '合言葉でログイン';
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.style.display = 'block';
+    el.textContent = msg;
   }
 </script>
 </body>

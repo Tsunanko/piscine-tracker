@@ -459,11 +459,13 @@ const TABS = [
 ];
 
 let currentTab = 0;
-let allStudents = [];
+let allStudents = [];    // 全学生（data.json の全エントリ）
+let activeStudents = []; // 偏差値母集団: is_active=true の学生（旧data.jsonでは全学生にフォールバック）
 let passes = {};
 let chartInstance = null;
 let hasPassData = false;
 let hasReviewData = false;
+let hasActiveField = false; // data.json に is_active フィールドがあるか（後方互換チェック）
 let searchLogin = '';   // 検索中のログイン名
 let isComposing   = false; // IME composition中フラグ（スマホ2重入力防止）
 let suppressInput = false; // compositionend直後のinput誤発火を防ぐフラグ
@@ -582,6 +584,12 @@ async function loadData() {
 
   hasReviewData = allStudents.some(s => s.review_given != null && s.review_given > 0);
 
+  // is_active フィールドの有無で後方互換性を確保
+  // 旧 data.json（is_active なし）→ 全学生を activeStudents として扱う
+  // 新 data.json（is_active あり）→ is_active=true の学生のみ
+  hasActiveField = allStudents.some(s => 'is_active' in s);
+  activeStudents = hasActiveField ? allStudents.filter(s => s.is_active) : allStudents;
+
   try {
     const pr = await fetch('data/passes.json?' + Date.now());
     if (pr.ok) {
@@ -590,8 +598,11 @@ async function loadData() {
     }
   } catch(_) {}
 
+  const activeLabel = hasActiveField
+    ? `全${allStudents.length}人・アクティブ${activeStudents.length}人（偏差値基準）`
+    : `全${allStudents.length}人`;
   document.getElementById('headerSub').textContent =
-    `全${allStudents.length}人` + (hasPassData ? ' · 合否データあり' : '');
+    activeLabel + (hasPassData ? ' · 合否データあり' : '');
 
   buildAllCorrTable();
 
@@ -626,7 +637,10 @@ function render() {
   const tab = TABS[currentTab];
   const reviewTab = (tab.xKey==='review_given'||tab.yKey==='review_given');
 
-  let pts = allStudents.map(s => ({
+  // 偏差値計算の母集団（アクティブ学生）のみを散布図・統計の対象にする
+  // → 散布図の平均ライン = 偏差値50の基準 になり「平均より上 = 偏差値50超」が保証される
+  // activeStudents: is_active フィールドがある場合はアクティブ学生のみ、ない場合は全学生
+  let pts = activeStudents.map(s => ({
     x: s[tab.xKey],
     y: s[tab.yKey],
     login: s.login,
@@ -727,6 +741,9 @@ function render() {
         --- 回帰直線
       </div>
     </div>
+    ${hasActiveField ? `<div style="font-size:10px;color:#555570;margin-top:6px;text-align:right">
+      ※ 平均・n はアクティブ参加者（直近7日1h以上）基準 = 偏差値50の基準
+    </div>` : ''}
     ${hasPassData ? `
     <div class="legend">
       <span><span class="legend-dot" style="background:#00cec9"></span>合格</span>
@@ -735,7 +752,7 @@ function render() {
     </div>` : ''}
     <div class="summary-grid">
       <div class="summary-item">
-        <div class="summary-label">n（対象人数）</div>
+        <div class="summary-label">n（${hasActiveField ? '直近7日アクティブ・偏差値基準' : '対象人数'}）</div>
         <div class="summary-value">${pts.length}人</div>
       </div>
       <div class="summary-item">
@@ -790,7 +807,7 @@ function renderChart(cached) {
     if (reviewTab && !hasReviewData) return;
     if (!document.getElementById('scatterCanvas')) return;
 
-    const pts = allStudents.map(s => ({
+    const pts = activeStudents.map(s => ({
       x: s[tab.xKey], y: s[tab.yKey], login: s.login,
     })).filter(p => p.x != null && p.y != null && !isNaN(p.x) && !isNaN(p.y));
     const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
@@ -818,10 +835,13 @@ function renderChart(cached) {
       const s = allStudents.find(s => s.login === matchedLogin);
       const xVal = s[tab.xKey];
       const yVal = s[tab.yKey];
+      const isInChart = pts.some(p => p.login === matchedLogin);
       resultEl.className = 'search-result found';
-      resultEl.textContent = xVal != null && yVal != null
+      const valStr = xVal != null && yVal != null
         ? `${matchedLogin}: ${Number(xVal).toFixed(1)} / ${Number(yVal).toFixed(2)}`
         : `${matchedLogin}: データなし`;
+      // アクティブ外の学生は散布図に表示されないため案内を付加
+      resultEl.textContent = valStr + (!isInChart && hasActiveField ? '（アクティブ期間外・散布図には非表示）' : '');
     } else {
       resultEl.className = 'search-result';
       resultEl.textContent = '見つかりません';
@@ -1016,7 +1036,7 @@ function buildAllCorrTable() {
   tbody.innerHTML = '';
 
   TABS.forEach((tab, i) => {
-    const pts = allStudents.map(s=>({
+    const pts = activeStudents.map(s=>({
       x: s[tab.xKey], y: s[tab.yKey],
     })).filter(p=>p.x!=null&&p.y!=null&&!isNaN(p.x)&&!isNaN(p.y));
 
@@ -1038,7 +1058,7 @@ function buildAllCorrTable() {
       <td>${tab.label}</td>
       <td style="font-weight:700;color:${rColor(r)}">${r.toFixed(3)}</td>
       <td><span style="font-size:11px;color:${interp.color}">${interp.text}</span></td>
-      <td style="color:var(--text-dim)">${pts.length}</td>
+      <td style="color:var(--text-dim)">${pts.length}<span style="font-size:10px"> (active)</span></td>
     </tr>`;
   });
 

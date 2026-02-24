@@ -685,18 +685,31 @@ async function renderMiniChart(login) {
     const d = await res.json();
     const all = [...(d.online || []), ...(d.offline || [])];
 
-    const pts = all
-      .filter(s => s.total_hours != null && s.total_hours >= 0 && s.level != null && s.level > 0)
+    // is_active フィールドがある場合はアクティブ学生のみを偏差値基準母集団として使用
+    // → stats.html の散布図と同じ母集団になり、平均線が一致する
+    // 旧 data.json（is_active なし）は全学生にフォールバック
+    const hasActive = all.some(s => 'is_active' in s);
+    const base = hasActive ? all.filter(s => s.is_active) : all;
+
+    const pts = base
+      .filter(s => s.total_hours != null && s.total_hours > 0 && s.level != null && s.level > 0)
       .map(s => ({ x: s.total_hours, y: s.level, login: s.login }));
 
-    if (pts.length === 0) return;
+    // 現在のユーザーが非アクティブでも散布図には全学生を表示（グレーアウト）
+    const allPts = all
+      .filter(s => s.total_hours != null && s.total_hours > 0 && s.level != null && s.level > 0)
+      .map(s => ({ x: s.total_hours, y: s.level, login: s.login }));
 
+    if (allPts.length === 0) return;
+
+    // 平均線の計算は偏差値母集団（アクティブ学生 or 全学生）から行う
+    // → stats.html の散布図の平均線と一致させる
     const xs = pts.map(p => p.x);
     const ys = pts.map(p => p.y);
-    const xMean = xs.reduce((a,b)=>a+b,0) / xs.length;
-    const yMean = ys.reduce((a,b)=>a+b,0) / ys.length;
-    const xMax = Math.max(...xs);
-    const yMax = Math.max(...ys);
+    const xMean = xs.length ? xs.reduce((a,b)=>a+b,0) / xs.length : 0;
+    const yMean = ys.length ? ys.reduce((a,b)=>a+b,0) / ys.length : 0;
+    const xMax = Math.max(...allPts.map(p => p.x));
+    const yMax = Math.max(...allPts.map(p => p.y));
 
     const canvas = document.getElementById('miniScatterCanvas');
     if (!canvas) return;
@@ -708,20 +721,20 @@ async function renderMiniChart(login) {
         datasets: [
           {
             label: '学生',
-            data: pts,
-            backgroundColor: pts.map(p => p.login === login ? 'rgba(255,118,117,1)' : 'rgba(108,92,231,0.45)'),
-            pointRadius: pts.map(p => p.login === login ? 9 : 4),
-            pointHoverRadius: pts.map(p => p.login === login ? 11 : 6),
-            pointBorderColor: pts.map(p => p.login === login ? 'rgba(255,255,255,0.9)' : 'transparent'),
-            pointBorderWidth: pts.map(p => p.login === login ? 2 : 0),
+            data: allPts,
+            backgroundColor: allPts.map(p => p.login === login ? 'rgba(255,118,117,1)' : 'rgba(108,92,231,0.45)'),
+            pointRadius: allPts.map(p => p.login === login ? 9 : 4),
+            pointHoverRadius: allPts.map(p => p.login === login ? 11 : 6),
+            pointBorderColor: allPts.map(p => p.login === login ? 'rgba(255,255,255,0.9)' : 'transparent'),
+            pointBorderWidth: allPts.map(p => p.login === login ? 2 : 0),
             order: 2,
           },
-          {  // 時間平均 縦線
+          {  // 時間平均 縦線（偏差値母集団ベース）
             data: [{x: xMean, y: 0}, {x: xMean, y: yMax * 1.1}],
             type: 'line', borderColor: 'rgba(253,203,110,0.65)', borderWidth: 1.5,
             borderDash: [4,3], pointRadius: 0, fill: false, order: 1,
           },
-          {  // Level平均 横線
+          {  // Level平均 横線（偏差値母集団ベース）
             data: [{x: 0, y: yMean}, {x: xMax * 1.1, y: yMean}],
             type: 'line', borderColor: 'rgba(0,206,201,0.65)', borderWidth: 1.5,
             borderDash: [4,3], pointRadius: 0, fill: false, order: 1,
