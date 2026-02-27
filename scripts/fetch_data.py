@@ -363,6 +363,10 @@ def main():
                 print(f"  [WARN] {login} projects failed: {e}")
                 projects = []
 
+            # Piscine Final Exam スコア抽出
+            exam_project = next((p for p in projects if "final exam" in p["name"].lower()), None)
+            students[login]["exam_score"] = exam_project["final_mark"] if exam_project else None
+
             time.sleep(0.3)  # projects_users の後
 
             # --- scale_teams でレビュー回数取得 ---
@@ -529,6 +533,7 @@ def main():
             "review_deviation": None if failed else s.get("review_deviation", 50.0),
             "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
             "review_given": None if failed else s.get("review_given", 0),
+            "exam_score": None if failed else s.get("exam_score"),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
