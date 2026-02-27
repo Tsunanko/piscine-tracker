@@ -282,6 +282,8 @@
 
   /* 偏差値トグルOFF時 */
   .student-grid.hide-dev .dev-section { display: none; }
+  /* ExamトグルOFF時 */
+  .student-grid.hide-exam .exam-section { display: none; }
 
   .student-rank {
     font-size: 9px;
@@ -489,9 +491,10 @@
 let dashboardData = null;
 let currentFilter = 'all';
 let searchQuery = '';
-let currentSort = 'hours'; // 'hours', 'level', 'composite', 'name'
+let currentSort = 'hours'; // 'hours', 'level', 'composite', 'exam', 'name'
 let isComposing = false;
 let showDev = localStorage.getItem('showDev') !== 'false';
+let showExam = localStorage.getItem('showExam') !== 'false';
 let loggedInUser = null; // ログイン中ユーザー情報
 
 function esc(str) {
@@ -515,6 +518,13 @@ function sortStudents(arr) {
     case 'composite':
       sorted.sort((a, b) => (b.composite_deviation || 50) - (a.composite_deviation || 50));
       break;
+    case 'exam':
+      sorted.sort((a, b) => {
+        const aScore = a.exam_score != null ? a.exam_score : -1;
+        const bScore = b.exam_score != null ? b.exam_score : -1;
+        return bScore - aScore;
+      });
+      break;
     case 'name':
       sorted.sort((a, b) => a.login.localeCompare(b.login));
       break;
@@ -530,9 +540,20 @@ function toggleDev() {
   if (btn) btn.classList.toggle('active', showDev);
 }
 
+function toggleExam() {
+  showExam = !showExam;
+  localStorage.setItem('showExam', String(showExam));
+  applyDisplayState();
+  const btn = document.getElementById('toggleExamBtn');
+  if (btn) btn.classList.toggle('active', showExam);
+}
+
 function applyDisplayState() {
   const grid = document.getElementById('studentGrid');
-  if (grid) grid.classList.toggle('hide-dev', !showDev);
+  if (grid) {
+    grid.classList.toggle('hide-dev', !showDev);
+    grid.classList.toggle('hide-exam', !showExam);
+  }
 }
 
 function initSearchInput() {
@@ -624,6 +645,7 @@ function renderDashboard() {
     { key: 'hours', label: '時間' },
     { key: 'level', label: 'Level' },
     { key: 'composite', label: '総合' },
+    { key: 'exam', label: 'Exam' },
     { key: 'name', label: 'Name' },
   ].map(s =>
     `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
@@ -637,6 +659,7 @@ function renderDashboard() {
     ${sortBtnsHTML}
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
+    <button class="sort-btn ${showExam ? 'active' : ''}" id="toggleExamBtn" onclick="toggleExam()">Exam</button>
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <a href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
     ${adminLink}
@@ -644,7 +667,7 @@ function renderDashboard() {
 
   // Update section header
   document.getElementById('sectionHeader').innerHTML =
-    `${{hours:'時間ランキング', level:'Level ランキング', composite:'総合ランキング', name:'全学生'}[currentSort] || '全学生'} <span class="section-count">(${allStudents.length}人)</span>`;
+    `${{hours:'時間ランキング', level:'Level ランキング', composite:'総合ランキング', exam:'Exam ランキング', name:'全学生'}[currentSort] || '全学生'} <span class="section-count">(${allStudents.length}人)</span>`;
 
   // Build student cards
   function makeCard(student) {
@@ -661,6 +684,7 @@ function renderDashboard() {
     const rankPrefix = currentSort === 'hours' ? '時'
                      : currentSort === 'level' ? 'Lv'
                      : currentSort === 'composite' ? '総'
+                     : currentSort === 'exam' ? 'Ex'
                      : '';
     const rank = `${rankPrefix}#${rankNum}`;
     const level = student.level != null ? student.level.toFixed(2) : '-';
@@ -674,6 +698,13 @@ function renderDashboard() {
     const lStr = lDev != null ? lDev : '-';
     const cDev = student.composite_deviation != null ? Math.round(student.composite_deviation) : null;
     const cStr = cDev != null ? cDev : '-';
+    const examScore = student.exam_score != null ? student.exam_score : null;
+    const examColor = examScore == null ? 'var(--text-dim)'
+                    : examScore >= 50 ? 'var(--green)'
+                    : 'var(--red)';
+    const examHTML = examScore != null
+      ? `<span style="color:${examColor}">${examScore}</span>`
+      : `<span style="color:var(--text-dim)">-</span>`;
     return `
       <div class="student-card ${cls}" onclick="goToStudent('${esc(student.login)}')">
         <div class="student-rank">${rank}</div>
@@ -693,6 +724,9 @@ function renderDashboard() {
             <span style="font-size:8px;color:var(--text-dim);margin-right:3px">総合</span>
             <span class="dev-val" style="color:${devColor(cDev)};font-size:10px">${cStr}</span>
           </div>
+        </div>
+        <div class="exam-section" style="font-size:9px;color:var(--text-dim);text-align:center;margin-top:3px">
+          Exam: ${examHTML}
         </div>
         ${seat}
       </div>`;
