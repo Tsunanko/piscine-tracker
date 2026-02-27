@@ -440,9 +440,11 @@ def main():
     print("\n[4] Calculating deviation scores...")
 
     # ── アクティブ学生の判定 ──────────────────────────────────────────────
-    # Piscine終了後は PISCINE_END を基準にする。
-    # 例: 終了7日後に実行しても「最終週に来た学生」が対象になり母集団が空にならない。
-    reference_time = min(now, PISCINE_END)
+    # PISCINE_END を基準に固定する。
+    # 理由: Piscine最終日を基準にした「最終7日間に1h以上来た学生」を母集団とすることで、
+    # スクリプトの実行タイミングに関わらず偏差値計算の母集団が安定する。
+    # 例: Piscine終了後も「最終週に来た学生」が対象になり続け、母集団が変動しない。
+    reference_time = PISCINE_END
     seven_days_ago = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD)).strftime("%Y-%m-%d")
     active_logins = set()
     for login, s in students.items():
