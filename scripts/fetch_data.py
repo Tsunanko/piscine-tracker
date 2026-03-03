@@ -255,8 +255,6 @@ def main():
     #    ※ 旧Step3(locations_stats×147回)を削除し、旧Step4に統合
     #    ※ scale_teams追加分はStep3削除と相殺→合計API呼び出し数は同じ
     print("\n[3] Fetching per-student data (locations_stats + projects + scale_teams)...")
-    os.makedirs(f"{OUTPUT_DIR}/data", exist_ok=True)
-
     loc_params = {
         "begin_at": PISCINE_START.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "end_at":   PISCINE_END.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
