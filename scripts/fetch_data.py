@@ -59,12 +59,34 @@ TARGET_HOURS_PER_DAY = 8    # 1日の目標学習時間
 CAMPUS_ID         = 26  # 42 Tokyo のキャンパスID
 PISCINE_CURSUS_ID = 9   # Piscine のカリキュラムID
 
-OUTPUT_DIR = "public"  # GitHub Pages で公開するディレクトリ
+WORKER_URL    = os.environ.get("WORKER_URL", "https://piscine-tracker.tsunanko.workers.dev")
+WORKER_SECRET = os.environ.get("WORKER_SECRET", "")
 
 # 偏差値計算: アクティブ学生の判定条件
 # Piscine終了後は PISCINE_END を基準に使う（終了後7日以上経過で母集団が空になるバグ防止）
 ACTIVE_DAYS_THRESHOLD  = 7    # 直近何日間を見るか
 ACTIVE_HOURS_THRESHOLD = 1.0  # 何時間以上来たら「アクティブ」とみなすか
+
+
+def upload_to_kv(payload):
+    """Worker API 経由でデータを Cloudflare KV にアップロードする。
+
+    payload 例:
+      { "type": "summary", "data": {...} }               → data.json 相当
+      { "type": "user", "login": "xxx", "data": {...} }  → data/{login}.json 相当
+
+    WORKER_SECRET が未設定の場合はスキップ（ローカルデバッグ用）。
+    """
+    if not WORKER_SECRET:
+        print("  [SKIP] WORKER_SECRET not set, skipping KV upload")
+        return
+    resp = requests.post(
+        f"{WORKER_URL}/api/kv/upload",
+        json=payload,
+        headers={"Authorization": f"Bearer {WORKER_SECRET}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
 
 
 def get_token():
@@ -502,11 +524,16 @@ def main():
         students[login]["composite_deviation"] = composite_dev
         students[login]["review_given"] = reviews
 
-    # 5. 個人JSONファイルを一括書き込み
-    print(f"\n[5] Writing {len(user_jsons)} per-user JSON files...")
+    # 5. 個人JSONを Cloudflare KV にアップロード
+    print(f"\n[5] Uploading {len(user_jsons)} per-user JSON to KV...")
+    ok_count = 0
     for login, uj in user_jsons.items():
-        with open(f"{OUTPUT_DIR}/data/{login}.json", "w") as f:
-            json.dump(uj, f, ensure_ascii=False)
+        try:
+            upload_to_kv({"type": "user", "login": login, "data": uj})
+            ok_count += 1
+        except Exception as e:
+            print(f"  [ERROR] KV upload failed for {login}: {e}")
+    print(f"  Uploaded {ok_count}/{len(user_jsons)} user JSONs")
 
     # 6. ダッシュボード用 data.json 生成
     print("\n[6] Writing dashboard data.json...")
@@ -561,10 +588,11 @@ def main():
         "cached_at": now.isoformat(),
     }
 
-    with open(f"{OUTPUT_DIR}/data.json", "w") as f:
-        json.dump(dashboard, f, ensure_ascii=False)
-
-    print(f"  Wrote public/data.json ({len(online)} online, {len(offline)} offline)")
+    try:
+        upload_to_kv({"type": "summary", "data": dashboard})
+        print(f"  Uploaded data.json to KV ({len(online)} online, {len(offline)} offline)")
+    except Exception as e:
+        print(f"  [ERROR] KV upload failed for data.json: {e}")
     print("\nDone!")
 
 
