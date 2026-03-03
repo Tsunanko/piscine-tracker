@@ -663,8 +663,10 @@ async function loadData() {
   btn.classList.add('spinning');
 
   try {
-    // GitHub Pages: read from static per-user JSON (cache-busted with timestamp)
-    const resp = await fetch(`data/${encodeURIComponent(LOGIN)}.json?t=${Date.now()}`);
+    const token = getToken();
+    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!resp.ok) throw new Error(`User "${LOGIN}" not found (HTTP ${resp.status})`);
     const data = await resp.json();
     render(data);
@@ -681,7 +683,10 @@ let miniChartInstance = null;
 
 async function renderMiniChart(login) {
   try {
-    const res = await fetch('data.json');
+    const token = getToken();
+    const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     const d = await res.json();
     const all = [...(d.online || []), ...(d.offline || [])];
 
