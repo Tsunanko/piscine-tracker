@@ -97,6 +97,40 @@ async function isAdmin(request, env) {
 }
 
 /**
+ * データアクセス認証チェック（piscine: トークン or 42 OAuth トークン）
+ *
+ * piscine: トークン → フォーマット確認のみ（軽量）
+ * 42 OAuth トークン → 42 API /v2/me で検証
+ *
+ * @param {Request} request
+ * @returns {{ login: string, type: string } | null}
+ */
+async function checkDataAuth(request) {
+  const auth = request.headers.get('Authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!token) return null;
+
+  // piscine: トークン（合言葉ログイン）→ フォーマット確認のみ
+  if (token.startsWith('piscine:')) {
+    const login = token.slice(8);
+    if (/^[a-zA-Z0-9_-]{1,30}$/.test(login)) return { login, type: 'piscine' };
+    return null;
+  }
+
+  // 42 OAuth トークン → API で検証
+  try {
+    const res = await fetch(USERINFO_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const user = await res.json();
+      return { login: user.login, type: 'oauth' };
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Cloudflare Workers のメインエントリーポイント
  *
  * Workers は「リクエストが来るたびに fetch() が呼ばれる」サーバーレス関数。
@@ -137,6 +171,22 @@ export default {
     // 管理者権限は付与しない（OAuthログインのみが管理者になれる）
     if (url.pathname === '/api/simple-login' && request.method === 'POST') {
       return handleSimpleLogin(request, env);
+    }
+
+    // ─── KVアップロード API（fetch_data.py が使用）────────────────────
+    // WORKER_SECRET で保護された内部API。外部からのアクセスは認証エラー。
+    if (url.pathname === '/api/kv/upload' && request.method === 'POST') {
+      return handleKvUpload(request, env);
+    }
+
+    // ─── データ取得 API（フロントエンドが使用）────────────────────────
+    // 42 OAuthトークン or piscine:トークンで認証後にKVのデータを返す
+    if (url.pathname === '/api/data' && request.method === 'GET') {
+      return handleGetData(request, env);
+    }
+    if (url.pathname.startsWith('/api/data/') && request.method === 'GET') {
+      const login = decodeURIComponent(url.pathname.slice('/api/data/'.length));
+      return handleGetUserData(request, env, login);
     }
 
     // ─── ログイン記録 API ──────────────────────────────────────────────
@@ -381,6 +431,117 @@ async function handleSimpleLogin(request, env) {
   }
 }
 
+/**
+ * KVアップロード API（fetch_data.py が使用する内部API）
+ *
+ * WORKER_SECRET（Bearer トークン）で保護。
+ * Body: { "type": "summary", "data": {...} }
+ *    or { "type": "user", "login": "xxx", "data": {...} }
+ */
+async function handleKvUpload(request, env) {
+  // WORKER_SECRET 認証
+  const auth = request.headers.get('Authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!env.WORKER_SECRET || token !== env.WORKER_SECRET) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    const body = await request.json();
+    const { type, data, login } = body;
+
+    if (type === 'summary') {
+      await env.PISCINE_DATA.put('data:summary', JSON.stringify(data));
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (type === 'user' && login && data) {
+      if (!/^[a-zA-Z0-9_-]{1,30}$/.test(login)) {
+        return new Response(JSON.stringify({ error: 'Invalid login' }), {
+          status: 400,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      await env.PISCINE_DATA.put(`data:user:${login}`, JSON.stringify(data));
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: 'Bad Request' }), {
+      status: 400,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * 全体ダッシュボード用 data.json を返す（認証必須）
+ */
+async function handleGetData(request, env) {
+  const user = await checkDataAuth(request);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const val = await env.PISCINE_DATA.get('data:summary');
+  if (!val) {
+    return new Response(JSON.stringify({ error: 'Data not found' }), {
+      status: 404,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  return new Response(val, {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
+/**
+ * 個人用 data/{login}.json を返す（認証必須）
+ */
+async function handleGetUserData(request, env, login) {
+  const user = await checkDataAuth(request);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!/^[a-zA-Z0-9_-]{1,30}$/.test(login)) {
+    return new Response(JSON.stringify({ error: 'Invalid login' }), {
+      status: 400,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const val = await env.PISCINE_DATA.get(`data:user:${login}`);
+  if (!val) {
+    return new Response(JSON.stringify({ error: 'User data not found' }), {
+      status: 404,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  return new Response(val, {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
 /** ログイン画面HTML */
 function loginPage() {
   const html = `<!DOCTYPE html>
@@ -536,6 +697,19 @@ async function handleCallback(request, env, url) {
     return errorPage(
       'アクセス拒否',
       `このサービスは 42 Tokyo の学生専用です。\nあなたのキャンパス: ${campusNames}`
+    );
+  }
+
+  // ─── Piscine生チェック: cursus_id=9（Piscine）のみの学生は OAuth 禁止 ──
+  // Piscine生は 42 本カリキュラム（cursus_id=21）を持たず、
+  // Piscine cursus（cursus_id=9）のみに所属している。
+  // → OAuth ではなく合言葉ログインを使うよう誘導する。
+  const cursusIds = (user.cursus_users || []).map(c => c.cursus_id);
+  const isPiscineOnly = cursusIds.includes(9) && !cursusIds.includes(21);
+  if (isPiscineOnly) {
+    return errorPage(
+      'ログイン方法が違います',
+      `Piscine参加中の方は、42 OAuth ではなく\n合言葉ログインをご利用ください。\n\nログイン画面に戻って\nログイン名と合言葉を入力してください。`
     );
   }
 
