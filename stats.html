@@ -627,7 +627,10 @@ function clearSearch() {
 // データ読み込み
 // ─────────────────────────────────────────────
 async function loadData() {
-  const res = await fetch('data.json?' + Date.now());
+  const token = sessionStorage.getItem('piscine_42_token') || '';
+  const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   const d = await res.json();
   const all = [...(d.online || []), ...(d.offline || [])];
   const map = {};
