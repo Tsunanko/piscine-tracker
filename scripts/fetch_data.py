@@ -598,7 +598,7 @@ def main():
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
-            # piscine_result はプライバシーのためダッシュボードに含めない（個人JSONのみ）
+            "piscine_result": s.get("piscine_result"),  # "passed" | "failed" | null
         }
         if login in online_logins:
             loc = active_map[login]

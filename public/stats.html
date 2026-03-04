@@ -645,13 +645,25 @@ async function loadData() {
   hasActiveField = allStudents.some(s => 'is_active' in s);
   activeStudents = hasActiveField ? allStudents.filter(s => s.is_active) : allStudents;
 
-  try {
-    const pr = await fetch('data/passes.json?' + Date.now());
-    if (pr.ok) {
-      passes = await pr.json();
-      hasPassData = Object.keys(passes).length > 0;
-    }
-  } catch(_) {}
+  // 合否データを API レスポンスから直接取得（piscine_result フィールド）
+  // 既存の passes 形式（"pass"/"fail"）に変換して baseColor() と互換性を保つ
+  passes = {};
+  for (const s of allStudents) {
+    if (s.piscine_result === 'passed') passes[s.login] = 'pass';
+    else if (s.piscine_result === 'failed') passes[s.login] = 'fail';
+  }
+  hasPassData = Object.keys(passes).length > 0;
+
+  // フォールバック: data/passes.json が存在する場合は上書き（後方互換）
+  if (!hasPassData) {
+    try {
+      const pr = await fetch('data/passes.json?' + Date.now());
+      if (pr.ok) {
+        passes = await pr.json();
+        hasPassData = Object.keys(passes).length > 0;
+      }
+    } catch(_) {}
+  }
 
   const activeLabel = hasActiveField
     ? `全${allStudents.length}人・アクティブ${activeStudents.length}人（偏差値基準）`
