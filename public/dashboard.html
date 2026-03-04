@@ -412,6 +412,7 @@
   .search-wrap {
     margin-bottom: 16px;
   }
+
   .search-input {
     width: 100%;
     padding: 10px 14px;
@@ -457,6 +458,10 @@
         <div class="summary-item">
           <div class="summary-label">Total</div>
           <div class="summary-value accent" id="totalCount">0</div>
+        </div>
+        <div class="summary-item" id="passedSummary" style="display:none">
+          <div class="summary-label" style="color:var(--orange)">合格</div>
+          <div class="summary-value" style="color:var(--orange)" id="passedCount">0</div>
         </div>
       </div>
       <div class="search-wrap">
@@ -627,6 +632,17 @@ function renderDashboard() {
   document.getElementById('headerSub').textContent = 'Feb 2 - Feb 27, 2026';
   document.getElementById('onlineCount').textContent = d.total_online;
   document.getElementById('totalCount').textContent = d.total_students;
+
+  // 合否サマリーを更新（発表済みの場合のみ合格者数を表示）
+  const passedSummary = document.getElementById('passedSummary');
+  if (d.results_announced && d.passed_count != null) {
+    if (passedSummary) {
+      passedSummary.style.display = '';
+      document.getElementById('passedCount').textContent = d.passed_count;
+    }
+  } else {
+    if (passedSummary) passedSummary.style.display = 'none';
+  }
 
   // Update filter bar
   const filterBtns = [
