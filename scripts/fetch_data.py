@@ -388,6 +388,7 @@ def main():
                     status = p.get("status", "")
                     validated = p.get("validated?", False)
                     final_mark = p.get("final_mark")
+                    marked_at = p.get("marked_at")
                     if proj_name:
                         projects.append({
                             "name": proj_name,
@@ -395,6 +396,7 @@ def main():
                             "status": status,
                             "validated": validated,
                             "final_mark": final_mark,
+                            "marked_at": marked_at,
                         })
                 def proj_sort_key(p):
                     if p["status"] == "in_progress":
@@ -413,6 +415,39 @@ def main():
             # Piscine Final Exam スコア抽出
             exam_project = next((p for p in projects if "final exam" in p["name"].lower()), None)
             students[login]["exam_score"] = exam_project["final_mark"] if exam_project else None
+
+            # Exam進捗（rank 00/01/02/... + final）を抽出
+            def get_exam_rank(name):
+                name_l = name.lower()
+                m = re.search(r'exam\s+rank\s+0*(\d+)', name_l)
+                if m: return int(m.group(1))
+                m = re.search(r'piscine\s+exam\s+0*(\d+)', name_l)
+                if m: return int(m.group(1))
+                return None
+
+            exam_progression = []
+            for p in projects_raw:
+                pname = p.get("project", {}).get("name", "")
+                rank = get_exam_rank(pname)
+                if rank is not None:
+                    exam_progression.append({
+                        "rank": rank,
+                        "name": pname,
+                        "final_mark": p.get("final_mark"),
+                        "validated": p.get("validated?", False),
+                        "marked_at": p.get("marked_at"),
+                    })
+            exam_progression.sort(key=lambda x: x["rank"])
+            if exam_project:
+                raw_fe = next((p for p in projects_raw if "final exam" in p.get("project", {}).get("name", "").lower()), None)
+                exam_progression.append({
+                    "rank": "final",
+                    "name": exam_project["name"],
+                    "final_mark": exam_project["final_mark"],
+                    "validated": exam_project["validated"],
+                    "marked_at": raw_fe.get("marked_at") if raw_fe else None,
+                })
+            students[login]["exam_progression"] = exam_progression
 
             time.sleep(0.3)  # projects_users の後
 
@@ -465,6 +500,7 @@ def main():
                 "review_given": review_given,
                 "daily": daily,
                 "projects": projects,
+                "exam_progression": students[login].get("exam_progression", []),
                 "piscine_result": piscine_result,  # "passed" | "failed" | null
                 "updated_at": now.isoformat(),
                 # level_deviation, hours_deviation はポスト処理で追加

@@ -531,6 +531,37 @@ function render(d) {
     </div>`;
   }
 
+  // ── Exam進捗カード（isAdminのみ） ──
+  let examProgressHTML = '';
+  if (isAdmin && d.exam_progression && d.exam_progression.length > 0) {
+    const ep = d.exam_progression;
+    const bars = ep.map((e, i) => {
+      const prev = i > 0 ? ep[i-1].final_mark : null;
+      const mark = e.final_mark;
+      const isFinal = e.rank === 'final';
+      const label = isFinal ? 'Final' : `Rank ${String(e.rank).padStart(2,'0')}`;
+      const pct = mark != null ? Math.min(100, mark) : 0;
+      const diff = (prev != null && mark != null) ? mark - prev : null;
+      const diffStr = diff !== null ? (diff >= 0 ? `+${diff}` : `${diff}`) : '';
+      const diffColor = diff === null ? '' : diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--red)' : 'var(--text-dim)';
+      const barColor = isFinal ? 'var(--orange)' : mark != null && mark >= 50 ? 'var(--green)' : 'var(--accent)';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--text-dim);width:42px">${label}</div>
+        <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${barColor};opacity:0.85;border-radius:4px"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);width:32px;text-align:right">${mark != null ? mark+'pt' : '-'}</div>
+        <div style="font-size:10px;width:28px;text-align:right;color:${diffColor}">${diffStr}</div>
+      </div>`;
+    }).join('');
+    examProgressHTML = `
+    <div class="card fade-in">
+      <div class="card-title">Exam 進捗</div>
+      ${bars}
+      <div style="margin-top:6px;font-size:10px;color:var(--text-dim)">50pt 以上で各 Rank 突破</div>
+    </div>`;
+  }
+
   // ── Exam スコア stat-item（isAdminのみ） ──
   const examStatHTML = (isAdmin && d.exam_score != null) ? `
         <div class="stat-item">
@@ -733,6 +764,9 @@ function render(d) {
         </span>
       </div>
     </div>
+
+    <!-- Exam進捗 -->
+    ${examProgressHTML}
 
     <!-- 伸び率 -->
     ${growthHTML}
