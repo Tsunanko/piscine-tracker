@@ -512,6 +512,9 @@ async function handleGetData(request, env) {
 
 /**
  * 個人用 data/{login}.json を返す（認証必須）
+ *
+ * プライバシー保護: piscine_result（合否）は本人または管理者のみに公開。
+ * 他のユーザーが取得した場合、piscine_result フィールドを除外する。
  */
 async function handleGetUserData(request, env, login) {
   const user = await checkDataAuth(request);
@@ -535,6 +538,21 @@ async function handleGetUserData(request, env, login) {
       status: 404,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
+  }
+
+  // 本人または管理者以外には piscine_result（合否）を非公開にする
+  const isOwnData = user.login === login;
+  const isAdminUser = await isAdmin(request, env);
+  if (!isOwnData && !isAdminUser) {
+    try {
+      const data = JSON.parse(val);
+      delete data.piscine_result;
+      return new Response(JSON.stringify(data), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    } catch {
+      // パース失敗時はそのまま返す（piscine_result がなければ問題ない）
+    }
   }
 
   return new Response(val, {
