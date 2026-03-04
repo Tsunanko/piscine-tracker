@@ -491,6 +491,47 @@ function render(d) {
       <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
     </div>
 
+    <!-- 合否バナー（自分のプロフィールを見た時のみ表示） -->
+    ${(loggedInUser && loggedInUser.login === d.login && d.piscine_result) ? (() => {
+      if (d.piscine_result === 'passed') {
+        return `<div class="fade-in" style="
+          background: linear-gradient(135deg, rgba(253,203,110,0.15), rgba(253,203,110,0.05));
+          border: 1px solid rgba(253,203,110,0.4);
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 16px;
+          text-align: center;
+        ">
+          <div style="font-size: 32px; margin-bottom: 8px">🎉</div>
+          <div style="font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 6px">
+            42 Tokyo 入学おめでとうございます！
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
+            Piscine を突破しました。<br>
+            ここからが本当の始まりです。これからもよろしく！
+          </div>
+        </div>`;
+      } else {
+        return `<div class="fade-in" style="
+          background: rgba(136,136,160,0.06);
+          border: 1px solid rgba(136,136,160,0.2);
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 16px;
+          text-align: center;
+        ">
+          <div style="font-size: 32px; margin-bottom: 8px">🏊</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px">
+            Piscine、お疲れ様でした！
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
+            挑戦したこと自体が大きな経験です。<br>
+            ここで得たスキルは必ず次に活きます。また会いましょう！
+          </div>
+        </div>`;
+      }
+    })() : ''}
+
     <!-- 偏差値 2×2グリッド -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;max-width:340px;margin-left:auto;margin-right:auto" class="fade-in">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;text-align:center">
@@ -794,8 +835,11 @@ function showError(msg) {
   `;
 }
 
+let loggedInUser = null;
+
 requireAuth().then(user => {
   if (!user) return;
+  loggedInUser = user;
   loadData();
   setInterval(loadData, 5 * 60 * 1000);
 });
