@@ -705,6 +705,11 @@ function renderDashboard() {
     const examHTML = examScore != null
       ? `<span style="color:${examColor}">${examScore}</span>`
       : `<span style="color:var(--text-dim)">-</span>`;
+    const passedHTML = student.passed === true
+      ? `<span style="color:var(--green);font-weight:bold">合格</span>`
+      : student.passed === false
+      ? `<span style="color:var(--red);font-weight:bold">不合格</span>`
+      : ``;
     return `
       <div class="student-card ${cls}" onclick="goToStudent('${esc(student.login)}')">
         <div class="student-rank">${rank}</div>
@@ -726,7 +731,7 @@ function renderDashboard() {
           </div>
         </div>
         <div class="exam-section" style="font-size:9px;color:var(--text-dim);text-align:center;margin-top:3px">
-          Exam: ${examHTML}
+          Exam: ${examHTML}${passedHTML ? ` ${passedHTML}` : ''}
         </div>
         ${seat}
       </div>`;
