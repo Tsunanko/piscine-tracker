@@ -19,6 +19,7 @@ name: Deploy Static Pages
 on:
   push:
     branches: [main]  # main ブランチへの push のみトリガー
+  workflow_dispatch:   # 手動実行も可能に
 
 permissions:
   contents: write
