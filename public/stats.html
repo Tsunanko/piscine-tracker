@@ -1292,6 +1292,7 @@ function buildAllCorrTable() {
 // ─────────────────────────────────────────────
 requireAuth().then(user => {
   if (!user) return;
+  currentUser = user;
   loadData(user).catch(e => {
     document.getElementById('mainCard').innerHTML =
       `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
