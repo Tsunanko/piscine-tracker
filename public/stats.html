@@ -437,6 +437,7 @@
     <button class="tab-btn" onclick="switchTab(1)">時間 × レビュー回数</button>
     <button class="tab-btn" onclick="switchTab(2)">Level × レビュー回数</button>
     <button class="tab-btn" onclick="switchTab(3)">試験スコア</button>
+    <button class="tab-btn" onclick="switchTab(4)">不合格者分析</button>
   </div>
 
   <!-- フィルターバー -->
@@ -523,6 +524,8 @@ function toggleFilter() {
   }
   if (currentTab === 3) {
     renderExamTab();
+  } else if (currentTab === 4) {
+    renderFailAnalysisTab();
   } else {
     render();
     buildAllCorrTable();
@@ -704,6 +707,8 @@ function switchTab(i) {
     b.classList.toggle('active', i===j));
   if (i === 3) {
     renderExamTab();
+  } else if (i === 4) {
+    renderFailAnalysisTab();
   } else {
     render();
   }
@@ -1161,15 +1166,22 @@ function renderExamTab() {
     ? withScore.reduce((a, s) => a + s.exam_score, 0) / students.length
     : null;
 
-  // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント
-  const binLabels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
-  const bins = Array(11).fill(null).map(() => ({ pass: 0, fail: 0, unknown: 0 }));
+  // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント（12番目のビン=未受験）
+  const binLabels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100','未受験'];
+  const bins = Array(12).fill(null).map(() => ({ pass: 0, fail: 0, unknown: 0 }));
   for (const s of withScore) {
     const bi = Math.min(Math.floor(s.exam_score / 10), 10);
     const r  = passes[s.login];
     if (r === 'pass')      bins[bi].pass++;
     else if (r === 'fail') bins[bi].fail++;
     else                   bins[bi].unknown++;
+  }
+  // 未受験者をビン[11]に追加
+  for (const s of noScore) {
+    const r = passes[s.login];
+    if (r === 'pass')      bins[11].pass++;
+    else if (r === 'fail') bins[11].fail++;
+    else                   bins[11].unknown++;
   }
 
   // スコア一覧（降順）— Piscine結果で合否表示
@@ -1348,6 +1360,139 @@ function renderExamTab() {
       },
     },
   });
+}
+
+// ─────────────────────────────────────────────
+// 不合格者分析タブ（管理者専用）
+// ─────────────────────────────────────────────
+function renderFailAnalysisTab() {
+  if (!currentUser || currentUser.login !== ADMIN_LOGIN) {
+    document.getElementById('mainCard').innerHTML =
+      `<div class="loading" style="color:var(--red)">⛔ このページは管理者専用です</div>`;
+    return;
+  }
+  document.getElementById('allCorrTable').style.display = 'none';
+
+  const students  = currentStudents();
+  const failStudents = students.filter(s => passes[s.login] === 'fail');
+  const passStudents = students.filter(s => passes[s.login] === 'pass');
+
+  if (failStudents.length === 0) {
+    document.getElementById('mainCard').innerHTML =
+      `<div style="text-align:center;padding:40px;color:var(--text-dim)">不合格者データがありません</div>`;
+    return;
+  }
+
+  // --- 平均算出ヘルパー ---
+  const avg = (arr, key) => {
+    const vals = arr.map(s => s[key]).filter(v => v != null && !isNaN(v));
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const fmt = (v, d=1) => v != null ? v.toFixed(d) : '—';
+
+  // 合格者/不合格者の各種平均
+  const failAvgScore = avg(failStudents.filter(s => s.exam_score != null), 'exam_score');
+  const passAvgScore = avg(passStudents.filter(s => s.exam_score != null), 'exam_score');
+  const failAvgHours = avg(failStudents, 'total_hours');
+  const passAvgHours = avg(passStudents, 'total_hours');
+  const failAvgLevel = avg(failStudents, 'level');
+  const passAvgLevel = avg(passStudents, 'level');
+
+  // 合格者の最低Examスコア（合格最低ライン）
+  const passWithScore = passStudents.filter(s => s.exam_score != null);
+  const minPassScore  = passWithScore.length > 0
+    ? Math.min(...passWithScore.map(s => s.exam_score))
+    : null;
+
+  // 不合格者のExamスコア分布（高得点順）
+  const failWithScore    = failStudents.filter(s => s.exam_score != null).sort((a,b) => b.exam_score - a.exam_score);
+  const failNoScore      = failStudents.filter(s => s.exam_score == null);
+
+  // 注目: 高スコア不合格者（しきい値=合格者最低点の50%、最低24点）
+  const threshold = Math.max(24, minPassScore != null ? Math.floor(minPassScore * 0.5) : 24);
+  const highScoreFail = failWithScore.filter(s => s.exam_score >= threshold);
+
+  // 不合格者スコア一覧テーブル行（Examスコアあり）
+  const failRows = failWithScore.map((s, i) => {
+    const scoreColor = s.exam_score >= (minPassScore ?? 999) ? 'var(--orange)' : 'var(--red)';
+    const note = s.exam_score >= (minPassScore ?? 999) ? '⚠ 合格点超え' : '';
+    return `<tr>
+      <td style="color:var(--text-dim)">${i + 1}</td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td style="font-weight:700;color:${scoreColor};font-size:15px">${s.exam_score}</td>
+      <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
+      <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
+      <td style="font-size:10px;color:var(--orange)">${note}</td>
+    </tr>`;
+  }).join('');
+
+  // 未受験不合格者行
+  const failNoScoreRows = failNoScore.map((s, i) => `<tr style="opacity:0.7">
+    <td style="color:var(--text-dim)">${failWithScore.length + i + 1}</td>
+    <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+    <td style="color:var(--text-dim)">—</td>
+    <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
+    <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
+    <td></td>
+  </tr>`).join('');
+
+  document.getElementById('mainCard').innerHTML = `
+    <div class="corr-header" style="margin-bottom:14px">
+      <div class="corr-title">不合格者分析</div>
+    </div>
+
+    <!-- 合格 vs 不合格 比較サマリー -->
+    <div style="overflow-x:auto;margin-bottom:16px">
+      <table class="corr-table" style="min-width:400px">
+        <thead><tr>
+          <th></th>
+          <th style="color:var(--green)">Piscine合格（${passStudents.length}人）</th>
+          <th style="color:var(--red)">Piscine不合格（${failStudents.length}人）</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--text-dim)">Exam平均スコア</td>
+            <td style="color:var(--green);font-weight:700">${fmt(passAvgScore)}</td>
+            <td style="color:var(--red);font-weight:700">${fmt(failAvgScore)}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-dim)">平均ログイン時間 (h)</td>
+            <td style="color:var(--green);font-weight:700">${fmt(passAvgHours)}</td>
+            <td style="color:var(--red);font-weight:700">${fmt(failAvgHours)}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-dim)">平均 Level</td>
+            <td style="color:var(--green);font-weight:700">${fmt(passAvgLevel, 2)}</td>
+            <td style="color:var(--red);font-weight:700">${fmt(failAvgLevel, 2)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 合格最低ライン -->
+    ${minPassScore != null ? `
+    <div style="padding:8px 14px;background:rgba(253,203,110,0.08);border:1px solid rgba(253,203,110,0.2);border-radius:8px;margin-bottom:14px;font-size:12px">
+      <span style="color:var(--orange);font-weight:700">⚠ 合格者の最低Examスコア: ${minPassScore}点</span>
+      <span style="color:var(--text-dim);margin-left:12px">— これ以上取っても不合格になった人が ${failWithScore.filter(s=>s.exam_score >= minPassScore).length}人います</span>
+    </div>` : ''}
+
+    <!-- 高スコア不合格者ハイライト -->
+    ${highScoreFail.length > 0 ? `
+    <div style="padding:8px 14px;background:rgba(255,118,117,0.06);border:1px solid rgba(255,118,117,0.2);border-radius:8px;margin-bottom:14px;font-size:12px">
+      <span style="color:var(--red);font-weight:700">Exam ${threshold}点以上で不合格: ${highScoreFail.length}人</span>
+      <span style="color:var(--text-dim);margin-left:8px">${highScoreFail.map(s =>
+        `<a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--red);text-decoration:none">${s.login}(${s.exam_score}点)</a>`
+      ).join(' / ')}</span>
+    </div>` : ''}
+
+    <!-- 不合格者一覧 -->
+    <div style="margin-top:16px">
+      <div class="all-corr-title">不合格者一覧（Examスコア降順）</div>
+      <table class="corr-table">
+        <thead><tr><th>#</th><th>ログイン</th><th>Examスコア</th><th>時間(h)</th><th>Level</th><th></th></tr></thead>
+        <tbody>${failRows}${failNoScoreRows}</tbody>
+      </table>
+    </div>`;
 }
 
 // ─────────────────────────────────────────────
