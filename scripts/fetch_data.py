@@ -60,6 +60,7 @@ CAMPUS_ID         = 26  # 42 Tokyo のキャンパスID
 PISCINE_CURSUS_ID = 9   # Piscine のカリキュラムID
 
 OUTPUT_DIR = "public"  # GitHub Pages で公開するディレクトリ
+RESULTS_FILE = Path(__file__).parent.parent / "data" / "results.json"
 
 # 偏差値計算: アクティブ学生の判定条件
 # Piscine終了後は PISCINE_END を基準に使う（終了後7日以上経過で母集団が空になるバグ防止）
@@ -182,6 +183,17 @@ def main():
 
     token = get_token()
     print("Token acquired")
+
+    # 0. data/results.json を読み込む（合否情報）
+    passed_map: dict[str, bool | None] = {}
+    if RESULTS_FILE.exists():
+        with open(RESULTS_FILE) as f:
+            _results = json.load(f)
+        for login, info in _results.get("students", {}).items():
+            passed_map[login] = info.get("passed")  # True / False / None
+        print(f"  Loaded results.json: {len(passed_map)} entries, {sum(1 for v in passed_map.values() if v is True)} passed")
+    else:
+        print("  data/results.json not found, skipping pass/fail merge")
 
     # 1. Piscine生一覧取得（levelも同時に取得）
     print("\n[1] Fetching piscine students (with level)...")
@@ -411,6 +423,7 @@ def main():
                 "daily": daily,
                 "projects": projects,
                 "updated_at": now.isoformat(),
+                "passed": passed_map.get(login),
                 # level_deviation, hours_deviation はポスト処理で追加
             }
             user_jsons[login] = user_json
@@ -536,6 +549,7 @@ def main():
             "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
             "review_given": None if failed else s.get("review_given", 0),
             "exam_score": None if failed else s.get("exam_score"),
+            "passed": passed_map.get(login),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
