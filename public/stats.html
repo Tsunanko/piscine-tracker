@@ -521,8 +521,12 @@ function toggleFilter() {
     btn.textContent = `アクティブのみ（${nActive}人）`;
     btn.classList.add('active');
   }
-  render();
-  buildAllCorrTable();
+  if (currentTab === 3) {
+    renderExamTab();
+  } else {
+    render();
+    buildAllCorrTable();
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1133,32 +1137,53 @@ function renderExamTab() {
   }
   document.getElementById('allCorrTable').style.display = 'none';
 
-  const withScore = allStudents.filter(s => s.exam_score != null);
-  const passed    = withScore.filter(s => s.exam_score >= 50);
-  const failed    = withScore.filter(s => s.exam_score <  50);
-  const noScore   = allStudents.filter(s => s.exam_score == null);
-  const passRate  = withScore.length > 0 ? Math.round(passed.length / withScore.length * 100) : 0;
+  // フィルター適用（アクティブのみ or 全員）
+  const students  = currentStudents();
+  const withScore = students.filter(s => s.exam_score != null);
+  const noScore   = students.filter(s => s.exam_score == null);
   const avg       = withScore.length > 0 ? withScore.reduce((a, s) => a + s.exam_score, 0) / withScore.length : 0;
 
-  // スコア分布ビン (0-9, 10-19, ..., 90-99, 100)
-  const bins = Array(11).fill(0);
-  for (const s of withScore) bins[Math.min(Math.floor(s.exam_score / 10), 10)]++;
-  const binLabels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
-  const binColors = bins.map((_, i) => i < 5 ? 'rgba(255,118,117,0.75)' : 'rgba(0,206,201,0.75)');
+  // Piscine通過結果ベースの集計（passes[] = loadData で構築済み）
+  const piscinePass    = students.filter(s => passes[s.login] === 'pass');
+  const piscineFail    = students.filter(s => passes[s.login] === 'fail');
+  const piscinePassRate = students.length > 0 ? Math.round(piscinePass.length / students.length * 100) : 0;
 
-  // スコア一覧（降順）
+  // 未受験なのにPiscine合格した人
+  const noScoreButPass = noScore.filter(s => passes[s.login] === 'pass');
+
+  // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント
+  const binLabels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
+  const bins = Array(11).fill(null).map(() => ({ pass: 0, fail: 0, unknown: 0 }));
+  for (const s of withScore) {
+    const bi = Math.min(Math.floor(s.exam_score / 10), 10);
+    const r  = passes[s.login];
+    if (r === 'pass')      bins[bi].pass++;
+    else if (r === 'fail') bins[bi].fail++;
+    else                   bins[bi].unknown++;
+  }
+
+  // スコア一覧（降順）— Piscine結果で合否表示
   const sorted = [...withScore].sort((a, b) => b.exam_score - a.exam_score);
   const rows = sorted.map((s, i) => {
-    const pass = s.exam_score >= 50;
-    const color   = pass ? 'var(--green)' : 'var(--red)';
-    const badgeBg = pass ? 'var(--green-dim)' : 'var(--red-dim)';
+    const r  = passes[s.login];
+    const isPass    = r === 'pass';
+    const isFail    = r === 'fail';
+    const scoreColor = isPass ? 'var(--green)' : isFail ? 'var(--red)' : 'var(--text)';
+    const badgeBg   = isPass ? 'var(--green-dim)' : isFail ? 'var(--red-dim)' : '#2a2a3a';
+    const badgeColor = isPass ? 'var(--green)' : isFail ? 'var(--red)' : 'var(--text-dim)';
+    const badgeText  = isPass ? '🎉 合格' : isFail ? '不合格' : '—';
     return `<tr>
       <td style="color:var(--text-dim)">${i + 1}</td>
       <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
-      <td style="font-weight:700;color:${color};font-size:16px">${s.exam_score}</td>
-      <td><span style="background:${badgeBg};color:${color};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">${pass ? '合格' : '不合格'}</span></td>
+      <td style="font-weight:700;color:${scoreColor};font-size:16px">${s.exam_score}</td>
+      <td><span style="background:${badgeBg};color:${badgeColor};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">${badgeText}</span></td>
     </tr>`;
   }).join('');
+
+  // 未受験で合格した人リスト
+  const noScorePassRows = noScoreButPass.map(s =>
+    `<a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--green);text-decoration:none;margin-right:8px">${s.login}</a>`
+  ).join('');
 
   document.getElementById('mainCard').innerHTML = `
     <div class="corr-header" style="margin-bottom:14px">
@@ -1166,35 +1191,49 @@ function renderExamTab() {
     </div>
     <div class="summary-grid">
       <div class="summary-item">
-        <div class="summary-label">受験者数</div>
+        <div class="summary-label">対象人数</div>
+        <div class="summary-value">${students.length}人</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Piscine合格</div>
+        <div class="summary-value" style="color:var(--green)">${piscinePass.length}人</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Piscine不合格</div>
+        <div class="summary-value" style="color:var(--red)">${piscineFail.length}人</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Piscine通過率</div>
+        <div class="summary-value">${students.length > 0 ? piscinePassRate + '%' : '—'}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Exam受験者</div>
         <div class="summary-value">${withScore.length}人</div>
       </div>
       <div class="summary-item">
-        <div class="summary-label">合格（≥ 50）</div>
-        <div class="summary-value" style="color:var(--green)">${passed.length}人</div>
+        <div class="summary-label">受験者平均スコア</div>
+        <div class="summary-value">${withScore.length > 0 ? avg.toFixed(1) : '—'}</div>
       </div>
       <div class="summary-item">
-        <div class="summary-label">不合格（< 50）</div>
-        <div class="summary-value" style="color:var(--red)">${failed.length}人</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">未受験 / 未集計</div>
+        <div class="summary-label">Exam未受験</div>
         <div class="summary-value" style="color:var(--text-dim)">${noScore.length}人</div>
       </div>
       <div class="summary-item">
-        <div class="summary-label">合格率</div>
-        <div class="summary-value">${withScore.length > 0 ? passRate + '%' : '—'}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">受験者平均</div>
-        <div class="summary-value">${withScore.length > 0 ? avg.toFixed(1) : '—'}</div>
+        <div class="summary-label">未受験で合格</div>
+        <div class="summary-value" style="color:var(--orange)">${noScoreButPass.length}人</div>
       </div>
     </div>
-    <div class="mean-legend" style="margin-top:10px">
-      <span><span class="legend-dot" style="background:rgba(0,206,201,0.75);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>合格（50点以上）</span>
-      <span><span class="legend-dot" style="background:rgba(255,118,117,0.75);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>不合格（50点未満）</span>
+    ${noScoreButPass.length > 0 ? `
+    <div style="margin-top:10px;padding:8px 12px;background:rgba(253,203,110,0.08);border-radius:8px;border:1px solid rgba(253,203,110,0.2)">
+      <span style="font-size:11px;color:var(--orange);font-weight:600">Exam未受験でPiscine合格：</span>
+      <span style="font-size:11px">${noScorePassRows}</span>
+    </div>` : ''}
+    <div class="mean-legend" style="margin-top:14px">
+      <span><span style="background:rgba(0,206,201,0.8);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Piscine合格</span>
+      <span><span style="background:rgba(255,118,117,0.8);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Piscine不合格</span>
+      <span><span style="background:rgba(136,136,160,0.5);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>結果未集計</span>
     </div>
-    <div class="chart-wrap" style="height:200px;margin-top:12px">
+    <div class="chart-wrap" style="height:220px;margin-top:8px">
       <canvas id="examCanvas"></canvas>
     </div>
     ${withScore.length === 0 ? `
@@ -1204,15 +1243,19 @@ function renderExamTab() {
       <div style="font-size:12px;margin-top:6px">データ更新後に表示されます</div>
     </div>` : `
     <div style="margin-top:20px">
-      <div class="all-corr-title">スコア一覧（高得点順）</div>
+      <div class="all-corr-title">スコア一覧（高得点順） ※ 合否はPiscine通過結果</div>
       <table class="corr-table">
-        <thead><tr><th>#</th><th>ログイン</th><th>スコア</th><th>合否</th></tr></thead>
+        <thead><tr><th>#</th><th>ログイン</th><th>スコア</th><th>Piscine</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`}
     ${noScore.length > 0 && withScore.length > 0 ? `
     <div style="margin-top:10px;font-size:11px;color:var(--text-dim)">
-      ※ 未受験 / 未集計 ${noScore.length}人: ${noScore.map(s => s.login).join(', ')}
+      ※ Exam未受験 ${noScore.length}人: ${noScore.map(s => {
+        const r = passes[s.login];
+        const c = r === 'pass' ? 'var(--green)' : r === 'fail' ? 'var(--red)' : 'var(--text-dim)';
+        return `<span style="color:${c}">${s.login}</span>`;
+      }).join(', ')}
     </div>` : ''}`;
 
   if (withScore.length === 0) return;
@@ -1224,22 +1267,60 @@ function renderExamTab() {
     type: 'bar',
     data: {
       labels: binLabels,
-      datasets: [{ label: '人数', data: bins, backgroundColor: binColors, borderColor: 'transparent', borderRadius: 4 }],
+      datasets: [
+        {
+          label: 'Piscine合格',
+          data: bins.map(b => b.pass),
+          backgroundColor: 'rgba(0,206,201,0.8)',
+          borderColor: 'transparent',
+          borderRadius: 3,
+        },
+        {
+          label: 'Piscine不合格',
+          data: bins.map(b => b.fail),
+          backgroundColor: 'rgba(255,118,117,0.8)',
+          borderColor: 'transparent',
+          borderRadius: 3,
+        },
+        {
+          label: '結果未集計',
+          data: bins.map(b => b.unknown),
+          backgroundColor: 'rgba(136,136,160,0.5)',
+          borderColor: 'transparent',
+          borderRadius: 3,
+        },
+      ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.raw}人` } },
+        legend: {
+          display: true,
+          labels: { color: '#8888a0', font: { size: 11 }, boxWidth: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}人`,
+            afterBody: items => {
+              const bi    = items[0].dataIndex;
+              const total = bins[bi].pass + bins[bi].fail + bins[bi].unknown;
+              if (total === 0) return [];
+              const rate = Math.round(bins[bi].pass / total * 100);
+              return [`Piscine通過率: ${rate}% (${bins[bi].pass}/${total}人)`];
+            },
+          },
+        },
       },
       scales: {
         x: {
+          stacked: true,
           title: { display: true, text: 'スコア', color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0', font: { size: 10 } },
         },
         y: {
+          stacked: true,
           title: { display: true, text: '人数', color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
           ticks: { color: '#8888a0', stepSize: 1 },
