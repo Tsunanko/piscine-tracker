@@ -705,9 +705,10 @@ function renderDashboard() {
     const examHTML = examScore != null
       ? `<span style="color:${examColor}">${examScore}</span>`
       : `<span style="color:var(--text-dim)">-</span>`;
-    const passedHTML = student.passed === true
+    const isAdmin = loggedInUser && loggedInUser.login === 'admin_user';
+    const passedHTML = isAdmin && student.passed === true
       ? `<span style="color:var(--green);font-weight:bold">合格</span>`
-      : student.passed === false
+      : isAdmin && student.passed === false
       ? `<span style="color:var(--red);font-weight:bold">不合格</span>`
       : ``;
     return `
