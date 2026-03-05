@@ -33,36 +33,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ─── Step 2: gh-pages ブランチから最新データを復元 ───────────────
-      # 【なぜこの処理が必要か】
-      # main ブランチには data.json / data/*.json がない（コードのみ）。
-      # gh-pages ブランチには update-data.yml が書き込んだ最新 JSON がある。
-      # このステップで gh-pages から data を取ってきて public/ に配置する。
-      # → コード変更でデータが消えないようにする。
-      #
-      # git fetch origin gh-pages || true
-      #   → gh-pages ブランチ情報を取得（存在しない場合もエラーにしない）
-      #
-      # git show origin/gh-pages:data.json > public/data.json
-      #   → gh-pages ブランチの data.json を直接ファイルに書き出す
-      #   → 2>/dev/null でエラー出力を隠す（ファイルがない場合のエラーを無視）
-      #
-      # git archive origin/gh-pages data/ | tar -x -C public/
-      #   → gh-pages ブランチの data/ ディレクトリ全体を tar アーカイブして
-      #      public/ に展開する（data/*.json を一括復元）
-      - name: Restore latest data from gh-pages
-        run: |
-          git fetch origin gh-pages || true
-          git show origin/gh-pages:data.json > public/data.json 2>/dev/null \
-            && echo "data.json restored from gh-pages" \
-            || echo "No data.json on gh-pages yet, using existing"
-          mkdir -p public/data
-          git archive origin/gh-pages data/ 2>/dev/null \
-            | tar -x -C public/ \
-            && echo "data/*.json restored from gh-pages" \
-            || echo "No data/ on gh-pages yet, using existing"
-
-      # ─── Step 3: GitHub Pages へデプロイ ─────────────────────────────
+      # ─── Step 2: GitHub Pages へデプロイ ─────────────────────────────
       # コード（HTML/JS/CSS）+ 復元したデータ（JSON）を合わせて gh-pages にデプロイ
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4

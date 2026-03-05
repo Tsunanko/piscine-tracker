@@ -59,13 +59,34 @@ TARGET_HOURS_PER_DAY = 8    # 1日の目標学習時間
 CAMPUS_ID         = 26  # 42 Tokyo のキャンパスID
 PISCINE_CURSUS_ID = 9   # Piscine のカリキュラムID
 
-OUTPUT_DIR = "public"  # GitHub Pages で公開するディレクトリ
-RESULTS_FILE = Path(__file__).parent.parent / "data" / "results.json"
+WORKER_URL    = os.environ.get("WORKER_URL", "https://piscine-tracker.tsunanko.workers.dev")
+WORKER_SECRET = os.environ.get("WORKER_SECRET", "")
 
 # 偏差値計算: アクティブ学生の判定条件
 # Piscine終了後は PISCINE_END を基準に使う（終了後7日以上経過で母集団が空になるバグ防止）
 ACTIVE_DAYS_THRESHOLD  = 7    # 直近何日間を見るか
 ACTIVE_HOURS_THRESHOLD = 1.0  # 何時間以上来たら「アクティブ」とみなすか
+
+
+def upload_to_kv(payload):
+    """Worker API 経由でデータを Cloudflare KV にアップロードする。
+
+    payload 例:
+      { "type": "summary", "data": {...} }               → data.json 相当
+      { "type": "user", "login": "xxx", "data": {...} }  → data/{login}.json 相当
+
+    WORKER_SECRET が未設定の場合はスキップ（ローカルデバッグ用）。
+    """
+    if not WORKER_SECRET:
+        print("  [SKIP] WORKER_SECRET not set, skipping KV upload")
+        return
+    resp = requests.post(
+        f"{WORKER_URL}/api/kv/upload",
+        json=payload,
+        headers={"Authorization": f"Bearer {WORKER_SECRET}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
 
 
 def get_token():
@@ -184,16 +205,6 @@ def main():
     token = get_token()
     print("Token acquired")
 
-    # 0. data/results.json を読み込む（合否情報）
-    passed_map: dict[str, bool | None] = {}
-    if RESULTS_FILE.exists():
-        with open(RESULTS_FILE) as f:
-            _results = json.load(f)
-        for login, info in _results.get("students", {}).items():
-            passed_map[login] = info.get("passed")  # True / False / None
-        print(f"  Loaded results.json: {len(passed_map)} entries, {sum(1 for v in passed_map.values() if v is True)} passed")
-    else:
-        print("  data/results.json not found, skipping pass/fail merge")
 
     # 1. Piscine生一覧取得（levelも同時に取得）
     print("\n[1] Fetching piscine students (with level)...")
@@ -220,6 +231,33 @@ def main():
         }
     print(f"  Total piscine students: {len(students)}")
 
+    # 1b. 42cursus（本科）に在籍している学生を取得 → Piscine合格者の判定に使う
+    # cursus_id=21 = 42 本カリキュラム（Piscine合格後に入学）
+    # Piscine生の中でこのカリキュラムに存在する場合 → piscine_result = "passed"
+    # 存在しない場合 → piscine_result = "failed"（結果未発表の場合は None）
+    print("\n[1b] Fetching 42cursus students (piscine graduates)...")
+    CURSUS_42_ID = 21  # 42 本カリキュラムのID
+    graduated_logins = set()
+    try:
+        cursus42_users = fetch_all_pages(token, f"/v2/cursus/{CURSUS_42_ID}/cursus_users", {
+            "filter[campus_id]": CAMPUS_ID,
+            "sort": "user_id",
+        })
+        for item in cursus42_users:
+            user = item.get("user", {})
+            login = user.get("login", "")
+            if login:
+                graduated_logins.add(login)
+        print(f"  42cursus students at campus {CAMPUS_ID}: {len(graduated_logins)}")
+    except Exception as e:
+        print(f"  [WARN] Failed to fetch 42cursus students: {e}")
+
+    # Piscine生の中で42cursusに移行した人数を確認
+    piscine_graduates = graduated_logins & set(students.keys())
+    results_announced = len(piscine_graduates) > 0
+    print(f"  Piscine graduates (in 42cursus): {len(piscine_graduates)}")
+    print(f"  Results announced: {results_announced}")
+
     # 2. アクティブロケーション取得
     print("\n[2] Fetching active locations...")
     locations_raw = fetch_all_pages(token, f"/v2/campus/{CAMPUS_ID}/locations", {
@@ -245,8 +283,6 @@ def main():
     #    ※ 旧Step3(locations_stats×147回)を削除し、旧Step4に統合
     #    ※ scale_teams追加分はStep3削除と相殺→合計API呼び出し数は同じ
     print("\n[3] Fetching per-student data (locations_stats + projects + scale_teams)...")
-    os.makedirs(f"{OUTPUT_DIR}/data", exist_ok=True)
-
     loc_params = {
         "begin_at": PISCINE_START.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "end_at":   PISCINE_END.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -396,6 +432,14 @@ def main():
             except Exception as e:
                 print(f"  [WARN] {login} scale_teams failed: {e}")
 
+            # Piscine合否判定
+            # results_announced=True の場合のみ合否を確定する（未発表の場合は None）
+            if results_announced:
+                piscine_result = "passed" if login in graduated_logins else "failed"
+            else:
+                piscine_result = None
+            students[login]["piscine_result"] = piscine_result
+
             # user_json 構築（偏差値はポスト処理で追加）
             user_json = {
                 "login": login,
@@ -422,8 +466,8 @@ def main():
                 "review_given": review_given,
                 "daily": daily,
                 "projects": projects,
+                "piscine_result": piscine_result,  # "passed" | "failed" | null
                 "updated_at": now.isoformat(),
-                "passed": passed_map.get(login),
                 # level_deviation, hours_deviation はポスト処理で追加
             }
             user_jsons[login] = user_json
@@ -517,11 +561,16 @@ def main():
         students[login]["composite_deviation"] = composite_dev
         students[login]["review_given"] = reviews
 
-    # 5. 個人JSONファイルを一括書き込み
-    print(f"\n[5] Writing {len(user_jsons)} per-user JSON files...")
+    # 5. 個人JSONを Cloudflare KV にアップロード
+    print(f"\n[5] Uploading {len(user_jsons)} per-user JSON to KV...")
+    ok_count = 0
     for login, uj in user_jsons.items():
-        with open(f"{OUTPUT_DIR}/data/{login}.json", "w") as f:
-            json.dump(uj, f, ensure_ascii=False)
+        try:
+            upload_to_kv({"type": "user", "login": login, "data": uj})
+            ok_count += 1
+        except Exception as e:
+            print(f"  [ERROR] KV upload failed for {login}: {e}")
+    print(f"  Uploaded {ok_count}/{len(user_jsons)} user JSONs")
 
     # 6. ダッシュボード用 data.json 生成
     print("\n[6] Writing dashboard data.json...")
@@ -549,10 +598,10 @@ def main():
             "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
             "review_given": None if failed else s.get("review_given", 0),
             "exam_score": None if failed else s.get("exam_score"),
-            "passed": passed_map.get(login),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
+            "piscine_result": s.get("piscine_result"),  # "passed" | "failed" | null
         }
         if login in online_logins:
             loc = active_map[login]
@@ -562,6 +611,10 @@ def main():
 
     online.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
     offline.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
+
+    # 合否集計
+    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed")
+    failed_count = sum(1 for s in all_students if s.get("piscine_result") == "failed")
 
     dashboard = {
         "online": online,
@@ -573,14 +626,18 @@ def main():
             "active_days": ACTIVE_DAYS_THRESHOLD,
             "active_hours_threshold": ACTIVE_HOURS_THRESHOLD,
         },
+        "passed_count": passed_count,                # Piscine合格者数
+        "failed_count": failed_count,                # Piscine不合格者数
+        "results_announced": results_announced,      # 合否発表済みかどうか
         "hours_loading": False,
         "cached_at": now.isoformat(),
     }
 
-    with open(f"{OUTPUT_DIR}/data.json", "w") as f:
-        json.dump(dashboard, f, ensure_ascii=False)
-
-    print(f"  Wrote public/data.json ({len(online)} online, {len(offline)} offline)")
+    try:
+        upload_to_kv({"type": "summary", "data": dashboard})
+        print(f"  Uploaded data.json to KV ({len(online)} online, {len(offline)} offline)")
+    except Exception as e:
+        print(f"  [ERROR] KV upload failed for data.json: {e}")
     print("\nDone!")
 
 
