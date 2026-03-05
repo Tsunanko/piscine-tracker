@@ -11,3 +11,7 @@ compatibility_date = "2024-01-01"
 [[kv_namespaces]]
 binding = "LOGIN_LOGS"
 id = "4a572047419946679f20b8082b99ce4d"
+
+[[kv_namespaces]]
+binding = "PISCINE_DATA"
+id = "f2a7cde9250a49b3828fba83fa0da7ef"

@@ -629,8 +629,12 @@ function clearSearch() {
 // ─────────────────────────────────────────────
 // データ読み込み
 // ─────────────────────────────────────────────
-async function loadData() {
-  const res = await fetch('data.json?' + Date.now());
+async function loadData(currentUser = null) {
+  const isAdmin = currentUser && currentUser.login === 'ijoja';
+  const token = sessionStorage.getItem('piscine_42_token') || '';
+  const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   const d = await res.json();
   const all = [...(d.online || []), ...(d.offline || [])];
   const map = {};
@@ -645,13 +649,17 @@ async function loadData() {
   hasActiveField = allStudents.some(s => 'is_active' in s);
   activeStudents = hasActiveField ? allStudents.filter(s => s.is_active) : allStudents;
 
-  try {
-    const pr = await fetch('data/passes.json?' + Date.now());
-    if (pr.ok) {
-      passes = await pr.json();
-      hasPassData = Object.keys(passes).length > 0;
+  // 合否データを API レスポンスから直接取得（管理者のみ）
+  passes = {};
+  if (isAdmin) {
+    for (const s of allStudents) {
+      if (s.piscine_result === 'passed') passes[s.login] = 'pass';
+      else if (s.piscine_result === 'failed') passes[s.login] = 'fail';
     }
-  } catch(_) {}
+    hasPassData = Object.keys(passes).length > 0;
+  } else {
+    hasPassData = false;
+  }
 
   const activeLabel = hasActiveField
     ? `全${allStudents.length}人・アクティブ${activeStudents.length}人（偏差値基準）`
@@ -1284,13 +1292,7 @@ function buildAllCorrTable() {
 // ─────────────────────────────────────────────
 requireAuth().then(user => {
   if (!user) return;
-  currentUser = user;
-  // 管理者以外には「試験スコア」タブを非表示
-  if (user.login !== ADMIN_LOGIN) {
-    const examTabBtn = document.querySelectorAll('.tab-btn')[3];
-    if (examTabBtn) examTabBtn.style.display = 'none';
-  }
-  loadData().catch(e => {
+  loadData(user).catch(e => {
     document.getElementById('mainCard').innerHTML =
       `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
   });

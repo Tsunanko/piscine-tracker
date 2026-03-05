@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 public/data/*.json
+public/data.json
