@@ -1141,7 +1141,7 @@ function renderExamTab() {
   const students  = currentStudents();
   const withScore = students.filter(s => s.exam_score != null);
   const noScore   = students.filter(s => s.exam_score == null);
-  const avg       = withScore.length > 0 ? withScore.reduce((a, s) => a + s.exam_score, 0) / withScore.length : 0;
+
 
   // Piscine通過結果ベースの集計（passes[] = loadData で構築済み）
   const piscinePass    = students.filter(s => passes[s.login] === 'pass');
@@ -1150,6 +1150,16 @@ function renderExamTab() {
 
   // 未受験なのにPiscine合格した人
   const noScoreButPass = noScore.filter(s => passes[s.login] === 'pass');
+
+  // 平均スコア（2種類）
+  // - 受験者平均: 受けた人だけが分母
+  // - 母集団平均: フィルター全員が分母（未受験者は0点扱い）
+  const avgExaminees  = withScore.length > 0
+    ? withScore.reduce((a, s) => a + s.exam_score, 0) / withScore.length
+    : null;
+  const avgPopulation = students.length > 0
+    ? withScore.reduce((a, s) => a + s.exam_score, 0) / students.length
+    : null;
 
   // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント
   const binLabels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
@@ -1225,7 +1235,11 @@ function renderExamTab() {
       </div>
       <div class="summary-item">
         <div class="summary-label">受験者平均スコア</div>
-        <div class="summary-value">${withScore.length > 0 ? avg.toFixed(1) : '—'}</div>
+        <div class="summary-value">${avgExaminees != null ? avgExaminees.toFixed(1) : '—'}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label" style="font-size:10px">母集団平均（未受験0点）</div>
+        <div class="summary-value">${avgPopulation != null ? avgPopulation.toFixed(1) : '—'}</div>
       </div>
       <div class="summary-item">
         <div class="summary-label">Exam未受験</div>
