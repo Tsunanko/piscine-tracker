@@ -412,6 +412,40 @@
   .search-wrap {
     margin-bottom: 16px;
   }
+
+  /* 合否カード色分け（合否トグルON時） */
+  .student-grid.show-result .student-card.result-passed {
+    border-color: rgba(253, 203, 110, 0.5);
+  }
+  .student-grid.show-result .student-card.result-passed:hover {
+    border-color: var(--orange);
+  }
+  .student-grid.show-result .student-card.result-failed {
+    border-color: rgba(255, 118, 117, 0.2);
+  }
+
+  /* 合否バッジ */
+  .result-section { margin-top: 3px; }
+  .result-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+  }
+  .result-badge.passed {
+    color: var(--orange);
+    background: rgba(253, 203, 110, 0.12);
+    border: 1px solid rgba(253, 203, 110, 0.35);
+  }
+  .result-badge.failed {
+    color: var(--text-dim);
+    background: rgba(136, 136, 160, 0.07);
+    border: 1px solid rgba(136, 136, 160, 0.2);
+  }
+  /* 合否トグルOFF時は非表示 */
+  .student-grid:not(.show-result) .result-section { display: none; }
+
   .search-input {
     width: 100%;
     padding: 10px 14px;
@@ -458,6 +492,10 @@
           <div class="summary-label">Total</div>
           <div class="summary-value accent" id="totalCount">0</div>
         </div>
+        <div class="summary-item" id="passedSummary" style="display:none">
+          <div class="summary-label" style="color:var(--orange)">合格</div>
+          <div class="summary-value" style="color:var(--orange)" id="passedCount">0</div>
+        </div>
       </div>
       <div class="search-wrap">
         <input type="text" class="search-input" id="searchInput" placeholder="Search by login...">
@@ -495,6 +533,7 @@ let currentSort = 'hours'; // 'hours', 'level', 'composite', 'exam', 'name'
 let isComposing = false;
 let showDev = localStorage.getItem('showDev') !== 'false';
 let showExam = localStorage.getItem('showExam') !== 'false';
+let showResult = localStorage.getItem('showResult') === 'true'; // 合否表示（デフォルトOFF）
 let loggedInUser = null; // ログイン中ユーザー情報
 
 function esc(str) {
@@ -548,11 +587,20 @@ function toggleExam() {
   if (btn) btn.classList.toggle('active', showExam);
 }
 
+function toggleResult() {
+  showResult = !showResult;
+  localStorage.setItem('showResult', String(showResult));
+  applyDisplayState();
+  const btn = document.getElementById('toggleResultBtn');
+  if (btn) btn.classList.toggle('active', showResult);
+}
+
 function applyDisplayState() {
   const grid = document.getElementById('studentGrid');
   if (grid) {
     grid.classList.toggle('hide-dev', !showDev);
     grid.classList.toggle('hide-exam', !showExam);
+    grid.classList.toggle('show-result', showResult);
   }
 }
 
@@ -583,6 +631,7 @@ function hoursClass(h) {
 
 function renderDashboard() {
   const d = dashboardData;
+  const isAdmin = loggedInUser && loggedInUser.login === 'ijoja';
 
   // ローディング非表示・ダッシュボード表示
   document.getElementById('loading').style.display = 'none';
@@ -601,8 +650,12 @@ function renderDashboard() {
     _isOnline: onlineSet.has(s.login),
   }));
 
-  // Apply cluster filter
-  if (currentFilter !== 'all') {
+  // Apply cluster / 合否 filter
+  if (isAdmin && currentFilter === 'passed') {
+    allStudents = allStudents.filter(s => s.piscine_result === 'passed');
+  } else if (isAdmin && currentFilter === 'failed') {
+    allStudents = allStudents.filter(s => s.piscine_result === 'failed');
+  } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed') {
     allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
   }
 
@@ -628,6 +681,17 @@ function renderDashboard() {
   document.getElementById('onlineCount').textContent = d.total_online;
   document.getElementById('totalCount').textContent = d.total_students;
 
+  // 合否サマリーを更新（管理者かつ発表済みの場合のみ合格者数を表示）
+  const passedSummary = document.getElementById('passedSummary');
+  if (isAdmin && d.results_announced && d.passed_count != null) {
+    if (passedSummary) {
+      passedSummary.style.display = '';
+      document.getElementById('passedCount').textContent = d.passed_count;
+    }
+  } else {
+    if (passedSummary) passedSummary.style.display = 'none';
+  }
+
   // Update filter bar
   const filterBtns = [
     `<button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" onclick="setFilter('all')">All</button>`
@@ -638,6 +702,15 @@ function renderDashboard() {
       `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${esc(c)}')">${esc(c)} (${count})</button>`
     );
   });
+  // 合否フィルターボタン（管理者かつ発表済みの場合のみ）
+  if (isAdmin && d.results_announced) {
+    filterBtns.push(
+      `<button class="filter-btn ${currentFilter === 'passed' ? 'active' : ''}" onclick="setFilter('passed')" style="${currentFilter !== 'passed' ? 'color:var(--orange);border-color:rgba(253,203,110,0.35)' : ''}">🎉 合格 (${d.passed_count ?? 0})</button>`
+    );
+    filterBtns.push(
+      `<button class="filter-btn ${currentFilter === 'failed' ? 'active' : ''}" onclick="setFilter('failed')">🏊 次回 (${d.failed_count ?? 0})</button>`
+    );
+  }
   document.getElementById('filterBar').innerHTML = filterBtns.join('');
 
   // Update sort bar
@@ -660,6 +733,7 @@ function renderDashboard() {
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
     <button class="sort-btn ${showExam ? 'active' : ''}" id="toggleExamBtn" onclick="toggleExam()">Exam</button>
+    ${(isAdmin && d.results_announced) ? `<button class="sort-btn ${showResult ? 'active' : ''}" id="toggleResultBtn" onclick="toggleResult()">合否</button>` : ''}
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <a href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
     ${adminLink}
@@ -705,14 +779,16 @@ function renderDashboard() {
     const examHTML = examScore != null
       ? `<span style="color:${examColor}">${examScore}</span>`
       : `<span style="color:var(--text-dim)">-</span>`;
-    const isAdmin = loggedInUser && loggedInUser.login === 'ijoja';
-    const passedHTML = isAdmin && student.passed === true
-      ? `<span style="color:var(--green);font-weight:bold">合格</span>`
-      : isAdmin && student.passed === false
-      ? `<span style="color:var(--red);font-weight:bold">不合格</span>`
-      : ``;
+    // 合否バッジ（管理者のみ）
+    const result = isAdmin ? student.piscine_result : null;
+    const resultCls = result === 'passed' ? 'result-passed' : result === 'failed' ? 'result-failed' : '';
+    const resultBadgeHTML = result === 'passed'
+      ? `<div class="result-section"><span class="result-badge passed">🎉 合格</span></div>`
+      : result === 'failed'
+      ? `<div class="result-section"><span class="result-badge failed">次回へ</span></div>`
+      : '';
     return `
-      <div class="student-card ${cls}" onclick="goToStudent('${esc(student.login)}')">
+      <div class="student-card ${cls} ${resultCls}" onclick="goToStudent('${esc(student.login)}')">
         <div class="student-rank">${rank}</div>
         ${avatar}
         <div class="student-login" title="${esc(student.display_name || student.login)}">${esc(student.login)}</div>
@@ -734,6 +810,7 @@ function renderDashboard() {
         <div class="exam-section" style="font-size:9px;color:var(--text-dim);text-align:center;margin-top:3px">
           Exam: ${examHTML}${passedHTML ? ` ${passedHTML}` : ''}
         </div>
+        ${resultBadgeHTML}
         ${seat}
       </div>`;
   }
@@ -785,7 +862,10 @@ async function loadDashboard() {
 
   try {
     // データ取得
-    const resp = await fetch(`data.json?t=${Date.now()}`);
+    const token = sessionStorage.getItem('piscine_42_token') || '';
+    const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 

@@ -429,7 +429,19 @@ const LOGIN = params.get('login') || 'yuichika';
 const initStatsLink = document.getElementById('statsLinkInit');
 if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}`;
 
+let currentStudentData = null;
+
+function calcWeekly(daily) {
+  if (!daily || daily.length === 0) return [];
+  const weeks = [];
+  for (let i = 0; i < daily.length; i += 7)
+    weeks.push(+daily.slice(i, i + 7).reduce((s, d) => s + d.hours, 0).toFixed(1));
+  return weeks;
+}
+
 function render(d) {
+  currentStudentData = d;
+  const isAdmin = loggedInUser?.login === 'ijoja';
   const app = document.getElementById('app');
 
   // Determine status
@@ -477,6 +489,55 @@ function render(d) {
   // Progress ring offset
   const offset = CIRCUMFERENCE - (d.progress_pct / 100) * CIRCUMFERENCE;
 
+  // ── 伸び率（週別）事前計算（isAdminのみ） ──
+  const weeklyHours = isAdmin ? calcWeekly(d.daily) : [];
+  let growthHTML = '';
+  if (weeklyHours.length >= 2) {
+    const half = Math.floor(d.daily.length / 2);
+    const firstH = +d.daily.slice(0, half).reduce((s, x) => s + x.hours, 0).toFixed(1);
+    const secondH = +d.daily.slice(half).reduce((s, x) => s + x.hours, 0).toFixed(1);
+    const trendPct = firstH > 0 ? (secondH - firstH) / firstH * 100 : null;
+    const trendStr = trendPct !== null ? (trendPct >= 0 ? '+' : '') + trendPct.toFixed(1) + '%' : null;
+    const trendColor = trendPct === null ? 'var(--text-dim)'
+                     : trendPct >= 5 ? 'var(--green)'
+                     : trendPct >= -5 ? 'var(--orange)' : 'var(--red)';
+    const trendLabel = trendPct === null ? '' : trendPct >= 5 ? '後半に向けて活発化' : trendPct >= -5 ? '安定したペース' : '後半にペースダウン';
+    const maxW = Math.max(0.1, ...weeklyHours);
+    const wLabels = ['1週目', '2週目', '3週目', '4週目'];
+    const weekBars = weeklyHours.map((h, i) => {
+      const pct = (h / maxW * 100).toFixed(1);
+      const isLast = i === weeklyHours.length - 1;
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--text-dim);width:36px">${wLabels[i]}</div>
+        <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${isLast ? 'var(--orange)' : 'var(--accent)'};opacity:0.85;border-radius:4px;transition:width 0.5s"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text);width:40px;text-align:right">${h}h</div>
+      </div>`;
+    }).join('');
+    const trendRow = trendStr ? `
+      <div style="margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px">前半(1〜13日) → 後半(14〜26日)</div>
+          <div style="font-size:12px;color:var(--text-dim)">${firstH}h → ${secondH}h &nbsp;<span style="color:${trendColor};font-size:11px">${trendLabel}</span></div>
+        </div>
+        <div style="font-size:24px;font-weight:800;color:${trendColor};margin-left:12px">${trendStr}</div>
+      </div>` : '';
+    growthHTML = `
+    <div class="card fade-in">
+      <div class="card-title">活動の推移（週別・伸び率）</div>
+      ${weekBars}
+      ${trendRow}
+    </div>`;
+  }
+
+  // ── Exam スコア stat-item（isAdminのみ） ──
+  const examStatHTML = (isAdmin && d.exam_score != null) ? `
+        <div class="stat-item">
+          <div class="stat-label">Final Exam</div>
+          <div class="stat-value accent">${d.exam_score}<span class="stat-suffix">pt</span></div>
+        </div>` : '';
+
   app.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
@@ -490,6 +551,47 @@ function render(d) {
       <h1>${d.login}</h1>
       <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
     </div>
+
+    <!-- 合否バナー（自分のプロフィールを見た時のみ表示） -->
+    ${(d.piscine_result && (loggedInUser?.login === d.login || isAdmin)) ? (() => {
+      if (d.piscine_result === 'passed') {
+        return `<div class="fade-in" style="
+          background: linear-gradient(135deg, rgba(253,203,110,0.15), rgba(253,203,110,0.05));
+          border: 1px solid rgba(253,203,110,0.4);
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 16px;
+          text-align: center;
+        ">
+          <div style="font-size: 32px; margin-bottom: 8px">🎉</div>
+          <div style="font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 6px">
+            42 Tokyo 入学おめでとうございます！
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
+            Piscine を突破しました。<br>
+            ここからが本当の始まりです。これからもよろしく！
+          </div>
+        </div>`;
+      } else {
+        return `<div class="fade-in" style="
+          background: rgba(136,136,160,0.06);
+          border: 1px solid rgba(136,136,160,0.2);
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 16px;
+          text-align: center;
+        ">
+          <div style="font-size: 32px; margin-bottom: 8px">🏊</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px">
+            Piscine、お疲れ様でした！
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
+            挑戦したこと自体が大きな経験です。<br>
+            ここで得たスキルは必ず次に活きます。また会いましょう！
+          </div>
+        </div>`;
+      }
+    })() : ''}
 
     <!-- 偏差値 2×2グリッド -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;max-width:340px;margin-left:auto;margin-right:auto" class="fade-in">
@@ -585,6 +687,7 @@ function render(d) {
           <div class="stat-label">目標まで残り</div>
           <div class="stat-value ${d.remaining_hours_needed > 0 ? (d.remaining_hours_needed > 40 ? 'red' : 'orange') : 'green'}">${Math.max(0, d.remaining_hours_needed)}<span class="stat-suffix">h</span></div>
         </div>
+        ${examStatHTML}
       </div>
       ${d.review_given != null ? `
       <div style="margin-top:10px;background:var(--surface2);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
@@ -631,6 +734,12 @@ function render(d) {
       </div>
     </div>
 
+    <!-- 伸び率 -->
+    ${growthHTML}
+
+    <!-- 合格ライン参考（isAdminのみ・グローバルデータ取得後に挿入） -->
+    <div id="thresholds-section"></div>
+
     <!-- 課題の進捗（最下部）-->
     ${d.projects && d.projects.length > 0 ? `
     <div class="card fade-in">
@@ -663,8 +772,10 @@ async function loadData() {
   btn.classList.add('spinning');
 
   try {
-    // GitHub Pages: read from static per-user JSON (cache-busted with timestamp)
-    const resp = await fetch(`data/${encodeURIComponent(LOGIN)}.json?t=${Date.now()}`);
+    const token = getToken();
+    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!resp.ok) throw new Error(`User "${LOGIN}" not found (HTTP ${resp.status})`);
     const data = await resp.json();
     render(data);
@@ -681,7 +792,10 @@ let miniChartInstance = null;
 
 async function renderMiniChart(login) {
   try {
-    const res = await fetch('data.json');
+    const token = getToken();
+    const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     const d = await res.json();
     const all = [...(d.online || []), ...(d.offline || [])];
 
@@ -770,9 +884,92 @@ async function renderMiniChart(login) {
         },
       },
     });
+
+    // 合格ライン参考（isAdminのみ）
+    if (currentStudentData && isAdmin) {
+      const passed = all.filter(s => s.piscine_result === 'passed');
+      renderThresholds(currentStudentData, passed, all.length);
+    }
   } catch(e) {
     console.warn('mini chart error:', e);
   }
+}
+
+function renderThresholds(student, passed, totalCount) {
+  const section = document.getElementById('thresholds-section');
+  if (!section || passed.length === 0) return;
+
+  function getStats(students, fn) {
+    const vals = students.map(fn).filter(v => v != null && v > 0).sort((a, b) => a - b);
+    if (vals.length === 0) return null;
+    return {
+      min: vals[0],
+      median: vals[Math.floor(vals.length / 2)],
+      max: vals[vals.length - 1],
+    };
+  }
+
+  const metrics = [
+    { label: 'Final Exam', unit: 'pt', decimals: 0,
+      fn: s => s.exam_score, val: student.exam_score },
+    { label: 'ログイン時間', unit: 'h', decimals: 1,
+      fn: s => s.total_hours ?? s.total_logged_hours, val: student.total_logged_hours },
+    { label: 'Level', unit: '', decimals: 2,
+      fn: s => s.level, val: student.level },
+    { label: 'レビュー回数', unit: '回', decimals: 0,
+      fn: s => s.review_given, val: student.review_given },
+  ];
+
+  const fmt = (v, m) => v != null ? v.toFixed(m.decimals) + m.unit : '-';
+
+  const rows = metrics.map(m => {
+    const st = getStats(passed, m.fn);
+    if (!st) return '';
+    const sv = m.val;
+    const aboveMin = sv != null && sv >= st.min;
+    const aboveMed = sv != null && sv >= st.median;
+    const color = sv == null ? 'var(--text-dim)' : aboveMed ? 'var(--green)' : aboveMin ? 'var(--orange)' : 'var(--red)';
+    const icon = sv == null ? '?' : aboveMed ? '◎' : aboveMin ? '○' : '△';
+    const maxBar = Math.max(st.max * 1.1, sv ?? 0, 0.1);
+    const minPct = Math.min(98, st.min / maxBar * 100).toFixed(1);
+    const medPct = Math.min(98, st.median / maxBar * 100).toFixed(1);
+    const valPct = sv != null ? Math.min(98, sv / maxBar * 100).toFixed(1) : null;
+
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <div style="font-size:12px;color:var(--text)">${m.label}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:13px;font-weight:700;color:${color}">${fmt(sv, m)}</div>
+          <div style="font-size:15px;color:${color}">${icon}</div>
+        </div>
+      </div>
+      <div style="position:relative;height:8px;background:var(--surface2);border-radius:4px">
+        <div style="position:absolute;left:${minPct}%;width:${Math.max(0, medPct - minPct)}%;height:100%;background:rgba(0,206,201,0.18);border-radius:2px"></div>
+        <div style="position:absolute;left:${minPct}%;top:-3px;width:2px;height:14px;background:var(--orange);opacity:0.9;border-radius:1px"></div>
+        <div style="position:absolute;left:${medPct}%;top:-3px;width:2px;height:14px;background:var(--green);opacity:0.7;border-radius:1px"></div>
+        ${valPct !== null ? `<div style="position:absolute;left:${valPct}%;top:-4px;width:3px;height:16px;background:#ff7675;border-radius:2px;transform:translateX(-50%)"></div>` : ''}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px">
+        <div style="font-size:9px;color:var(--text-dim)"><span style="color:var(--orange)">|</span> 最低 ${fmt(st.min, m)}</div>
+        <div style="font-size:9px;color:var(--text-dim)"><span style="color:var(--green)">|</span> 中央値 ${fmt(st.median, m)}</div>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!rows) return;
+
+  const passRate = ((passed.length / totalCount) * 100).toFixed(0);
+  section.innerHTML = `
+    <div class="card fade-in" style="margin-bottom:12px">
+      <div class="card-title">合格ライン参考（合格者 ${passed.length}人 / 全体 ${totalCount}人・合格率 ${passRate}%）</div>
+      ${rows}
+      <div style="margin-top:12px;font-size:10px;color:var(--text-dim);line-height:1.6">
+        <span style="color:#ff7675">|</span> あなた &nbsp;
+        <span style="color:var(--orange)">|</span> 合格最低値 &nbsp;
+        <span style="color:var(--green)">|</span> 合格中央値<br>
+        ◎ 中央値以上 &nbsp; ○ 最低値以上 &nbsp; △ 最低値未満（参考値のため合否を保証しません）
+      </div>
+    </div>`;
 }
 
 function showError(msg) {
@@ -789,8 +986,11 @@ function showError(msg) {
   `;
 }
 
+let loggedInUser = null;
+
 requireAuth().then(user => {
   if (!user) return;
+  loggedInUser = user;
   loadData();
   setInterval(loadData, 5 * 60 * 1000);
 });
