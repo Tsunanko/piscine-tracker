@@ -1478,7 +1478,7 @@ function renderFailAnalysisTab() {
     const diff = val - mean;
     const color = diff >= 0 ? 'var(--green)' : 'var(--red)';
     const sign  = diff >= 0 ? '+' : '';
-    return `${fmt(val)} <span style="color:${color};font-size:11px">(${sign}${fmt(diff)})</span>`;
+    return `<span style="white-space:nowrap">${fmt(val)} <span style="color:${color};font-size:11px">(${sign}${fmt(diff)})</span></span>`;
   };
 
   // 全3条件クリアでも不合格の人（Megatoron等の影響を受けた可能性）
@@ -1529,7 +1529,7 @@ function renderFailAnalysisTab() {
     <td style="text-align:center;color:${color};font-weight:bold">${g.cz != null ? (g.cz>=0?'+':'')+g.cz.toFixed(2)+'σ' : '—'}</td>
   </tr>`;
 
-  // 全条件クリア不合格者の乖離テーブル行
+  // 全条件クリア不合格者の乖離テーブル行（総合偏差σを左2列目に配置）
   const deviationRows = [...allThresholdFail]
     .sort((a, b) => (compositeZ(b) ?? -99) - (compositeZ(a) ?? -99))
     .map(s => {
@@ -1541,30 +1541,30 @@ function renderFailAnalysisTab() {
       const czColor = cz == null ? 'var(--text-dim)' : cz >= 0 ? 'var(--orange)' : 'var(--red)';
       return `<tr>
         <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
-        <td style="text-align:center">${valCell(s.exam_score,   passAvgScore,  v => Math.round(v)+'点')}</td>
+        <td style="text-align:center;font-weight:700;color:${czColor};white-space:nowrap">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2)+'σ' : '—'}</td>
+        <td style="text-align:center;white-space:nowrap">${valCell(s.exam_score,   passAvgScore,  v => Math.round(v)+'点')}</td>
         <td style="text-align:center">${zCell(ze)}</td>
-        <td style="text-align:center">${valCell(s.total_hours,  passAvgHours,  v => v.toFixed(0)+'h')}</td>
+        <td style="text-align:center;white-space:nowrap">${valCell(s.total_hours,  passAvgHours,  v => v.toFixed(0)+'h')}</td>
         <td style="text-align:center">${zCell(zh)}</td>
-        <td style="text-align:center">${valCell(s.level,        passAvgLevel,  v => v.toFixed(2))}</td>
+        <td style="text-align:center;white-space:nowrap">${valCell(s.level,        passAvgLevel,  v => v.toFixed(2))}</td>
         <td style="text-align:center">${zCell(zl)}</td>
-        <td style="text-align:center">${s.review_given != null ? valCell(s.review_given, passAvgReview, v => Math.round(v)+'回') : '<span style="color:var(--text-dim)">—</span>'}</td>
+        <td style="text-align:center;white-space:nowrap">${s.review_given != null ? valCell(s.review_given, passAvgReview, v => Math.round(v)+'回') : '<span style="color:var(--text-dim)">—</span>'}</td>
         <td style="text-align:center">${zr != null ? zCell(zr) : '<span style="color:var(--text-dim)">—</span>'}</td>
-        <td style="text-align:center;font-weight:700;color:${czColor}">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2) : '—'}</td>
       </tr>`;
     }).join('');
 
   // 合格者の参考行（平均）
   const passRefRow = `<tr style="background:rgba(0,206,201,0.05);border-top:1px solid rgba(0,206,201,0.2)">
     <td style="color:var(--accent-light);font-weight:700">合格者平均</td>
-    <td style="text-align:center;color:var(--green);font-weight:700">${passAvgScore  != null ? Math.round(passAvgScore)+'点'   : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px">±${passStdScore  != null ? passStdScore.toFixed(1)  : '—'}</td>
-    <td style="text-align:center;color:var(--green);font-weight:700">${passAvgHours  != null ? passAvgHours.toFixed(0)+'h'   : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px">±${passStdHours  != null ? passStdHours.toFixed(1)  : '—'}</td>
-    <td style="text-align:center;color:var(--green);font-weight:700">${passAvgLevel  != null ? passAvgLevel.toFixed(2)       : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px">±${passStdLevel  != null ? passStdLevel.toFixed(2)  : '—'}</td>
-    <td style="text-align:center;color:var(--green);font-weight:700">${passAvgReview != null ? Math.round(passAvgReview)+'回' : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px">±${passStdReview != null ? passStdReview.toFixed(1) : '—'}</td>
     <td style="text-align:center;color:var(--text-dim)">基準(0)</td>
+    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgScore  != null ? Math.round(passAvgScore)+'点'   : '—'}</td>
+    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdScore  != null ? passStdScore.toFixed(1)  : '—'}</td>
+    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgHours  != null ? passAvgHours.toFixed(0)+'h'   : '—'}</td>
+    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdHours  != null ? passStdHours.toFixed(1)  : '—'}</td>
+    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgLevel  != null ? passAvgLevel.toFixed(2)       : '—'}</td>
+    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdLevel  != null ? passStdLevel.toFixed(2)  : '—'}</td>
+    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgReview != null ? Math.round(passAvgReview)+'回' : '—'}</td>
+    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdReview != null ? passStdReview.toFixed(1) : '—'}</td>
   </tr>`;
 
   // --- テーブル行（条件チェック列付き）---
@@ -1621,12 +1621,11 @@ function renderFailAnalysisTab() {
 
     <!-- 判定基準の注記 -->
     <div style="padding:8px 14px;background:rgba(108,92,231,0.08);border:1px solid rgba(108,92,231,0.25);border-radius:8px;margin-bottom:16px;font-size:12px;color:var(--text-dim);line-height:1.7">
-      ℹ️ <strong style="color:var(--accent-light)">Piscine合否の判定基準</strong>は
-      Final Exam のスコアが主な指標と推察されますが、それだけではない可能性があります。<br>
-      <span style="margin-left:16px">① Final Exam スコア（100点満点）— データとして確認できる主要指標</span><br>
+      ℹ️ <strong style="color:var(--accent-light)">Piscine合否の判定基準</strong>には、以下のような要素が関わっている可能性があると推察されます。<br>
+      <span style="margin-left:16px">① Final Exam スコア（100点満点）</span><br>
       <span style="margin-left:16px">② <strong>Megatoron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
-      <span style="margin-left:16px">③ ログイン時間・課題達成度・Levelなど — 参考指標として推察</span><br>
-      <span style="color:rgba(255,255,255,0.4);font-size:11px">※ ②③は公式に公開された情報ではなく、高スコアでも不合格になるケースがあることから推察されるものです。</span>
+      <span style="margin-left:16px">③ ログイン時間・課題達成度・Level など</span><br>
+      <span style="color:rgba(255,255,255,0.4);font-size:11px">※ いずれも公式に公開された情報ではなく、データから推察されるものです。</span>
     </div>
 
     <!-- 合格 vs 不合格 比較サマリー -->
@@ -1722,6 +1721,7 @@ function renderFailAnalysisTab() {
         <table class="corr-table" style="font-size:12px">
           <thead><tr>
             <th>ログイン</th>
+            <th style="text-align:center;color:var(--orange)">総合偏差σ</th>
             <th style="text-align:center">Exam</th>
             <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
             <th style="text-align:center">時間</th>
@@ -1730,7 +1730,6 @@ function renderFailAnalysisTab() {
             <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
             <th style="text-align:center">レビュー数</th>
             <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
-            <th style="text-align:center">総合偏差σ</th>
           </tr></thead>
           <tbody>
             ${passRefRow}
