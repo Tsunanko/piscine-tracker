@@ -1509,14 +1509,12 @@ function renderFailAnalysisTab() {
   };
 
   const corrResults = [
-    { key: 'exam_score',  label: 'Final Exam',      icon: '📝', ...pbCorr('exam_score') },
-    { key: 'level',       label: 'Level',            icon: '📊', ...pbCorr('level') },
-    { key: 'total_hours', label: 'ログイン時間',      icon: '⏱️', ...pbCorr('total_hours') },
-    { key: 'review_given',label: 'レビュー回数',      icon: '👥', ...pbCorr('review_given') },
-    { key: 'active_days', label: 'アクティブ日数',    icon: '📅', ...pbCorr('active_days',
+    { key: 'exam_score',  label: 'Final Exam',   icon: '📝', ...pbCorr('exam_score') },
+    { key: 'level',       label: 'Level',         icon: '📊', ...pbCorr('level') },
+    { key: 'total_hours', label: 'ログイン時間',  icon: '⏱️', ...pbCorr('total_hours') },
+    { key: 'review_given',label: 'レビュー回数',  icon: '👥', ...pbCorr('review_given') },
+    { key: 'active_days', label: 'アクティブ日数', icon: '📅', ...pbCorr('active_days',
       s => s.active_days != null && s.active_days > 0 ? s.active_days : null) },
-    { key: 'daily_avg',   label: '1日平均ログイン時間', icon: '📈', ...pbCorr('daily_avg',
-      s => (s.total_hours != null && s.active_days > 0) ? s.total_hours / s.active_days : null) },
   ].filter(c => c.r != null).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
 
   // 強さラベル（バーグラデ用に実色コード）
@@ -1901,7 +1899,7 @@ function renderFailAnalysisTab() {
 
       <div style="color:rgba(255,255,255,0.35);font-size:12px;margin-top:8px;line-height:1.6">
         ※ 予測モデルは相関係数加重zスコアの単純線形モデル。因果関係ではなく相関に基づく推定です。<br>
-        ※ 「Megatoron」とは仲間による相互評価投票のこと。Piscine期間中に「最も助けてくれた人」を選ぶ投票で、結果が合否に影響するとされています（詳細は非公開）。
+        ※ 「Megatoron」とは仲間による推薦投票のこと。Piscine期間中に「この人と一緒に入学したい」と思う仲間を選ぶ投票で、結果が合否に影響するとされています（詳細は非公開）。
       </div>
     </div>` : ''}
 
