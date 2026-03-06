@@ -1166,22 +1166,23 @@ function renderExamTab() {
     ? withScore.reduce((a, s) => a + s.exam_score, 0) / students.length
     : null;
 
-  // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント（12番目のビン=未受験）
-  const binLabels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100','未受験'];
+  // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント（最初のビン=未受験）
+  const binLabels = ['未受験','0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
   const bins = Array(12).fill(null).map(() => ({ pass: 0, fail: 0, unknown: 0 }));
+  // 未受験者をビン[0]に追加
+  for (const s of noScore) {
+    const r = passes[s.login];
+    if (r === 'pass')      bins[0].pass++;
+    else if (r === 'fail') bins[0].fail++;
+    else                   bins[0].unknown++;
+  }
+  // 受験者をビン[1-11]に追加（スコア÷10 + 1）
   for (const s of withScore) {
-    const bi = Math.min(Math.floor(s.exam_score / 10), 10);
+    const bi = Math.min(Math.floor(s.exam_score / 10), 10) + 1;
     const r  = passes[s.login];
     if (r === 'pass')      bins[bi].pass++;
     else if (r === 'fail') bins[bi].fail++;
     else                   bins[bi].unknown++;
-  }
-  // 未受験者をビン[11]に追加
-  for (const s of noScore) {
-    const r = passes[s.login];
-    if (r === 'pass')      bins[11].pass++;
-    else if (r === 'fail') bins[11].fail++;
-    else                   bins[11].unknown++;
   }
 
   // スコア一覧（降順）— Piscine結果で合否表示
