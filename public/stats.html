@@ -1519,13 +1519,13 @@ function renderFailAnalysisTab() {
       s => (s.total_hours != null && s.active_days > 0) ? s.total_hours / s.active_days : null) },
   ].filter(c => c.r != null).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
 
-  // 強さラベル
+  // 強さラベル（バーグラデ用に実色コード）
   const corrLabel = (r) => {
     const a = Math.abs(r);
-    if (a >= 0.7) return { text: '強い正の相関', color: 'var(--green)' };
-    if (a >= 0.5) return { text: '中程度の正の相関', color: 'var(--green)' };
-    if (a >= 0.3) return { text: '弱い正の相関', color: 'var(--orange)' };
-    return { text: '非常に弱い', color: 'var(--text-dim)' };
+    if (a >= 0.7) return { text: '強い相関',      color: '#00b894', bg: 'rgba(0,184,148,0.18)' };
+    if (a >= 0.5) return { text: '中程度の相関',  color: '#00cec9', bg: 'rgba(0,206,201,0.18)' };
+    if (a >= 0.3) return { text: '弱い相関',      color: '#fdcb6e', bg: 'rgba(253,203,110,0.18)' };
+    return         { text: '非常に弱い',          color: '#8888a0', bg: 'rgba(136,136,160,0.12)' };
   };
 
   // ─── 合否予測モデル（相関係数加重スコア） ───
@@ -1811,10 +1811,10 @@ function renderFailAnalysisTab() {
 
     <!-- 相関係数ランキング -->
     <div style="margin-bottom:20px">
-      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
+      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
         📊 合否との相関係数ランキング（点双列相関）
       </div>
-      <div style="color:var(--text-dim);font-size:11px;margin-bottom:4px;line-height:1.7">
+      <div style="color:var(--text-dim);font-size:13px;margin-bottom:4px;line-height:1.8">
         各指標と合否（合格=1 / 不合格=0）の点双列相関係数 <strong style="color:var(--text)">r<sub>pb</sub></strong>。<br>
         値が大きいほど「その指標が高い人ほど合格しやすい」傾向が強い。
       </div>
@@ -1823,31 +1823,31 @@ function renderFailAnalysisTab() {
           const absR = Math.abs(c.r);
           const pct = Math.min(absR / 0.8 * 100, 100);
           const cl = corrLabel(c.r);
-          return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <span style="min-width:130px;font-size:12px;color:var(--text);white-space:nowrap">${c.icon} ${c.label}</span>
-            <div style="flex:1;height:22px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;position:relative">
-              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${cl.color}33,${cl.color});border-radius:4px;transition:width 0.5s"></div>
+          return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <span style="min-width:150px;font-size:14px;color:var(--text);white-space:nowrap">${c.icon} ${c.label}</span>
+            <div style="flex:1;height:24px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden;position:relative">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${cl.bg},${cl.color});border-radius:6px"></div>
             </div>
-            <span style="min-width:55px;text-align:right;font-weight:700;color:${cl.color};font-size:14px">${c.r.toFixed(3)}</span>
-            <span style="min-width:90px;font-size:10px;color:${cl.color}">${cl.text}</span>
+            <span style="min-width:60px;text-align:right;font-weight:700;color:${cl.color};font-size:16px">${c.r.toFixed(3)}</span>
+            <span style="min-width:90px;font-size:12px;color:${cl.color}">${cl.text}</span>
           </div>`;
         }).join('')}
       </div>
-      <div style="color:var(--text-dim);font-size:11px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;line-height:1.7">
+      <div style="color:var(--text-dim);font-size:13px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;line-height:1.8">
         💡 <strong style="color:var(--text)">1位: ${corrResults[0]?.label ?? '—'}</strong>（r=${corrResults[0]?.r?.toFixed(3) ?? '—'}）が合否に最も強く関連。
         ${corrResults.length >= 2 ? `2位は <strong style="color:var(--text)">${corrResults[1].label}</strong>（r=${corrResults[1].r.toFixed(3)}）。` : ''}
-        ${corrResults.length >= 3 && corrResults[0]?.key === 'level' && corrResults[2]?.key === 'total_hours' ?
-          `<br>📌 レビュー回数は時間より順位が上 → <strong style="color:var(--accent-light)">同じ時間をかけるなら対話的学習（レビュー）に費やす方が効果的</strong>という示唆。` : ''}
+        ${corrResults.length >= 3 && corrResults[1]?.key === 'review_given' && corrResults[2]?.key === 'total_hours' ?
+          `<br>📌 レビュー回数は時間より順位が上 → <strong style="color:var(--accent-light)">同じ時間をかけるなら対話的学習（レビュー）の方がレベルが上がる傾向</strong>という示唆。` : ''}
       </div>
     </div>
 
     <!-- 合否予測モデル & Megatoron推定 -->
     ${predData.length > 0 ? `
     <div style="margin-bottom:20px">
-      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
+      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
         🎯 数値データによる合否予測精度
       </div>
-      <div style="color:var(--text-dim);font-size:11px;margin-bottom:10px;line-height:1.7">
+      <div style="color:var(--text-dim);font-size:13px;margin-bottom:10px;line-height:1.8">
         全${corrResults.length}指標の相関係数を重みにした予測スコアで合否を判定した場合の精度。<br>
         <strong style="color:var(--text)">説明できない部分 ≈ Megatoron等の数値外要因の影響</strong>と推察される。
       </div>
@@ -1855,14 +1855,14 @@ function renderFailAnalysisTab() {
       <!-- 精度メーター -->
       <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px;padding:12px;background:rgba(0,206,201,0.06);border:1px solid rgba(0,206,201,0.2);border-radius:8px;text-align:center">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">数値のみの予測精度</div>
-          <div style="font-size:28px;font-weight:700;color:var(--green)">${predAccPct}%</div>
-          <div style="font-size:10px;color:var(--text-dim)">${predData.length}人中 ${Math.round(bestAcc * predData.length)}人を正しく予測</div>
+          <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px">数値のみの予測精度</div>
+          <div style="font-size:32px;font-weight:700;color:var(--green)">${predAccPct}%</div>
+          <div style="font-size:12px;color:var(--text-dim)">${predData.length}人中 ${Math.round(bestAcc * predData.length)}人を正しく予測</div>
         </div>
         <div style="flex:1;min-width:200px;padding:12px;background:rgba(108,92,231,0.06);border:1px solid rgba(108,92,231,0.2);border-radius:8px;text-align:center">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">数値で説明できない部分</div>
-          <div style="font-size:28px;font-weight:700;color:var(--accent-light)">${unexplainedPct}%</div>
-          <div style="font-size:10px;color:var(--text-dim)">≈ Megatoron等の影響と推察</div>
+          <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px">数値で説明できない部分</div>
+          <div style="font-size:32px;font-weight:700;color:var(--accent-light)">${unexplainedPct}%</div>
+          <div style="font-size:12px;color:var(--text-dim)">≈ Megatoron等の影響と推察</div>
         </div>
       </div>
 
@@ -1877,31 +1877,31 @@ function renderFailAnalysisTab() {
       </div>
 
       ${(falseNeg.length > 0 || falsePos.length > 0) ? `
-      <div style="font-size:12px;line-height:1.8">
+      <div style="font-size:13px;line-height:1.8">
         <div style="color:var(--text-dim);margin-bottom:6px">
           <strong style="color:var(--text)">🔮 Megatoron推定影響を受けた可能性のある学生:</strong>
         </div>
         ${falseNeg.length > 0 ? `
-        <div style="margin-bottom:6px;padding:6px 10px;background:rgba(255,118,117,0.05);border-radius:6px">
+        <div style="margin-bottom:6px;padding:8px 12px;background:rgba(255,118,117,0.05);border-radius:6px">
           <span style="color:var(--red)">▼ 数値は合格圏だが不合格</span>（${falseNeg.length}人）
-          <span style="color:var(--text-dim);font-size:10px">— Megatoronで不利だった可能性</span><br>
-          <span style="font-size:11px;color:var(--text-dim)">
+          <span style="color:var(--text-dim);font-size:12px">— Megatoronで不利だった可能性</span><br>
+          <span style="font-size:12px;color:var(--text-dim)">
             ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join(', ')}
           </span>
         </div>` : ''}
         ${falsePos.length > 0 ? `
-        <div style="padding:6px 10px;background:rgba(0,206,201,0.05);border-radius:6px">
+        <div style="padding:8px 12px;background:rgba(0,206,201,0.05);border-radius:6px">
           <span style="color:var(--green)">▲ 数値は不合格圏だが合格</span>（${falsePos.length}人）
-          <span style="color:var(--text-dim);font-size:10px">— Megatoronで有利だった可能性</span><br>
-          <span style="font-size:11px;color:var(--text-dim)">
+          <span style="color:var(--text-dim);font-size:12px">— Megatoronで有利だった可能性</span><br>
+          <span style="font-size:12px;color:var(--text-dim)">
             ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join(', ')}
           </span>
         </div>` : ''}
       </div>` : ''}
 
-      <div style="color:rgba(255,255,255,0.35);font-size:10px;margin-top:8px;line-height:1.5">
+      <div style="color:rgba(255,255,255,0.35);font-size:12px;margin-top:8px;line-height:1.6">
         ※ 予測モデルは相関係数加重zスコアの単純線形モデル。因果関係ではなく相関に基づく推定です。<br>
-        ※ 「Megatoron」は42の相互投票システム（voxotron.42.fr）。仲間による週次投票で「最も助けてくれた人」を選び、結果がランキングに影響するとされる仕組みです。
+        ※ 「Megatoron」とは仲間による相互評価投票のこと。Piscine期間中に「最も助けてくれた人」を選ぶ投票で、結果が合否に影響するとされています（詳細は非公開）。
       </div>
     </div>` : ''}
 
