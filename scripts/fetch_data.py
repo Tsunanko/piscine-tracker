@@ -417,20 +417,47 @@ def main():
 
             time.sleep(0.3)  # projects_users の後
 
-            # --- scale_teams でレビュー回数取得 ---
-            review_given = 0
+            # --- scale_teams でレビュー回数・フラグ・フィードバック取得 ---
+            review_given         = 0  # 評価者として実施したレビュー数
+            outstanding_received = 0  # 自分のプロジェクトが "Outstanding project" と評価された回数
+            cheat_received       = 0  # 自分のプロジェクトに "Cheat" フラグが付いた回数
+            feedback_texts       = [] # 評価者として受け取ったフィードバックテキスト一覧
             try:
                 scale_teams_raw = api_get(token, f"/v2/users/{login}/scale_teams", {
                     "page[size]": 100,
                     "range[begin_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
                 })
-                review_given = sum(
-                    1 for s in scale_teams_raw
-                    if s.get("corrector", {}).get("login") == login
-                    and s.get("filled_at")
-                )
+                for team in scale_teams_raw:
+                    if not team.get("filled_at"):
+                        continue
+                    corrector_login  = team.get("corrector", {}).get("login", "")
+                    corrected_logins = [c.get("login", "") for c in team.get("correcteds", [])]
+                    flag_name        = (team.get("flag") or {}).get("name", "")
+                    feedback_text    = (team.get("feedback") or "").strip()
+
+                    if corrector_login == login:
+                        # このユーザーが評価者 → レビュー回数カウント
+                        review_given += 1
+                        # 被評価者から評価者への感謝/評価テキストを収集
+                        if feedback_text:
+                            feedback_texts.append(feedback_text)
+
+                    if login in corrected_logins:
+                        # このユーザーが被評価者 → 自分の作品へのフラグを集計
+                        if flag_name == "Outstanding project":
+                            outstanding_received += 1
+                        elif flag_name == "Cheat":
+                            cheat_received += 1
+
             except Exception as e:
                 print(f"  [WARN] {login} scale_teams failed: {e}")
+
+            # フィードバック集計
+            feedback_count      = len(feedback_texts)
+            feedback_avg_length = (
+                round(sum(len(t) for t in feedback_texts) / feedback_count, 1)
+                if feedback_count > 0 else 0.0
+            )
 
             # Piscine合否判定
             # results_announced=True の場合のみ合否を確定する（未発表の場合は None）
@@ -464,6 +491,10 @@ def main():
                 "is_active": is_active,
                 "active_extra_hours": round(active_extra_hours, 2),
                 "review_given": review_given,
+                "outstanding_received": outstanding_received,  # Outstanding flagをもらった回数
+                "cheat_received": cheat_received,              # Cheatフラグをもらった回数
+                "feedback_count": feedback_count,              # 評価者として受け取ったFBテキスト数
+                "feedback_avg_length": feedback_avg_length,    # FBテキスト平均文字数（丁寧さの代理指標）
                 "daily": daily,
                 "projects": projects,
                 "piscine_result": piscine_result,  # "passed" | "failed" | null
@@ -597,6 +628,10 @@ def main():
             "review_deviation": None if failed else s.get("review_deviation", 50.0),
             "composite_deviation": None if failed else s.get("composite_deviation", 50.0),
             "review_given": None if failed else s.get("review_given", 0),
+            "outstanding_received": None if failed else s.get("outstanding_received", 0),
+            "cheat_received":       None if failed else s.get("cheat_received", 0),
+            "feedback_count":       None if failed else s.get("feedback_count", 0),
+            "feedback_avg_length":  None if failed else s.get("feedback_avg_length", 0.0),
             "exam_score": None if failed else s.get("exam_score"),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
