@@ -1509,12 +1509,16 @@ function renderFailAnalysisTab() {
   };
 
   const corrResults = [
-    { key: 'exam_score',  label: 'Final Exam',   icon: '📝', ...pbCorr('exam_score') },
-    { key: 'level',       label: 'Level',         icon: '📊', ...pbCorr('level') },
-    { key: 'total_hours', label: 'ログイン時間',  icon: '⏱️', ...pbCorr('total_hours') },
-    { key: 'review_given',label: 'レビュー回数',  icon: '👥', ...pbCorr('review_given') },
-    { key: 'active_days', label: 'アクティブ日数', icon: '📅', ...pbCorr('active_days',
+    { key: 'exam_score',           label: 'Final Exam',            icon: '📝', ...pbCorr('exam_score') },
+    { key: 'level',                label: 'Level',                  icon: '📊', ...pbCorr('level') },
+    { key: 'total_hours',          label: 'ログイン時間',            icon: '⏱️', ...pbCorr('total_hours') },
+    { key: 'review_given',         label: 'レビュー回数',            icon: '👥', ...pbCorr('review_given') },
+    { key: 'active_days',          label: 'アクティブ日数',          icon: '📅', ...pbCorr('active_days',
       s => s.active_days != null && s.active_days > 0 ? s.active_days : null) },
+    { key: 'outstanding_received', label: 'Outstanding獲得回数',    icon: '🏆', ...pbCorr('outstanding_received') },
+    { key: 'feedback_count',       label: 'FB受取数（評価者として）', icon: '💬', ...pbCorr('feedback_count') },
+    { key: 'feedback_avg_length',  label: 'FB平均文字数（丁寧さ）',  icon: '✍️', ...pbCorr('feedback_avg_length') },
+    { key: 'cheat_received',       label: 'Cheatフラグ被弾回数',     icon: '🚨', ...pbCorr('cheat_received') },
   ].filter(c => c.r != null).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
 
   // 強さラベル（バーグラデ用に実色コード）
