@@ -1831,11 +1831,37 @@ function renderFailAnalysisTab() {
           </div>`;
         }).join('')}
       </div>
-      <div style="color:var(--text-dim);font-size:13px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;line-height:1.8">
+      <div style="color:var(--text-dim);font-size:13px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;line-height:1.8;margin-bottom:10px">
         💡 <strong style="color:var(--text)">1位: ${corrResults[0]?.label ?? '—'}</strong>（r=${corrResults[0]?.r?.toFixed(3) ?? '—'}）が合否に最も強く関連。
         ${corrResults.length >= 2 ? `2位は <strong style="color:var(--text)">${corrResults[1].label}</strong>（r=${corrResults[1].r.toFixed(3)}）。` : ''}
         ${corrResults.length >= 3 && corrResults[1]?.key === 'review_given' && corrResults[2]?.key === 'total_hours' ?
           `<br>📌 レビュー回数は時間より順位が上 → <strong style="color:var(--accent-light)">同じ時間をかけるなら対話的学習（レビュー）の方がレベルが上がる傾向</strong>という示唆。` : ''}
+      </div>
+
+      <!-- 指標の読み解き説明 -->
+      <div style="padding:10px 14px;background:rgba(108,92,231,0.05);border:1px solid rgba(108,92,231,0.18);border-radius:8px;font-size:13px;line-height:1.9">
+        <div style="color:var(--accent-light);font-weight:700;margin-bottom:6px">📖 指標の読み方</div>
+        <div style="color:var(--text-dim)">
+          <span style="color:var(--text)">⏱️ ログイン時間</span> — Piscine期間中の<strong style="color:var(--text)">累計ログイン時間</strong>。総量を表す。<br>
+          <span style="color:var(--text)">📅 アクティブ日数</span> — 1時間以上ログインした<strong style="color:var(--text)">日数</strong>（連続出席の指標）。<br>
+          <div style="margin-top:6px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:6px">
+            ${(() => {
+              const hoursR  = corrResults.find(c => c.key === 'total_hours')?.r;
+              const daysR   = corrResults.find(c => c.key === 'active_days')?.r;
+              if (hoursR != null && daysR != null && daysR > hoursR) {
+                return `📌 このデータでは <strong style="color:var(--accent-light)">アクティブ日数（r=${daysR.toFixed(3)}）> ログイン時間（r=${hoursR.toFixed(3)}）</strong><br>
+                → <strong style="color:var(--text)">長時間の突貫より、毎日コツコツ継続して来た人の方が合格しやすい</strong>傾向がある。<br>
+                <span style="font-size:12px">毎日来る → 毎日レビュー・交流できる → Megatoron投票でも認知されやすい、という連鎖も考えられる。</span>`;
+              } else {
+                return `ログイン時間は累計時間、アクティブ日数は継続して来た日数を表す別々の指標。`;
+              }
+            })()}
+          </div>
+          <div style="margin-top:8px">
+            <span style="color:var(--text)">👥 レビュー回数</span> — Piscine中に行った<strong style="color:var(--text)">ピア評価の累計回数</strong>。<br>
+            <span style="font-size:12px">単に時間をかけるより、他者のコードを評価・対話する学習の方が相関が高い可能性を示す。</span>
+          </div>
+        </div>
       </div>
     </div>
 
