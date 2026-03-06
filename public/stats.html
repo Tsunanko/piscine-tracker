@@ -1535,6 +1535,20 @@ function renderFailAnalysisTab() {
     ...allThresholdFail.map(s  => ({ ...s, _result: 'fail' })),
   ].sort((a, b) => (compositeZ(b) ?? -99) - (compositeZ(a) ?? -99));
 
+  // 値+σを縦積み1セルにするヘルパー
+  const stackCell = (val, mean, fmtVal, z) => {
+    if (val == null) return `<td style="text-align:center;color:var(--text-dim)">—</td>`;
+    const diff  = mean != null ? val - mean : null;
+    const dSign = diff != null ? (diff >= 0 ? '+' : '') : '';
+    const dColor= diff != null ? (diff >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)';
+    const zStr  = z != null ? `<div style="font-size:10px;color:${z>=0?'var(--green)':'var(--red)'};font-weight:700">${z>=0?'+':''}${z.toFixed(2)}σ</div>` : '';
+    return `<td style="text-align:center;white-space:nowrap;line-height:1.3;padding:4px 6px">
+      <div style="font-size:12px">${fmtVal(val)}</div>
+      ${diff != null ? `<div style="font-size:10px;color:${dColor}">(${dSign}${fmtVal(diff)})</div>` : ''}
+      ${zStr}
+    </td>`;
+  };
+
   const deviationRows = mixedGroup.map(s => {
       const isPasser = s._result === 'pass';
       const ze = zScore(s.exam_score,   passAvgScore,   passStdScore);
@@ -1554,30 +1568,34 @@ function renderFailAnalysisTab() {
           <a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
           <span style="margin-left:4px">${resultBadge}</span>
         </td>
-        <td style="text-align:center;font-weight:700;color:${czColor};white-space:nowrap">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2)+'σ' : '—'}</td>
-        <td style="text-align:center;white-space:nowrap">${valCell(s.exam_score,   passAvgScore,  v => Math.round(v)+'点')}</td>
-        <td style="text-align:center">${zCell(ze)}</td>
-        <td style="text-align:center;white-space:nowrap">${valCell(s.total_hours,  passAvgHours,  v => v.toFixed(0)+'h')}</td>
-        <td style="text-align:center">${zCell(zh)}</td>
-        <td style="text-align:center;white-space:nowrap">${valCell(s.level,        passAvgLevel,  v => v.toFixed(2))}</td>
-        <td style="text-align:center">${zCell(zl)}</td>
-        <td style="text-align:center;white-space:nowrap">${s.review_given != null ? valCell(s.review_given, passAvgReview, v => Math.round(v)+'回') : '<span style="color:var(--text-dim)">—</span>'}</td>
-        <td style="text-align:center">${zr != null ? zCell(zr) : '<span style="color:var(--text-dim)">—</span>'}</td>
+        <td style="text-align:center;font-weight:700;color:${czColor};white-space:nowrap;font-size:13px">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2)+'σ' : '—'}</td>
+        ${stackCell(s.exam_score,   passAvgScore,  v => Math.round(v)+'点', ze)}
+        ${stackCell(s.total_hours,  passAvgHours,  v => v.toFixed(0)+'h',   zh)}
+        ${stackCell(s.level,        passAvgLevel,  v => v.toFixed(2),        zl)}
+        ${stackCell(s.review_given, passAvgReview, v => Math.round(v)+'回',  zr)}
       </tr>`;
     }).join('');
 
   // 合格者の参考行（平均）
   const passRefRow = `<tr style="background:rgba(0,206,201,0.05);border-top:1px solid rgba(0,206,201,0.2)">
     <td style="color:var(--accent-light);font-weight:700">合格者平均</td>
-    <td style="text-align:center;color:var(--text-dim)">基準(0)</td>
-    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgScore  != null ? Math.round(passAvgScore)+'点'   : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdScore  != null ? passStdScore.toFixed(1)  : '—'}</td>
-    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgHours  != null ? passAvgHours.toFixed(0)+'h'   : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdHours  != null ? passStdHours.toFixed(1)  : '—'}</td>
-    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgLevel  != null ? passAvgLevel.toFixed(2)       : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdLevel  != null ? passStdLevel.toFixed(2)  : '—'}</td>
-    <td style="text-align:center;color:var(--green);font-weight:700;white-space:nowrap">${passAvgReview != null ? Math.round(passAvgReview)+'回' : '—'}</td>
-    <td style="text-align:center;color:var(--text-dim);font-size:11px;white-space:nowrap">±${passStdReview != null ? passStdReview.toFixed(1) : '—'}</td>
+    <td style="text-align:center;color:var(--text-dim);font-size:11px">基準(0)</td>
+    <td style="text-align:center;white-space:nowrap">
+      <div style="color:var(--green);font-weight:700">${passAvgScore != null ? Math.round(passAvgScore)+'点' : '—'}</div>
+      <div style="font-size:10px;color:var(--text-dim)">±${passStdScore != null ? passStdScore.toFixed(1) : '—'}</div>
+    </td>
+    <td style="text-align:center;white-space:nowrap">
+      <div style="color:var(--green);font-weight:700">${passAvgHours != null ? passAvgHours.toFixed(0)+'h' : '—'}</div>
+      <div style="font-size:10px;color:var(--text-dim)">±${passStdHours != null ? passStdHours.toFixed(1) : '—'}</div>
+    </td>
+    <td style="text-align:center;white-space:nowrap">
+      <div style="color:var(--green);font-weight:700">${passAvgLevel != null ? passAvgLevel.toFixed(2) : '—'}</div>
+      <div style="font-size:10px;color:var(--text-dim)">±${passStdLevel != null ? passStdLevel.toFixed(2) : '—'}</div>
+    </td>
+    <td style="text-align:center;white-space:nowrap">
+      <div style="color:var(--green);font-weight:700">${passAvgReview != null ? Math.round(passAvgReview)+'回' : '—'}</div>
+      <div style="font-size:10px;color:var(--text-dim)">±${passStdReview != null ? passStdReview.toFixed(1) : '—'}</div>
+    </td>
   </tr>`;
 
   // --- テーブル行（条件チェック列付き）---
@@ -1741,14 +1759,10 @@ function renderFailAnalysisTab() {
           <thead><tr>
             <th>ログイン</th>
             <th style="text-align:center;color:var(--orange)">総合偏差σ</th>
-            <th style="text-align:center">Exam</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
-            <th style="text-align:center">時間</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
-            <th style="text-align:center">Level</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
-            <th style="text-align:center">レビュー数</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
+            <th style="text-align:center">Exam<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
+            <th style="text-align:center">時間<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
+            <th style="text-align:center">Level<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
+            <th style="text-align:center">レビュー数<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
           </tr></thead>
           <tbody>
             ${passRefRow}
