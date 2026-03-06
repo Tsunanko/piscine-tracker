@@ -1589,13 +1589,28 @@ function renderFailAnalysisTab() {
 
     <!-- 条件クリア数 × 合否率 -->
     <div style="margin-bottom:16px">
-      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:8px">
-        📊 条件クリア数（Exam・時間・Level）× 合否率
+      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
+        📊 合格に必要な条件クリア数 × 合否率
+      </div>
+      <!-- 3条件の定義を明示 -->
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;font-size:12px">
+        <span style="padding:3px 10px;background:rgba(0,206,201,0.1);border:1px solid rgba(0,206,201,0.3);border-radius:20px;color:var(--accent-light)">
+          ① Exam ≥ <strong>${minPassScore ?? '?'}点</strong>
+        </span>
+        <span style="padding:3px 10px;background:rgba(0,206,201,0.1);border:1px solid rgba(0,206,201,0.3);border-radius:20px;color:var(--accent-light)">
+          ② ログイン時間 ≥ <strong>${minPassHours != null ? minPassHours.toFixed(1) : '?'}h</strong>
+        </span>
+        <span style="padding:3px 10px;background:rgba(0,206,201,0.1);border:1px solid rgba(0,206,201,0.3);border-radius:20px;color:var(--accent-light)">
+          ③ Level ≥ <strong>${minPassLevel != null ? minPassLevel.toFixed(2) : '?'}</strong>
+        </span>
+        <span style="padding:3px 6px;color:var(--text-dim);font-size:11px;align-self:center">
+          ※ 各ラインは合格者の最低値
+        </span>
       </div>
       <div style="overflow-x:auto">
         <table class="corr-table" style="min-width:380px">
           <thead><tr>
-            <th>条件クリア数</th>
+            <th>①②③ のうち達成した数</th>
             <th style="text-align:center">総人数</th>
             <th style="text-align:center;color:var(--green)">合格</th>
             <th style="text-align:center;color:var(--red)">不合格</th>
@@ -1603,9 +1618,6 @@ function renderFailAnalysisTab() {
           </tr></thead>
           <tbody>${condGroupRows}</tbody>
         </table>
-      </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
-        ※ 各条件のラインは合格者の最低値（Exam: ${minPassScore ?? '?'}点 / 時間: ${minPassHours != null ? minPassHours.toFixed(1) : '?'}h / Level: ${minPassLevel != null ? minPassLevel.toFixed(2) : '?'}）
       </div>
     </div>
 
