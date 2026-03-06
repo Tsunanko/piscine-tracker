@@ -434,8 +434,8 @@
   <!-- タブ -->
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab(0)">時間 × Level</button>
-    <button class="tab-btn" onclick="switchTab(1)">時間 × レビュー回数</button>
-    <button class="tab-btn" onclick="switchTab(2)">Level × レビュー回数</button>
+    <button class="tab-btn" onclick="switchTab(1)">レビュー回数 × Level</button>
+    <button class="tab-btn" onclick="switchTab(2)">時間 × レビュー回数</button>
     <button class="tab-btn admin-only-tab" id="tabBtn3" onclick="switchTab(3)" style="display:none">試験スコア</button>
     <button class="tab-btn admin-only-tab" id="tabBtn4" onclick="switchTab(4)" style="display:none">合否分析</button>
   </div>
@@ -484,9 +484,9 @@
 // データ & 設定
 // ─────────────────────────────────────────────
 const TABS = [
-  { label: '時間 × Level',         xKey: 'total_hours', yKey: 'level',        xLabel: 'ログイン時間 (h)', yLabel: 'Level' },
-  { label: '時間 × レビュー回数',   xKey: 'total_hours', yKey: 'review_given', xLabel: 'ログイン時間 (h)', yLabel: 'レビュー回数' },
-  { label: 'Level × レビュー回数',  xKey: 'level',       yKey: 'review_given', xLabel: 'Level',           yLabel: 'レビュー回数' },
+  { label: '時間 × Level',           xKey: 'total_hours',  yKey: 'level',        xLabel: 'ログイン時間 (h)', yLabel: 'Level' },
+  { label: 'レビュー回数 × Level',   xKey: 'review_given', yKey: 'level',        xLabel: 'レビュー回数',     yLabel: 'Level' },
+  { label: '時間 × レビュー回数',    xKey: 'total_hours',  yKey: 'review_given', xLabel: 'ログイン時間 (h)', yLabel: 'レビュー回数' },
 ];
 
 let currentTab = 0;
