@@ -586,11 +586,15 @@ def main():
         uj["review_deviation"] = review_dev
         uj["composite_deviation"] = composite_dev
         # dashboard JSON 生成で使うためstudentsにも保存
-        students[login]["level_deviation"] = level_dev
-        students[login]["hours_deviation"] = hours_dev
-        students[login]["review_deviation"] = review_dev
+        students[login]["level_deviation"]    = level_dev
+        students[login]["hours_deviation"]    = hours_dev
+        students[login]["review_deviation"]   = review_dev
         students[login]["composite_deviation"] = composite_dev
-        students[login]["review_given"] = reviews
+        students[login]["review_given"]           = reviews
+        students[login]["outstanding_received"]   = uj.get("outstanding_received", 0)
+        students[login]["cheat_received"]         = uj.get("cheat_received", 0)
+        students[login]["feedback_count"]         = uj.get("feedback_count", 0)
+        students[login]["feedback_avg_length"]    = uj.get("feedback_avg_length", 0.0)
 
     # 5. 個人JSONを Cloudflare KV にアップロード
     print(f"\n[5] Uploading {len(user_jsons)} per-user JSON to KV...")
