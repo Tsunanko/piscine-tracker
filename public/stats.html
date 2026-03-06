@@ -1529,18 +1529,31 @@ function renderFailAnalysisTab() {
     <td style="text-align:center;color:${color};font-weight:bold">${g.cz != null ? (g.cz>=0?'+':'')+g.cz.toFixed(2)+'σ' : '—'}</td>
   </tr>`;
 
-  // 全条件クリア不合格者の乖離テーブル行（総合偏差σを左2列目に配置）
-  const deviationRows = [...allThresholdFail]
-    .sort((a, b) => (compositeZ(b) ?? -99) - (compositeZ(a) ?? -99))
-    .map(s => {
+  // ギリギリ合格者 + 全条件クリア不合格者を混在表示（総合偏差σ降順）
+  const mixedGroup = [
+    ...borderlinePassers.map(s => ({ ...s, _result: 'pass' })),
+    ...allThresholdFail.map(s  => ({ ...s, _result: 'fail' })),
+  ].sort((a, b) => (compositeZ(b) ?? -99) - (compositeZ(a) ?? -99));
+
+  const deviationRows = mixedGroup.map(s => {
+      const isPasser = s._result === 'pass';
       const ze = zScore(s.exam_score,   passAvgScore,   passStdScore);
       const zh = zScore(s.total_hours,  passAvgHours,   passStdHours);
       const zl = zScore(s.level,        passAvgLevel,   passStdLevel);
       const zr = zScore(s.review_given, passAvgReview,  passStdReview);
       const cz = compositeZ(s);
-      const czColor = cz == null ? 'var(--text-dim)' : cz >= 0 ? 'var(--orange)' : 'var(--red)';
-      return `<tr>
-        <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      const czColor = cz == null ? 'var(--text-dim)' : cz >= 0 ? 'var(--accent-light)' : 'var(--red)';
+      const rowBg   = isPasser
+        ? 'background:rgba(0,206,201,0.04);'
+        : 'background:rgba(255,118,117,0.03);';
+      const resultBadge = isPasser
+        ? `<span style="padding:1px 7px;border-radius:10px;background:rgba(0,206,201,0.15);color:var(--green);font-size:10px;font-weight:700">合格</span>`
+        : `<span style="padding:1px 7px;border-radius:10px;background:rgba(255,118,117,0.15);color:var(--red);font-size:10px;font-weight:700">不合格</span>`;
+      return `<tr style="${rowBg}">
+        <td style="white-space:nowrap">
+          <a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
+          <span style="margin-left:4px">${resultBadge}</span>
+        </td>
         <td style="text-align:center;font-weight:700;color:${czColor};white-space:nowrap">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2)+'σ' : '—'}</td>
         <td style="text-align:center;white-space:nowrap">${valCell(s.exam_score,   passAvgScore,  v => Math.round(v)+'点')}</td>
         <td style="text-align:center">${zCell(ze)}</td>
@@ -1712,10 +1725,16 @@ function renderFailAnalysisTab() {
       </div>
     </div>
 
-    <!-- 全条件クリア不合格者 個別一覧 -->
+    <!-- ギリギリ合格者 + 全条件クリア不合格者 混在比較 -->
     <div style="margin-bottom:20px">
-      <div style="color:var(--orange);font-weight:700;font-size:12px;margin-bottom:6px">
-        全条件クリアでも不合格だった ${allThresholdFail.length}人 — 個別の合格者平均との乖離
+      <div style="font-weight:700;font-size:12px;margin-bottom:4px">
+        <span style="color:var(--green)">■ ギリギリ合格（${borderlinePassers.length}人）</span>
+        <span style="color:var(--text-dim);margin:0 6px">×</span>
+        <span style="color:var(--red)">■ 全条件クリア不合格（${allThresholdFail.length}人）</span>
+        <span style="color:var(--text-dim);font-size:11px;margin-left:8px">— 総合偏差σ降順</span>
+      </div>
+      <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">
+        数値が近いのに結果が違う行に注目すると、数値以外の評価基準の影響が見えてきます。
       </div>
       <div style="overflow-x:auto">
         <table class="corr-table" style="font-size:12px">
