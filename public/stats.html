@@ -1482,7 +1482,7 @@ function renderFailAnalysisTab() {
     return `<span style="white-space:nowrap">${fmt(val)} <span style="color:${color};font-size:11px">(${sign}${fmt(diff)})</span></span>`;
   };
 
-  // 全3条件クリアでも不合格の人（Voxotron等の影響を受けた可能性）
+  // 全3条件クリアでも不合格の人（Megatoron等の影響を受けた可能性）
   const allStudentsWithResult = students.filter(s => passes[s.login] === 'pass' || passes[s.login] === 'fail');
   const allThresholdFail = failStudents.filter(s => condCount(s) === 3);
 
@@ -1578,7 +1578,7 @@ function renderFailAnalysisTab() {
   const predAccPct = (bestAcc * 100).toFixed(1);
   const unexplainedPct = ((1 - bestAcc) * 100).toFixed(1);
 
-  // 誤分類 = Voxotron推定影響
+  // 誤分類 = Megatoron推定影響
   const falseNeg = predData.filter(p => p.score >= bestTh && p.actual === 'fail');  // 数値的には合格圏だが不合格
   const falsePos = predData.filter(p => p.score < bestTh && p.actual === 'pass');   // 数値的には不合格圏だが合格
 
@@ -1751,7 +1751,7 @@ function renderFailAnalysisTab() {
     <div style="padding:8px 14px;background:rgba(108,92,231,0.08);border:1px solid rgba(108,92,231,0.25);border-radius:8px;margin-bottom:16px;font-size:12px;color:var(--text-dim);line-height:1.7">
       ℹ️ <strong style="color:var(--accent-light)">Piscine合否の判定基準</strong>には、以下のような要素が関わっている可能性があると推察されます。<br>
       <span style="margin-left:16px">① Final Exam スコア（100点満点）</span><br>
-      <span style="margin-left:16px">② <strong>Voxotron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
+      <span style="margin-left:16px">② <strong>Megatoron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
       <span style="margin-left:16px">③ ログイン時間・課題達成度・Level など</span><br>
       <span style="color:rgba(255,255,255,0.4);font-size:11px">※ いずれも公式に公開された情報ではなく、データから推察されるものです。</span>
     </div>
@@ -1841,7 +1841,7 @@ function renderFailAnalysisTab() {
       </div>
     </div>
 
-    <!-- 合否予測モデル & Voxotron推定 -->
+    <!-- 合否予測モデル & Megatoron推定 -->
     ${predData.length > 0 ? `
     <div style="margin-bottom:20px">
       <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
@@ -1849,7 +1849,7 @@ function renderFailAnalysisTab() {
       </div>
       <div style="color:var(--text-dim);font-size:11px;margin-bottom:10px;line-height:1.7">
         全${corrResults.length}指標の相関係数を重みにした予測スコアで合否を判定した場合の精度。<br>
-        <strong style="color:var(--text)">説明できない部分 ≈ Voxotron等の数値外要因の影響</strong>と推察される。
+        <strong style="color:var(--text)">説明できない部分 ≈ Megatoron等の数値外要因の影響</strong>と推察される。
       </div>
 
       <!-- 精度メーター -->
@@ -1862,7 +1862,7 @@ function renderFailAnalysisTab() {
         <div style="flex:1;min-width:200px;padding:12px;background:rgba(108,92,231,0.06);border:1px solid rgba(108,92,231,0.2);border-radius:8px;text-align:center">
           <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">数値で説明できない部分</div>
           <div style="font-size:28px;font-weight:700;color:var(--accent-light)">${unexplainedPct}%</div>
-          <div style="font-size:10px;color:var(--text-dim)">≈ Voxotron等の影響と推察</div>
+          <div style="font-size:10px;color:var(--text-dim)">≈ Megatoron等の影響と推察</div>
         </div>
       </div>
 
@@ -1872,19 +1872,19 @@ function renderFailAnalysisTab() {
           数値で説明可能
         </div>
         <div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim)">
-          Voxotron等
+          Megatoron等
         </div>
       </div>
 
       ${(falseNeg.length > 0 || falsePos.length > 0) ? `
       <div style="font-size:12px;line-height:1.8">
         <div style="color:var(--text-dim);margin-bottom:6px">
-          <strong style="color:var(--text)">🔮 Voxotron推定影響を受けた可能性のある学生:</strong>
+          <strong style="color:var(--text)">🔮 Megatoron推定影響を受けた可能性のある学生:</strong>
         </div>
         ${falseNeg.length > 0 ? `
         <div style="margin-bottom:6px;padding:6px 10px;background:rgba(255,118,117,0.05);border-radius:6px">
           <span style="color:var(--red)">▼ 数値は合格圏だが不合格</span>（${falseNeg.length}人）
-          <span style="color:var(--text-dim);font-size:10px">— Voxotronで不利だった可能性</span><br>
+          <span style="color:var(--text-dim);font-size:10px">— Megatoronで不利だった可能性</span><br>
           <span style="font-size:11px;color:var(--text-dim)">
             ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join(', ')}
           </span>
@@ -1892,7 +1892,7 @@ function renderFailAnalysisTab() {
         ${falsePos.length > 0 ? `
         <div style="padding:6px 10px;background:rgba(0,206,201,0.05);border-radius:6px">
           <span style="color:var(--green)">▲ 数値は不合格圏だが合格</span>（${falsePos.length}人）
-          <span style="color:var(--text-dim);font-size:10px">— Voxotronで有利だった可能性</span><br>
+          <span style="color:var(--text-dim);font-size:10px">— Megatoronで有利だった可能性</span><br>
           <span style="font-size:11px;color:var(--text-dim)">
             ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join(', ')}
           </span>
@@ -1901,7 +1901,7 @@ function renderFailAnalysisTab() {
 
       <div style="color:rgba(255,255,255,0.35);font-size:10px;margin-top:8px;line-height:1.5">
         ※ 予測モデルは相関係数加重zスコアの単純線形モデル。因果関係ではなく相関に基づく推定です。<br>
-        ※ 「Voxotron」は42の相互投票システム（voxotron.42.fr）。仲間による週次投票で「最も助けてくれた人」を選び、結果がランキングに影響するとされる仕組みです。
+        ※ 「Megatoron」は42の相互投票システム（voxotron.42.fr）。仲間による週次投票で「最も助けてくれた人」を選び、結果がランキングに影響するとされる仕組みです。
       </div>
     </div>` : ''}
 
@@ -1915,7 +1915,7 @@ function renderFailAnalysisTab() {
         <span style="color:var(--green)">■ 合格者全体</span> vs
         <span style="color:var(--orange)">■ ギリギリ合格者</span>（全条件クリア かつ 総合偏差 &lt; 0 = ${borderlinePassers.length}人）vs
         <span style="color:var(--red)">■ 全条件クリア不合格者</span>（${allThresholdFail.length}人）<br>
-        ギリギリ合格者と不合格者の数値が近い場合 → 差は <strong style="color:var(--text)">数値では捉えられない何らかの評価基準（Voxotron等と推察）</strong> にある可能性が高い
+        ギリギリ合格者と不合格者の数値が近い場合 → 差は <strong style="color:var(--text)">数値では捉えられない何らかの評価基準（Megatoron等と推察）</strong> にある可能性が高い
       </div>
       <div style="overflow-x:auto">
         <table class="corr-table" style="font-size:12px;min-width:480px">
