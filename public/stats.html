@@ -436,8 +436,8 @@
     <button class="tab-btn active" onclick="switchTab(0)">時間 × Level</button>
     <button class="tab-btn" onclick="switchTab(1)">時間 × レビュー回数</button>
     <button class="tab-btn" onclick="switchTab(2)">Level × レビュー回数</button>
-    <button class="tab-btn" onclick="switchTab(3)">試験スコア</button>
-    <button class="tab-btn" onclick="switchTab(4)">合否分析</button>
+    <button class="tab-btn admin-only-tab" id="tabBtn3" onclick="switchTab(3)" style="display:none">試験スコア</button>
+    <button class="tab-btn admin-only-tab" id="tabBtn4" onclick="switchTab(4)" style="display:none">合否分析</button>
   </div>
 
   <!-- フィルターバー -->
@@ -1701,6 +1701,11 @@ function buildAllCorrTable() {
 requireAuth().then(user => {
   if (!user) return;
   currentUser = user;
+  // 管理者のみタブボタンを表示
+  if (user.login === ADMIN_LOGIN) {
+    document.getElementById('tabBtn3').style.display = '';
+    document.getElementById('tabBtn4').style.display = '';
+  }
   loadData(user).catch(e => {
     document.getElementById('mainCard').innerHTML =
       `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
