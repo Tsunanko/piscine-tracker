@@ -1439,11 +1439,58 @@ function renderFailAnalysisTab() {
       color:${active ? '#fff' : 'var(--text-dim)'}">${label}</span>`;
   };
 
-  // --- テーブル行 ---
+  // --- 条件クリア判定ヘルパー ---
+  const condCheck = (s) => ({
+    exam:  minPassScore != null && s.exam_score  != null && s.exam_score  >= minPassScore,
+    hours: minPassHours != null && s.total_hours != null && s.total_hours >= minPassHours,
+    level: minPassLevel != null && s.level       != null && s.level       >= minPassLevel,
+  });
+  const condCount = (s) => {
+    const c = condCheck(s);
+    return (c.exam ? 1 : 0) + (c.hours ? 1 : 0) + (c.level ? 1 : 0);
+  };
+  const ck = (ok) => ok
+    ? `<span style="color:var(--green);font-weight:700">✓</span>`
+    : `<span style="color:var(--red);opacity:0.5">✗</span>`;
+
+  // --- 条件クリア数 × 合否率テーブル ---
+  const allStudentsWithResult = students.filter(s => passes[s.login] === 'pass' || passes[s.login] === 'fail');
+  const condGroups = [3, 2, 1, 0].map(n => {
+    const group = allStudentsWithResult.filter(s => condCount(s) === n);
+    const passN = group.filter(s => passes[s.login] === 'pass').length;
+    const failN = group.filter(s => passes[s.login] === 'fail').length;
+    const rate  = group.length > 0 ? (passN / group.length * 100) : null;
+    return { n, total: group.length, passN, failN, rate };
+  });
+
+  const condGroupRows = condGroups.map(g => {
+    const barW = g.rate != null ? g.rate.toFixed(0) : 0;
+    const rateColor = g.rate == null ? 'var(--text-dim)'
+      : g.rate >= 70 ? 'var(--green)' : g.rate >= 40 ? 'var(--orange)' : 'var(--red)';
+    const label = ['0条件', '1条件', '2条件', '全3条件'][g.n];
+    return `<tr>
+      <td style="font-weight:700;color:var(--accent-light)">${label}クリア</td>
+      <td style="color:var(--text-dim);text-align:center">${g.total}人</td>
+      <td style="color:var(--green);text-align:center">${g.passN}</td>
+      <td style="color:var(--red);text-align:center">${g.failN}</td>
+      <td style="text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:6px;width:100%">
+          <div style="flex:1;background:rgba(255,255,255,0.08);border-radius:3px;height:8px;min-width:60px;overflow:hidden">
+            <div style="width:${barW}%;height:100%;background:${rateColor};border-radius:3px;transition:width 0.3s"></div>
+          </div>
+          <span style="color:${rateColor};font-weight:700;font-size:13px;min-width:38px">${g.rate != null ? g.rate.toFixed(0)+'%' : '—'}</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // --- テーブル行（条件チェック列付き）---
   const failRows = sortedFail.map((s, i) => {
     const aboveMinScore = minPassScore != null && s.exam_score >= minPassScore;
     const scoreColor    = aboveMinScore ? 'var(--orange)' : 'var(--red)';
-    const note          = aboveMinScore ? '⚠ 合格点超え' : '';
+    const c = condCheck(s);
+    const cnt = (c.exam ? 1 : 0) + (c.hours ? 1 : 0) + (c.level ? 1 : 0);
+    const cntColor = cnt === 3 ? 'var(--orange)' : cnt === 2 ? 'var(--accent-light)' : 'var(--text-dim)';
     return `<tr>
       <td style="color:var(--text-dim)">${i + 1}</td>
       <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
@@ -1451,19 +1498,25 @@ function renderFailAnalysisTab() {
       <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
       <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
       <td style="color:var(--text-dim)">${s.review_given != null ? s.review_given : '—'}</td>
-      <td style="font-size:10px;color:var(--orange)">${note}</td>
+      <td style="text-align:center">${ck(c.exam)}${ck(c.hours)}${ck(c.level)}</td>
+      <td style="color:${cntColor};font-weight:700;font-size:11px;text-align:center">${cnt}/3</td>
     </tr>`;
   }).join('');
 
-  const failNoScoreRows = failNoScore.map((s, i) => `<tr style="opacity:0.6">
-    <td style="color:var(--text-dim)">${sortedFail.length + i + 1}</td>
-    <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
-    <td style="color:var(--text-dim)">—</td>
-    <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
-    <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
-    <td style="color:var(--text-dim)">${s.review_given != null ? s.review_given : '—'}</td>
-    <td></td>
-  </tr>`).join('');
+  const failNoScoreRows = failNoScore.map((s, i) => {
+    const c = condCheck(s);
+    const cnt = (c.exam ? 1 : 0) + (c.hours ? 1 : 0) + (c.level ? 1 : 0);
+    return `<tr style="opacity:0.6">
+      <td style="color:var(--text-dim)">${sortedFail.length + i + 1}</td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td style="color:var(--text-dim)">—</td>
+      <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
+      <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
+      <td style="color:var(--text-dim)">${s.review_given != null ? s.review_given : '—'}</td>
+      <td style="text-align:center">${ck(c.exam)}${ck(c.hours)}${ck(c.level)}</td>
+      <td style="color:var(--text-dim);font-size:11px;text-align:center">${cnt}/3</td>
+    </tr>`;
+  }).join('');
 
   // --- 最低ライン分析パネル ---
   const minLinePanel = (label, minVal, failArr, key, unit='', decimals=1) => {
@@ -1534,6 +1587,28 @@ function renderFailAnalysisTab() {
       ${minLinePanel('Level', minPassLevel, failStudents.filter(s=>s.level!=null), 'level', '', 2)}
     </div>
 
+    <!-- 条件クリア数 × 合否率 -->
+    <div style="margin-bottom:16px">
+      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:8px">
+        📊 条件クリア数（Exam・時間・Level）× 合否率
+      </div>
+      <div style="overflow-x:auto">
+        <table class="corr-table" style="min-width:380px">
+          <thead><tr>
+            <th>条件クリア数</th>
+            <th style="text-align:center">総人数</th>
+            <th style="text-align:center;color:var(--green)">合格</th>
+            <th style="text-align:center;color:var(--red)">不合格</th>
+            <th>合格率</th>
+          </tr></thead>
+          <tbody>${condGroupRows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
+        ※ 各条件のラインは合格者の最低値（Exam: ${minPassScore ?? '?'}点 / 時間: ${minPassHours != null ? minPassHours.toFixed(1) : '?'}h / Level: ${minPassLevel != null ? minPassLevel.toFixed(2) : '?'}）
+      </div>
+    </div>
+
     <!-- 高スコア不合格者ハイライト -->
     ${highScoreFail.length > 0 ? `
     <div style="padding:8px 14px;background:rgba(255,118,117,0.06);border:1px solid rgba(255,118,117,0.2);border-radius:8px;margin-bottom:14px;font-size:12px">
@@ -1558,11 +1633,12 @@ function renderFailAnalysisTab() {
           <thead><tr>
             <th>#</th>
             <th>ログイン</th>
-            <th>Examスコア</th>
+            <th>Exam</th>
             <th>時間(h)</th>
             <th>Level</th>
             <th>レビュー数</th>
-            <th></th>
+            <th style="text-align:center;font-size:10px">E/T/L</th>
+            <th style="text-align:center">条件</th>
           </tr></thead>
           <tbody>${failRows}${failNoScoreRows}</tbody>
         </table>
