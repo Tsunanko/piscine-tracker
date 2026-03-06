@@ -1482,9 +1482,105 @@ function renderFailAnalysisTab() {
     return `<span style="white-space:nowrap">${fmt(val)} <span style="color:${color};font-size:11px">(${sign}${fmt(diff)})</span></span>`;
   };
 
-  // 全3条件クリアでも不合格の人（Megatoron等の影響を受けた可能性）
+  // 全3条件クリアでも不合格の人（Voxotron等の影響を受けた可能性）
   const allStudentsWithResult = students.filter(s => passes[s.login] === 'pass' || passes[s.login] === 'fail');
   const allThresholdFail = failStudents.filter(s => condCount(s) === 3);
+
+  // ─── 点双列相関係数（Point-Biserial Correlation） ───
+  // 合否（二値: pass=1, fail=0）と各連続変数の相関
+  const pbCorr = (key, getFn) => {
+    const valid = allStudentsWithResult.filter(s => {
+      const v = getFn ? getFn(s) : s[key];
+      return v != null && !isNaN(v);
+    });
+    if (valid.length < 3) return null;
+    const pGroup = valid.filter(s => passes[s.login] === 'pass');
+    const fGroup = valid.filter(s => passes[s.login] === 'fail');
+    if (pGroup.length === 0 || fGroup.length === 0) return null;
+    const getVal = (s) => getFn ? getFn(s) : s[key];
+    const mp = pGroup.reduce((a, s) => a + getVal(s), 0) / pGroup.length;
+    const mf = fGroup.reduce((a, s) => a + getVal(s), 0) / fGroup.length;
+    const allVals = valid.map(getVal);
+    const mean = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+    const sn = Math.sqrt(allVals.reduce((a, v) => a + (v - mean) ** 2, 0) / allVals.length);
+    if (sn === 0) return null;
+    const n = allVals.length, n1 = pGroup.length, n0 = fGroup.length;
+    return { r: (mp - mf) / sn * Math.sqrt(n1 * n0 / (n * n)), n, mp, mf };
+  };
+
+  const corrResults = [
+    { key: 'exam_score',  label: 'Final Exam',      icon: '📝', ...pbCorr('exam_score') },
+    { key: 'level',       label: 'Level',            icon: '📊', ...pbCorr('level') },
+    { key: 'total_hours', label: 'ログイン時間',      icon: '⏱️', ...pbCorr('total_hours') },
+    { key: 'review_given',label: 'レビュー回数',      icon: '👥', ...pbCorr('review_given') },
+    { key: 'active_days', label: 'アクティブ日数',    icon: '📅', ...pbCorr('active_days',
+      s => s.active_days != null && s.active_days > 0 ? s.active_days : null) },
+    { key: 'daily_avg',   label: '1日平均ログイン時間', icon: '📈', ...pbCorr('daily_avg',
+      s => (s.total_hours != null && s.active_days > 0) ? s.total_hours / s.active_days : null) },
+  ].filter(c => c.r != null).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+
+  // 強さラベル
+  const corrLabel = (r) => {
+    const a = Math.abs(r);
+    if (a >= 0.7) return { text: '強い正の相関', color: 'var(--green)' };
+    if (a >= 0.5) return { text: '中程度の正の相関', color: 'var(--green)' };
+    if (a >= 0.3) return { text: '弱い正の相関', color: 'var(--orange)' };
+    return { text: '非常に弱い', color: 'var(--text-dim)' };
+  };
+
+  // ─── 合否予測モデル（相関係数加重スコア） ───
+  const factorStats = {};
+  for (const c of corrResults) {
+    const getVal = c.key === 'daily_avg'
+      ? (s) => (s.total_hours != null && s.active_days > 0) ? s.total_hours / s.active_days : null
+      : c.key === 'active_days'
+      ? (s) => (s.active_days != null && s.active_days > 0) ? s.active_days : null
+      : (s) => s[c.key];
+    const vals = allStudentsWithResult.map(getVal).filter(v => v != null && !isNaN(v));
+    if (vals.length < 2) continue;
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const std = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length);
+    if (std > 0) factorStats[c.key] = { mean, std, r: c.r, getVal };
+  }
+
+  // 予測スコア = Σ(r_i × z_i) / Σ|r_i|
+  const predScore = (s) => {
+    let score = 0, wSum = 0;
+    for (const [key, st] of Object.entries(factorStats)) {
+      const v = st.getVal(s);
+      if (v == null) continue;
+      const z = (v - st.mean) / st.std;
+      score += z * st.r;
+      wSum += Math.abs(st.r);
+    }
+    return wSum > 0 ? score / wSum : null;
+  };
+
+  const predData = allStudentsWithResult
+    .map(s => ({ login: s.login, actual: passes[s.login], score: predScore(s) }))
+    .filter(p => p.score != null)
+    .sort((a, b) => b.score - a.score);
+
+  // 最適閾値を探索（全候補で精度最大化）
+  let bestAcc = 0, bestTh = 0;
+  if (predData.length > 0) {
+    const scores = predData.map(p => p.score);
+    const candidates = [...new Set(scores)].sort((a, b) => a - b);
+    for (let i = 0; i < candidates.length; i++) {
+      const th = (i === 0) ? candidates[0] - 0.01 : (candidates[i] + candidates[i - 1]) / 2;
+      const correct = predData.filter(p =>
+        (p.score >= th && p.actual === 'pass') || (p.score < th && p.actual === 'fail')
+      ).length;
+      const acc = correct / predData.length;
+      if (acc > bestAcc) { bestAcc = acc; bestTh = th; }
+    }
+  }
+  const predAccPct = (bestAcc * 100).toFixed(1);
+  const unexplainedPct = ((1 - bestAcc) * 100).toFixed(1);
+
+  // 誤分類 = Voxotron推定影響
+  const falseNeg = predData.filter(p => p.score >= bestTh && p.actual === 'fail');  // 数値的には合格圏だが不合格
+  const falsePos = predData.filter(p => p.score < bestTh && p.actual === 'pass');   // 数値的には不合格圏だが合格
 
   // ギリギリ合格者 = 全条件クリア かつ 総合偏差スコアが合格者平均以下（compositeZ < 0）
   // ※ compositeZ は後で定義するため、後処理で計算
@@ -1655,7 +1751,7 @@ function renderFailAnalysisTab() {
     <div style="padding:8px 14px;background:rgba(108,92,231,0.08);border:1px solid rgba(108,92,231,0.25);border-radius:8px;margin-bottom:16px;font-size:12px;color:var(--text-dim);line-height:1.7">
       ℹ️ <strong style="color:var(--accent-light)">Piscine合否の判定基準</strong>には、以下のような要素が関わっている可能性があると推察されます。<br>
       <span style="margin-left:16px">① Final Exam スコア（100点満点）</span><br>
-      <span style="margin-left:16px">② <strong>Megatoron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
+      <span style="margin-left:16px">② <strong>Voxotron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
       <span style="margin-left:16px">③ ログイン時間・課題達成度・Level など</span><br>
       <span style="color:rgba(255,255,255,0.4);font-size:11px">※ いずれも公式に公開された情報ではなく、データから推察されるものです。</span>
     </div>
@@ -1713,6 +1809,102 @@ function renderFailAnalysisTab() {
       </div>
     </div>
 
+    <!-- 相関係数ランキング -->
+    <div style="margin-bottom:20px">
+      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
+        📊 合否との相関係数ランキング（点双列相関）
+      </div>
+      <div style="color:var(--text-dim);font-size:11px;margin-bottom:4px;line-height:1.7">
+        各指標と合否（合格=1 / 不合格=0）の点双列相関係数 <strong style="color:var(--text)">r<sub>pb</sub></strong>。<br>
+        値が大きいほど「その指標が高い人ほど合格しやすい」傾向が強い。
+      </div>
+      <div style="padding:8px 0">
+        ${corrResults.map(c => {
+          const absR = Math.abs(c.r);
+          const pct = Math.min(absR / 0.8 * 100, 100);
+          const cl = corrLabel(c.r);
+          return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="min-width:130px;font-size:12px;color:var(--text);white-space:nowrap">${c.icon} ${c.label}</span>
+            <div style="flex:1;height:22px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;position:relative">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${cl.color}33,${cl.color});border-radius:4px;transition:width 0.5s"></div>
+            </div>
+            <span style="min-width:55px;text-align:right;font-weight:700;color:${cl.color};font-size:14px">${c.r.toFixed(3)}</span>
+            <span style="min-width:90px;font-size:10px;color:${cl.color}">${cl.text}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="color:var(--text-dim);font-size:11px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;line-height:1.7">
+        💡 <strong style="color:var(--text)">1位: ${corrResults[0]?.label ?? '—'}</strong>（r=${corrResults[0]?.r?.toFixed(3) ?? '—'}）が合否に最も強く関連。
+        ${corrResults.length >= 2 ? `2位は <strong style="color:var(--text)">${corrResults[1].label}</strong>（r=${corrResults[1].r.toFixed(3)}）。` : ''}
+        ${corrResults.length >= 3 && corrResults[0]?.key === 'level' && corrResults[2]?.key === 'total_hours' ?
+          `<br>📌 レビュー回数は時間より順位が上 → <strong style="color:var(--accent-light)">同じ時間をかけるなら対話的学習（レビュー）に費やす方が効果的</strong>という示唆。` : ''}
+      </div>
+    </div>
+
+    <!-- 合否予測モデル & Voxotron推定 -->
+    ${predData.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
+        🎯 数値データによる合否予測精度
+      </div>
+      <div style="color:var(--text-dim);font-size:11px;margin-bottom:10px;line-height:1.7">
+        全${corrResults.length}指標の相関係数を重みにした予測スコアで合否を判定した場合の精度。<br>
+        <strong style="color:var(--text)">説明できない部分 ≈ Voxotron等の数値外要因の影響</strong>と推察される。
+      </div>
+
+      <!-- 精度メーター -->
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px;padding:12px;background:rgba(0,206,201,0.06);border:1px solid rgba(0,206,201,0.2);border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">数値のみの予測精度</div>
+          <div style="font-size:28px;font-weight:700;color:var(--green)">${predAccPct}%</div>
+          <div style="font-size:10px;color:var(--text-dim)">${predData.length}人中 ${Math.round(bestAcc * predData.length)}人を正しく予測</div>
+        </div>
+        <div style="flex:1;min-width:200px;padding:12px;background:rgba(108,92,231,0.06);border:1px solid rgba(108,92,231,0.2);border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">数値で説明できない部分</div>
+          <div style="font-size:28px;font-weight:700;color:var(--accent-light)">${unexplainedPct}%</div>
+          <div style="font-size:10px;color:var(--text-dim)">≈ Voxotron等の影響と推察</div>
+        </div>
+      </div>
+
+      <!-- 精度バー -->
+      <div style="height:24px;background:rgba(255,255,255,0.05);border-radius:12px;overflow:hidden;margin-bottom:14px;display:flex">
+        <div style="width:${predAccPct}%;background:linear-gradient(90deg,var(--green),var(--accent-light));border-radius:12px 0 0 12px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">
+          数値で説明可能
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim)">
+          Voxotron等
+        </div>
+      </div>
+
+      ${(falseNeg.length > 0 || falsePos.length > 0) ? `
+      <div style="font-size:12px;line-height:1.8">
+        <div style="color:var(--text-dim);margin-bottom:6px">
+          <strong style="color:var(--text)">🔮 Voxotron推定影響を受けた可能性のある学生:</strong>
+        </div>
+        ${falseNeg.length > 0 ? `
+        <div style="margin-bottom:6px;padding:6px 10px;background:rgba(255,118,117,0.05);border-radius:6px">
+          <span style="color:var(--red)">▼ 数値は合格圏だが不合格</span>（${falseNeg.length}人）
+          <span style="color:var(--text-dim);font-size:10px">— Voxotronで不利だった可能性</span><br>
+          <span style="font-size:11px;color:var(--text-dim)">
+            ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join(', ')}
+          </span>
+        </div>` : ''}
+        ${falsePos.length > 0 ? `
+        <div style="padding:6px 10px;background:rgba(0,206,201,0.05);border-radius:6px">
+          <span style="color:var(--green)">▲ 数値は不合格圏だが合格</span>（${falsePos.length}人）
+          <span style="color:var(--text-dim);font-size:10px">— Voxotronで有利だった可能性</span><br>
+          <span style="font-size:11px;color:var(--text-dim)">
+            ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join(', ')}
+          </span>
+        </div>` : ''}
+      </div>` : ''}
+
+      <div style="color:rgba(255,255,255,0.35);font-size:10px;margin-top:8px;line-height:1.5">
+        ※ 予測モデルは相関係数加重zスコアの単純線形モデル。因果関係ではなく相関に基づく推定です。<br>
+        ※ 「Voxotron」は42の相互投票システム（voxotron.42.fr）。仲間による週次投票で「最も助けてくれた人」を選び、結果がランキングに影響するとされる仕組みです。
+      </div>
+    </div>` : ''}
+
     <!-- グループ比較（合格者全体 / ギリギリ合格者 / 全条件クリア不合格者） -->
     ${allThresholdFail.length > 0 ? `
     <div style="margin-bottom:20px">
@@ -1723,7 +1915,7 @@ function renderFailAnalysisTab() {
         <span style="color:var(--green)">■ 合格者全体</span> vs
         <span style="color:var(--orange)">■ ギリギリ合格者</span>（全条件クリア かつ 総合偏差 &lt; 0 = ${borderlinePassers.length}人）vs
         <span style="color:var(--red)">■ 全条件クリア不合格者</span>（${allThresholdFail.length}人）<br>
-        ギリギリ合格者と不合格者の数値が近い場合 → 差は <strong style="color:var(--text)">数値では捉えられない何らかの評価基準（Megatoron等と推察）</strong> にある可能性が高い
+        ギリギリ合格者と不合格者の数値が近い場合 → 差は <strong style="color:var(--text)">数値では捉えられない何らかの評価基準（Voxotron等と推察）</strong> にある可能性が高い
       </div>
       <div style="overflow-x:auto">
         <table class="corr-table" style="font-size:12px;min-width:480px">
