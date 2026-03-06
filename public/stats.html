@@ -1483,7 +1483,16 @@ function renderFailAnalysisTab() {
   // 全3条件クリアでも不合格の人（Megatoron等の影響を受けた可能性）
   const allStudentsWithResult = students.filter(s => passes[s.login] === 'pass' || passes[s.login] === 'fail');
   const allThresholdFail = failStudents.filter(s => condCount(s) === 3);
-  const allThresholdPass = passStudents; // 合格者は参照用
+
+  // ギリギリ合格者 = 全条件クリア かつ 総合偏差スコアが合格者平均以下（compositeZ < 0）
+  // ※ compositeZ は後で定義するため、後処理で計算
+  // グループ別平均ヘルパー
+  const groupAvg = (group) => ({
+    exam:   avg(group.filter(s => s.exam_score  != null), 'exam_score'),
+    hours:  avg(group.filter(s => s.total_hours != null), 'total_hours'),
+    level:  avg(group.filter(s => s.level       != null), 'level'),
+    review: avg(group.filter(s => s.review_given != null), 'review_given'),
+  });
 
   // 合格者vs不合格者の総合偏差スコア（z スコア合計）
   const compositeZ = (s) => {
@@ -1493,6 +1502,31 @@ function renderFailAnalysisTab() {
     const vals = [ze, zh, zl].filter(v => v != null);
     return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   };
+
+  // ギリギリ合格者（compositeZ が定義された後で計算）
+  const borderlinePassers = passStudents.filter(s => condCount(s) === 3 && (compositeZ(s) ?? 0) < 0);
+
+  // グループ別平均（compositeZ 込み）
+  const groupAvgFull = (group) => {
+    const g = groupAvg(group);
+    const czs = group.map(compositeZ).filter(v => v != null);
+    g.cz = czs.length ? czs.reduce((a,b)=>a+b,0)/czs.length : null;
+    return g;
+  };
+
+  const gAll  = groupAvgFull(passStudents);
+  const gBL   = groupAvgFull(borderlinePassers);
+  const gFail = groupAvgFull(allThresholdFail);
+
+  // グループ比較テーブル行
+  const gcRow = (label, g, color, bold) => `<tr>
+    <td style="color:${color};font-weight:${bold?'700':'400'}">${label}</td>
+    <td style="text-align:center;color:${color};font-weight:${bold?'700':'400'}">${g.exam != null ? Math.round(g.exam)+'点' : '—'}</td>
+    <td style="text-align:center;color:${color};font-weight:${bold?'700':'400'}">${g.hours != null ? g.hours.toFixed(0)+'h' : '—'}</td>
+    <td style="text-align:center;color:${color};font-weight:${bold?'700':'400'}">${g.level != null ? g.level.toFixed(2) : '—'}</td>
+    <td style="text-align:center;color:${color};font-weight:${bold?'700':'400'}">${g.review != null ? g.review.toFixed(1) : '—'}</td>
+    <td style="text-align:center;color:${color};font-weight:bold">${g.cz != null ? (g.cz>=0?'+':'')+g.cz.toFixed(2)+'σ' : '—'}</td>
+  </tr>`;
 
   // 全条件クリア不合格者の乖離テーブル行
   const deviationRows = [...allThresholdFail]
@@ -1582,11 +1616,11 @@ function renderFailAnalysisTab() {
     <!-- 判定基準の注記 -->
     <div style="padding:8px 14px;background:rgba(108,92,231,0.08);border:1px solid rgba(108,92,231,0.25);border-radius:8px;margin-bottom:16px;font-size:12px;color:var(--text-dim);line-height:1.7">
       ℹ️ <strong style="color:var(--accent-light)">Piscine合否の判定基準</strong>は
-      Exam点数だけではありません。<br>
-      <span style="margin-left:16px">① Final Exam スコア（100点満点）</span><br>
-      <span style="margin-left:16px">② <strong>Megatoron 投票</strong>（仲間・スタッフによる評価）</span><br>
-      <span style="margin-left:16px">③ ログイン時間・課題達成状況など総合評価</span><br>
-      高スコアでも不合格になるケースはMegatoron等の影響と考えられます。
+      Final Exam のスコアが主な指標と推察されますが、それだけではない可能性があります。<br>
+      <span style="margin-left:16px">① Final Exam スコア（100点満点）— データとして確認できる主要指標</span><br>
+      <span style="margin-left:16px">② <strong>Megatoron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
+      <span style="margin-left:16px">③ ログイン時間・課題達成度・Levelなど — 参考指標として推察</span><br>
+      <span style="color:rgba(255,255,255,0.4);font-size:11px">※ ②③は公式に公開された情報ではなく、高スコアでも不合格になるケースがあることから推察されるものです。</span>
     </div>
 
     <!-- 合格 vs 不合格 比較サマリー -->
@@ -1630,28 +1664,65 @@ function renderFailAnalysisTab() {
       ${minLinePanel('Level', minPassLevel, failStudents.filter(s=>s.level!=null), 'level', '', 2)}
     </div>
 
-    <!-- 合格者平均との乖離分析（全条件クリア不合格者） -->
+    <!-- σ（シグマ）の説明 -->
+    <div style="padding:10px 14px;background:rgba(108,92,231,0.06);border:1px solid rgba(108,92,231,0.2);border-radius:8px;margin-bottom:14px;font-size:12px;line-height:1.8">
+      <div style="color:var(--accent-light);font-weight:700;margin-bottom:4px">📐 σ（シグマ）とは？</div>
+      <div style="color:var(--text-dim)">
+        合格者グループの「ばらつき」を表す単位。合格者の平均を <strong style="color:var(--text)">0σ</strong> として、どれだけ離れているかを示す。<br>
+        例: Examの合格者平均が <strong style="color:var(--green)">${Math.round(passAvgScore ?? 0)}点</strong>、σ=${passStdScore != null ? passStdScore.toFixed(1) : '?'}点 の場合<br>
+        　<span style="color:var(--green)">+1σ = ${passAvgScore != null && passStdScore != null ? Math.round(passAvgScore + passStdScore)+'点' : '?'}（合格者の上位16%）</span>
+        　<span style="color:var(--red)">−1σ = ${passAvgScore != null && passStdScore != null ? Math.round(passAvgScore - passStdScore)+'点' : '?'}（合格者の下位16%）</span><br>
+        <strong style="color:var(--text)">総合偏差スコア</strong> = Exam・時間・Level の3指標σ平均。<span style="color:var(--green)">プラス = 合格者平均以上</span> / <span style="color:var(--red)">マイナス = 合格者平均以下</span>
+      </div>
+    </div>
+
+    <!-- グループ比較（合格者全体 / ギリギリ合格者 / 全条件クリア不合格者） -->
     ${allThresholdFail.length > 0 ? `
     <div style="margin-bottom:20px">
-      <div style="color:var(--orange);font-weight:700;font-size:13px;margin-bottom:4px">
-        🔍 全条件クリアでも不合格だった ${allThresholdFail.length}人 — 合格者平均との乖離
+      <div style="color:var(--accent-light);font-weight:700;font-size:13px;margin-bottom:6px">
+        🔍 グループ別平均比較
       </div>
-      <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px;line-height:1.6">
-        Exam・時間・Level の最低ラインを全て超えているにもかかわらず不合格になった人たち。<br>
-        σ（シグマ）は合格者の標準偏差。<span style="color:var(--green)">+値 = 合格者平均より高い</span> / <span style="color:var(--red)">−値 = 合格者平均より低い</span><br>
-        総合偏差スコア = 3指標のzスコア平均。これが低い人ほど合格者平均から遠い。
+      <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px;line-height:1.7">
+        <span style="color:var(--green)">■ 合格者全体</span> vs
+        <span style="color:var(--orange)">■ ギリギリ合格者</span>（全条件クリア かつ 総合偏差 &lt; 0 = ${borderlinePassers.length}人）vs
+        <span style="color:var(--red)">■ 全条件クリア不合格者</span>（${allThresholdFail.length}人）<br>
+        ギリギリ合格者と不合格者の数値が近い場合 → 差は <strong style="color:var(--text)">数値では捉えられない何らかの評価基準（Megatoron等と推察）</strong> にある可能性が高い
+      </div>
+      <div style="overflow-x:auto">
+        <table class="corr-table" style="font-size:12px;min-width:480px">
+          <thead><tr>
+            <th>グループ</th>
+            <th style="text-align:center">Exam平均</th>
+            <th style="text-align:center">時間平均</th>
+            <th style="text-align:center">Level平均</th>
+            <th style="text-align:center">レビュー平均</th>
+            <th style="text-align:center">総合偏差σ</th>
+          </tr></thead>
+          <tbody>
+            ${gcRow('合格者全体（'+passStudents.length+'人）', gAll, 'var(--green)', true)}
+            ${gcRow('ギリギリ合格（'+borderlinePassers.length+'人）', gBL, 'var(--orange)', false)}
+            ${gcRow('全条件クリア不合格（'+allThresholdFail.length+'人）', gFail, 'var(--red)', false)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 全条件クリア不合格者 個別一覧 -->
+    <div style="margin-bottom:20px">
+      <div style="color:var(--orange);font-weight:700;font-size:12px;margin-bottom:6px">
+        全条件クリアでも不合格だった ${allThresholdFail.length}人 — 個別の合格者平均との乖離
       </div>
       <div style="overflow-x:auto">
         <table class="corr-table" style="font-size:12px">
           <thead><tr>
             <th>ログイン</th>
             <th style="text-align:center">Exam</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差</th>
+            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
             <th style="text-align:center">時間</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差</th>
+            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
             <th style="text-align:center">Level</th>
-            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差</th>
-            <th style="text-align:center">総合偏差</th>
+            <th style="text-align:center;color:var(--text-dim);font-size:10px">偏差σ</th>
+            <th style="text-align:center">総合偏差σ</th>
           </tr></thead>
           <tbody>
             ${passRefRow}
