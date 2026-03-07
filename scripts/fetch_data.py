@@ -576,23 +576,18 @@ def main():
 
     # ── アクティブ学生の判定 ──────────────────────────────────────────────
     # Piscine進行中: PISCINE_END基準の直近ACTIVE_DAYS_THRESHOLD日間に1h以上来た学生
-    # Piscine終了後: 全ピシン期間（PISCINE_START〜PISCINE_END）に1h以上来た学生
-    #   → 最終週だけでなくピシン全体で活動した学生を漏れなく母集団に含める
-    reference_time = PISCINE_END
-    if now >= PISCINE_END:
-        # ピシン終了後: 期間全体（全26日）を対象
-        window_start = PISCINE_START.strftime("%Y-%m-%d")
-        window_label = f"full piscine ({PISCINE_START.strftime('%m/%d')}〜{(PISCINE_END - timedelta(days=1)).strftime('%m/%d')})"
-    else:
-        # ピシン進行中: 直近7日間を対象（ローリングウィンドウ）
-        window_start = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD)).strftime("%Y-%m-%d")
-        window_label = f"last {ACTIVE_DAYS_THRESHOLD}d from {reference_time.strftime('%Y-%m-%d')}"
+    # アクティブ判定: Piscine最終日（PISCINE_END-1日）を基準に直近7日間に1h以上来た学生
+    # 設計意図: 序盤で離脱した学生を除き、最終週まで継続して参加した学生を母集団とする。
+    # ピシン進行中・終了後いずれも同じ基準で固定（実行タイミングに依存しない安定した母集団）。
+    # 例: 最終日=2/27 → 対象期間 2/21〜2/27 の7日間に1h以上来た学生
+    reference_time = PISCINE_END - timedelta(days=1)  # 最終日（Feb 27）
+    window_start = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD - 1)).strftime("%Y-%m-%d")
     active_logins = set()
     for login, s in students.items():
         daily = s.get("daily", [])
         if any(d["date"] >= window_start and d["hours"] >= ACTIVE_HOURS_THRESHOLD for d in daily):
             active_logins.add(login)
-    print(f"  Active ({window_label}, {ACTIVE_HOURS_THRESHOLD}h+): {len(active_logins)} students")
+    print(f"  Active (last {ACTIVE_DAYS_THRESHOLD}d before piscine end: {window_start}〜{reference_time.strftime('%Y-%m-%d')}, {ACTIVE_HOURS_THRESHOLD}h+): {len(active_logins)} students")
 
     # レベル偏差値: アクティブ学生（level > 0）を母集団
     active_levels = [s["level"] for login, s in students.items()
