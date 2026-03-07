@@ -1850,20 +1850,27 @@ function renderFailAnalysisTab() {
       </div>
       <div style="color:var(--text-dim);font-size:13px;margin-bottom:4px;line-height:1.8">
         各指標と合否（合格=1 / 不合格=0）の点双列相関係数 <strong style="color:var(--text)">r<sub>pb</sub></strong>。<br>
-        値が大きいほど「その指標が高い人ほど合格しやすい」傾向が強い。
+        <span style="color:var(--green)">r &gt; 0</span>（緑）= 値が高いほど合格しやすい　／　<span style="color:#ff7675">r &lt; 0（↓逆）</span> = 値が高いほど<strong style="color:#ff7675">落ちやすい（逆相関）</strong>
       </div>
       <div style="padding:8px 0">
         ${corrResults.map(c => {
           const absR = Math.abs(c.r);
           const pct = Math.min(absR / 0.8 * 100, 100);
-          const cl = corrLabel(c.r);
+          const isNeg = c.r < 0;
+          // 負の相関は赤系、正の相関は通常色
+          const cl = isNeg
+            ? { text: absR >= 0.3 ? '逆相関（高い→落ちやすい）' : '逆相関（弱い）', color: '#ff7675', bg: 'rgba(255,118,117,0.15)' }
+            : corrLabel(c.r);
+          const dirLabel = isNeg
+            ? `<span style="font-size:10px;color:#ff7675;background:rgba(255,118,117,0.15);padding:1px 5px;border-radius:4px;margin-left:4px">↓逆</span>`
+            : '';
           return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-            <span style="width:200px;flex-shrink:0;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.icon} ${c.label}</span>
+            <span style="width:200px;flex-shrink:0;font-size:14px;color:${isNeg?'#ff9f9f':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.icon} ${c.label}${dirLabel}</span>
             <div style="flex:1;height:24px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden;position:relative">
               <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${cl.bg},${cl.color});border-radius:6px"></div>
             </div>
             <span style="min-width:60px;text-align:right;font-weight:700;color:${cl.color};font-size:16px">${c.r.toFixed(3)}</span>
-            <span style="min-width:90px;font-size:12px;color:${cl.color}">${cl.text}</span>
+            <span style="min-width:110px;font-size:11px;color:${cl.color}">${cl.text}</span>
           </div>`;
         }).join('')}
       </div>
