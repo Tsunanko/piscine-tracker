@@ -689,16 +689,24 @@ def main():
         students[login]["avg_interested"]         = uj.get("avg_interested")
         students[login]["avg_punctuality"]        = uj.get("avg_punctuality")
 
-    # 5. 個人JSONを Cloudflare KV にアップロード
-    print(f"\n[5] Uploading {len(user_jsons)} per-user JSON to KV...")
-    ok_count = 0
-    for login, uj in user_jsons.items():
-        try:
-            upload_to_kv({"type": "user", "login": login, "data": uj})
-            ok_count += 1
-        except Exception as e:
-            print(f"  [ERROR] KV upload failed for {login}: {e}")
-    print(f"  Uploaded {ok_count}/{len(user_jsons)} user JSONs")
+    # 5. 個人JSONを Cloudflare KV にアップロード（バッチ方式: 1回のリクエストで全員分）
+    # 旧方式（147回個別送信）は Cloudflare KV 無料プランの 1,000回/日 上限をすぐ消費するため廃止。
+    # 新方式: 全ユーザーJSONを1つのオブジェクト {login: data} にまとめて1回で送信 → KV書き込みは1回のみ。
+    print(f"\n[5] Uploading {len(user_jsons)} per-user JSONs to KV (batch mode)...")
+    try:
+        upload_to_kv({"type": "users_batch", "data": user_jsons})
+        print(f"  Uploaded all {len(user_jsons)} user JSONs as batch (1 KV write)")
+    except Exception as e:
+        print(f"  [ERROR] Batch KV upload failed: {e}")
+        print(f"  [INFO] Falling back to individual uploads...")
+        ok_count = 0
+        for login, uj in user_jsons.items():
+            try:
+                upload_to_kv({"type": "user", "login": login, "data": uj})
+                ok_count += 1
+            except Exception as e2:
+                print(f"  [ERROR] KV upload failed for {login}: {e2}")
+        print(f"  Uploaded {ok_count}/{len(user_jsons)} user JSONs (individual fallback)")
 
     # 6. ダッシュボード用 data.json 生成
     print("\n[6] Writing dashboard data.json...")
