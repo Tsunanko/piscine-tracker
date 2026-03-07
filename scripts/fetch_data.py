@@ -238,6 +238,7 @@ def main():
     print("\n[1b] Fetching 42cursus students (piscine graduates)...")
     CURSUS_42_ID = 21  # 42 本カリキュラムのID
     graduated_logins = set()
+    cursus42_by_login = {}  # login → cursus42 entry（不足学生の復元に使用）
     try:
         cursus42_users = fetch_all_pages(token, f"/v2/cursus/{CURSUS_42_ID}/cursus_users", {
             "filter[campus_id]": CAMPUS_ID,
@@ -248,9 +249,36 @@ def main():
             login = user.get("login", "")
             if login:
                 graduated_logins.add(login)
+                cursus42_by_login[login] = item
         print(f"  42cursus students at campus {CAMPUS_ID}: {len(graduated_logins)}")
     except Exception as e:
         print(f"  [WARN] Failed to fetch 42cursus students: {e}")
+
+    # ── 合格したがpiscine cursusから消えた学生を復元 ──────────────────────
+    # 42 APIでは、ピシン合格後に本科(cursus_42)へ移行するとpiscine cursusエントリが
+    # 削除される場合がある。そのまま放置すると passed_count が過少計上になる。
+    # 対策: graduated_loginsにいるがstudentsに存在しない学生を最低限のデータで補填する。
+    missing_graduates = graduated_logins - set(students.keys())
+    if missing_graduates:
+        print(f"  [INFO] Restoring {len(missing_graduates)} graduates missing from piscine cursus:")
+        for login in sorted(missing_graduates):
+            item = cursus42_by_login.get(login, {})
+            user = item.get("user", {})
+            image = user.get("image", {})
+            image_small = ""
+            if isinstance(image, dict):
+                image_small = (image.get("versions") or {}).get("small") or ""
+            elif isinstance(image, str):
+                image_small = image
+            students[login] = {
+                "login": login,
+                "display_name": user.get("usual_full_name") or user.get("displayname", login),
+                "image_small": image_small,
+                "total_hours": 0,
+                "level": round(item.get("level", 0), 2),
+                "daily": [],
+            }
+            print(f"    + {login}")
 
     # Piscine生の中で42cursusに移行した人数を確認
     piscine_graduates = graduated_logins & set(students.keys())
@@ -550,18 +578,24 @@ def main():
     print("\n[4] Calculating deviation scores...")
 
     # ── アクティブ学生の判定 ──────────────────────────────────────────────
-    # PISCINE_END を基準に固定する。
-    # 理由: Piscine最終日を基準にした「最終7日間に1h以上来た学生」を母集団とすることで、
-    # スクリプトの実行タイミングに関わらず偏差値計算の母集団が安定する。
-    # 例: Piscine終了後も「最終週に来た学生」が対象になり続け、母集団が変動しない。
+    # Piscine進行中: PISCINE_END基準の直近ACTIVE_DAYS_THRESHOLD日間に1h以上来た学生
+    # Piscine終了後: 全ピシン期間（PISCINE_START〜PISCINE_END）に1h以上来た学生
+    #   → 最終週だけでなくピシン全体で活動した学生を漏れなく母集団に含める
     reference_time = PISCINE_END
-    seven_days_ago = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD)).strftime("%Y-%m-%d")
+    if now >= PISCINE_END:
+        # ピシン終了後: 期間全体（全26日）を対象
+        window_start = PISCINE_START.strftime("%Y-%m-%d")
+        window_label = f"full piscine ({PISCINE_START.strftime('%m/%d')}〜{(PISCINE_END - timedelta(days=1)).strftime('%m/%d')})"
+    else:
+        # ピシン進行中: 直近7日間を対象（ローリングウィンドウ）
+        window_start = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD)).strftime("%Y-%m-%d")
+        window_label = f"last {ACTIVE_DAYS_THRESHOLD}d from {reference_time.strftime('%Y-%m-%d')}"
     active_logins = set()
     for login, s in students.items():
         daily = s.get("daily", [])
-        if any(d["date"] >= seven_days_ago and d["hours"] >= ACTIVE_HOURS_THRESHOLD for d in daily):
+        if any(d["date"] >= window_start and d["hours"] >= ACTIVE_HOURS_THRESHOLD for d in daily):
             active_logins.add(login)
-    print(f"  Active (ref={reference_time.strftime('%Y-%m-%d')}, last {ACTIVE_DAYS_THRESHOLD}d, {ACTIVE_HOURS_THRESHOLD}h+): {len(active_logins)} students")
+    print(f"  Active ({window_label}, {ACTIVE_HOURS_THRESHOLD}h+): {len(active_logins)} students")
 
     # レベル偏差値: アクティブ学生（level > 0）を母集団
     active_levels = [s["level"] for login, s in students.items()
