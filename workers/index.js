@@ -478,7 +478,8 @@ async function handleKvUpload(request, env) {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+    console.error('KV upload error:', e);
+    return new Response(JSON.stringify({ error: 'Internal Server Error', detail: e?.message || String(e) }), {
       status: 500,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });

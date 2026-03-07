@@ -68,7 +68,7 @@ ACTIVE_DAYS_THRESHOLD  = 7    # 直近何日間を見るか
 ACTIVE_HOURS_THRESHOLD = 1.0  # 何時間以上来たら「アクティブ」とみなすか
 
 
-def upload_to_kv(payload):
+def upload_to_kv(payload, max_retries=3):
     """Worker API 経由でデータを Cloudflare KV にアップロードする。
 
     payload 例:
@@ -76,17 +76,48 @@ def upload_to_kv(payload):
       { "type": "user", "login": "xxx", "data": {...} }  → data/{login}.json 相当
 
     WORKER_SECRET が未設定の場合はスキップ（ローカルデバッグ用）。
+    5xx エラーの場合は最大 max_retries 回リトライする（指数バックオフ）。
     """
     if not WORKER_SECRET:
         print("  [SKIP] WORKER_SECRET not set, skipping KV upload")
         return
-    resp = requests.post(
-        f"{WORKER_URL}/api/kv/upload",
-        json=payload,
-        headers={"Authorization": f"Bearer {WORKER_SECRET}"},
-        timeout=30,
-    )
-    resp.raise_for_status()
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(
+                f"{WORKER_URL}/api/kv/upload",
+                json=payload,
+                headers={"Authorization": f"Bearer {WORKER_SECRET}"},
+                timeout=30,
+            )
+            if not resp.ok:
+                # エラー詳細をログに出力（Workerが返したエラーメッセージ）
+                try:
+                    err_body = resp.json()
+                    err_detail = err_body.get("detail", err_body.get("error", ""))
+                except Exception:
+                    err_detail = resp.text[:300]
+                login_hint = payload.get("login", payload.get("type", "?"))
+                if resp.status_code >= 500 and attempt < max_retries - 1:
+                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    print(f"  [WARN] KV {resp.status_code} for {login_hint}: {err_detail} → retry in {wait}s")
+                    time.sleep(wait)
+                    last_err = requests.HTTPError(f"{resp.status_code}: {err_detail}", response=resp)
+                    continue
+                else:
+                    print(f"  [ERROR] KV {resp.status_code} for {login_hint}: {err_detail}")
+                    resp.raise_for_status()
+            return  # 成功
+        except requests.exceptions.Timeout:
+            wait = 2 ** attempt
+            print(f"  [WARN] KV upload timeout (attempt {attempt+1}) → retry in {wait}s")
+            time.sleep(wait)
+            last_err = Exception("Timeout")
+        except requests.HTTPError:
+            raise  # 既にログ済みなので再raiseのみ
+        except Exception as e:
+            raise
+    raise last_err or Exception("KV upload failed after retries")
 
 
 def get_token():
@@ -396,11 +427,22 @@ def main():
 
             time.sleep(0.3)  # locations_stats の後
 
-            # --- プロジェクト取得 ---
+            # --- プロジェクト取得（429の場合は1回リトライ）---
             try:
-                projects_raw = api_get(token, f"/v2/users/{login}/projects_users", {
-                    "page[size]": 50,
-                })
+                try:
+                    projects_raw = api_get(token, f"/v2/users/{login}/projects_users", {
+                        "page[size]": 50,
+                    })
+                except Exception as proj_e:
+                    # 429 Too Many Requests → 10秒待ってリトライ
+                    if "429" in str(proj_e):
+                        print(f"  [WARN] {login} projects 429, retry in 10s...")
+                        time.sleep(10)
+                        projects_raw = api_get(token, f"/v2/users/{login}/projects_users", {
+                            "page[size]": 50,
+                        })
+                    else:
+                        raise
                 projects = []
                 for p in projects_raw:
                     proj_name = p.get("project", {}).get("name", "")
