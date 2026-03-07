@@ -1826,7 +1826,7 @@ function renderFailAnalysisTab() {
           const pct = Math.min(absR / 0.8 * 100, 100);
           const cl = corrLabel(c.r);
           return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-            <span style="min-width:150px;font-size:14px;color:var(--text);white-space:nowrap">${c.icon} ${c.label}</span>
+            <span style="width:200px;flex-shrink:0;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.icon} ${c.label}</span>
             <div style="flex:1;height:24px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden;position:relative">
               <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${cl.bg},${cl.color});border-radius:6px"></div>
             </div>
