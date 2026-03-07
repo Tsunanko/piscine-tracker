@@ -271,12 +271,10 @@ def main():
     else:
         print(f"  [INFO] No missing graduates (join_cutoff={join_cutoff})")
 
-    # Piscine生の中で42cursusに移行した人数を確認（カード表示あり分）
+    # Piscine生（147人）の中で42cursusに移行した人数を確認
     piscine_graduates = graduated_logins & set(students.keys())
-    # 合計合格数 = piscine cursus在籍中の合格者 + cursus削除済み合格者
-    total_graduates = len(piscine_graduates) + len(missing_graduate_logins)
-    results_announced = total_graduates > 0
-    print(f"  Piscine graduates (in 42cursus): {total_graduates} ({len(piscine_graduates)} with data + {len(missing_graduate_logins)} data deleted)")
+    results_announced = len(piscine_graduates) > 0
+    print(f"  Piscine graduates (in 42cursus): {len(piscine_graduates)}")
     print(f"  Results announced: {results_announced}")
 
     # 2. アクティブロケーション取得
@@ -551,6 +549,12 @@ def main():
             # fetch失敗をNoneでマーク（0と区別する）
             students[login]["total_hours"] = None
             students[login]["fetch_failed"] = True
+            # ★ piscine_result はAPIエラーと無関係（graduated_logins判定は常に有効）
+            #   ここで設定しないと合格者がpassed_countに入らなくなるバグを防ぐ
+            if results_announced:
+                students[login]["piscine_result"] = "passed" if login in graduated_logins else "failed"
+            else:
+                students[login]["piscine_result"] = None
             # リトライは1回だけ実施
             time.sleep(2)
             try:
@@ -706,15 +710,14 @@ def main():
     online.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
     offline.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
 
-    # 合否集計
-    # missing_graduate_logins: piscine cursusから削除された合格者（カード非表示だがカウントする）
-    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed") + len(missing_graduate_logins)
+    # 合否集計（147人の piscine cursus 在籍者のみ対象）
+    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed")
     failed_count = sum(1 for s in all_students if s.get("piscine_result") == "failed")
 
     dashboard = {
         "online": online,
         "offline": offline,
-        "total_students": len(all_students) + len(missing_graduate_logins),  # カード非表示の合格者も含む実人数
+        "total_students": len(all_students),  # piscine cursus在籍の147人
         "total_online": len(online),
         "active_count": len(active_logins),          # 偏差値計算の母集団人数
         "deviation_base": {                           # 偏差値計算条件（stats.html表示用）
