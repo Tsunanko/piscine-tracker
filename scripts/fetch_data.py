@@ -267,9 +267,9 @@ def main():
         if begin_at >= join_cutoff:
             missing_graduate_logins.add(login)
     if missing_graduate_logins:
-        print(f"  [INFO] {len(missing_graduate_logins)} graduates with deleted piscine cursus (counted in passed_count only): {sorted(missing_graduate_logins)}")
+        print(f"  [INFO] {len(missing_graduate_logins)} cursus_42 entries with begin_at>={join_cutoff} NOT in piscine cursus (treated as different cohort, excluded): {sorted(missing_graduate_logins)}")
     else:
-        print(f"  [INFO] No missing graduates (join_cutoff={join_cutoff})")
+        print(f"  [INFO] No such entries (join_cutoff={join_cutoff})")
 
     # Piscine生（147人）の中で42cursusに移行した人数を確認
     piscine_graduates = graduated_logins & set(students.keys())
