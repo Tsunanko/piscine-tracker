@@ -554,6 +554,32 @@ def main():
             avg_interested  = _avg(interested_scores)    # 興味・関心（0-4）
             avg_punctuality = _avg(punctuality_scores)   # 時間厳守（0-4）
 
+            time.sleep(0.3)  # scale_teams の後
+
+            # --- イベント参加数取得 ---
+            events_attended = 0
+            try:
+                events_raw = api_get(token, f"/v2/users/{login}/events_users", {
+                    "page[size]": 100,
+                    "range[created_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
+                })
+                events_attended = len(events_raw)
+            except Exception as e:
+                if "429" in str(e):
+                    print(f"  [WARN] {login} events 429, retry in 10s...")
+                    time.sleep(10)
+                    try:
+                        events_raw = api_get(token, f"/v2/users/{login}/events_users", {
+                            "page[size]": 100,
+                            "range[created_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
+                        })
+                        events_attended = len(events_raw)
+                    except Exception as e2:
+                        print(f"  [WARN] {login} events retry failed: {e2}")
+                else:
+                    print(f"  [WARN] {login} events failed: {e}")
+            students[login]["events_attended"] = events_attended
+
             # Piscine合否判定
             # results_announced=True の場合のみ合否を確定する（未発表の場合は None）
             if results_announced:
@@ -593,6 +619,7 @@ def main():
                 "avg_rigorous":    avg_rigorous,     # 厳密さ（0-4）
                 "avg_interested":  avg_interested,   # 興味・関心（0-4）
                 "avg_punctuality": avg_punctuality,  # 時間厳守（0-4）
+                "events_attended": events_attended,   # Piscine期間中のイベント参加数
                 "daily": daily,
                 "projects": projects,
                 "piscine_result": piscine_result,  # "passed" | "failed" | null
@@ -626,7 +653,7 @@ def main():
 
         if (i + 1) % 20 == 0 or (i + 1) == len(login_list):
             print(f"  {i + 1}/{len(login_list)} done")
-        time.sleep(0.3)  # scale_teams の後（ループ末尾）
+        time.sleep(0.3)  # events_users の後（ループ末尾）
 
     # 4. 偏差値計算（ポスト処理）
     print("\n[4] Calculating deviation scores...")
@@ -760,6 +787,7 @@ def main():
             "rush_attempted": None if failed else s.get("rush_attempted", 0),
             "bsq_completed":  None if failed else s.get("bsq_completed", 0),
             "bsq_attempted":  None if failed else s.get("bsq_attempted", 0),
+            "events_attended": None if failed else s.get("events_attended", 0),
             "c_completed":    None if failed else s.get("c_completed", 0),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
