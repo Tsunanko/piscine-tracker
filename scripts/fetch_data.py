@@ -417,11 +417,16 @@ def main():
 
             time.sleep(0.3)  # projects_users の後
 
-            # --- scale_teams でレビュー回数・フラグ・フィードバック取得 ---
+            # --- scale_teams でレビュー回数・フラグ・評価スコア取得 ---
             review_given         = 0  # 評価者として実施したレビュー数
             outstanding_received = 0  # 自分のプロジェクトが "Outstanding project" と評価された回数
             cheat_received       = 0  # 自分のプロジェクトに "Cheat" フラグが付いた回数
-            feedback_texts       = [] # 評価者として受け取ったフィードバックテキスト一覧
+            # 被評価者から評価者への4項目スコア（Interested/Nice/Punctuality/Rigorous）
+            rating_scores      = []   # 総合満足度（1-5）
+            nice_scores        = []   # 感じの良さ（0-4）
+            rigorous_scores    = []   # 厳密さ（0-4）
+            interested_scores  = []   # 興味・関心（0-4）
+            punctuality_scores = []   # 時間厳守（0-4）
             try:
                 scale_teams_raw = api_get(token, f"/v2/users/{login}/scale_teams", {
                     "page[size]": 100,
@@ -433,14 +438,26 @@ def main():
                     corrector_login  = team.get("corrector", {}).get("login", "")
                     corrected_logins = [c.get("login", "") for c in team.get("correcteds", [])]
                     flag_name        = (team.get("flag") or {}).get("name", "")
-                    feedback_text    = (team.get("feedback") or "").strip()
 
                     if corrector_login == login:
-                        # このユーザーが評価者 → レビュー回数カウント
+                        # このユーザーが評価者 → レビュー回数 & 評価スコアを収集
                         review_given += 1
-                        # 被評価者から評価者への感謝/評価テキストを収集
-                        if feedback_text:
-                            feedback_texts.append(feedback_text)
+                        for fb in (team.get("feedbacks") or []):
+                            r = fb.get("rating")
+                            if r is not None:
+                                rating_scores.append(r)
+                            for detail in (fb.get("feedback_details") or []):
+                                kind = detail.get("kind", "")
+                                rate = detail.get("rate")
+                                if rate is not None:
+                                    if kind == "nice":
+                                        nice_scores.append(rate)
+                                    elif kind == "rigorous":
+                                        rigorous_scores.append(rate)
+                                    elif kind == "interested":
+                                        interested_scores.append(rate)
+                                    elif kind == "punctuality":
+                                        punctuality_scores.append(rate)
 
                     if login in corrected_logins:
                         # このユーザーが被評価者 → 自分の作品へのフラグを集計
@@ -452,12 +469,14 @@ def main():
             except Exception as e:
                 print(f"  [WARN] {login} scale_teams failed: {e}")
 
-            # フィードバック集計
-            feedback_count      = len(feedback_texts)
-            feedback_avg_length = (
-                round(sum(len(t) for t in feedback_texts) / feedback_count, 1)
-                if feedback_count > 0 else 0.0
-            )
+            # 評価スコア平均（レビューを受けていない場合は None）
+            def _avg(lst):
+                return round(sum(lst) / len(lst), 2) if lst else None
+            avg_rating      = _avg(rating_scores)       # 総合満足度（1-5）
+            avg_nice        = _avg(nice_scores)          # 感じの良さ（0-4）
+            avg_rigorous    = _avg(rigorous_scores)      # 厳密さ（0-4）
+            avg_interested  = _avg(interested_scores)    # 興味・関心（0-4）
+            avg_punctuality = _avg(punctuality_scores)   # 時間厳守（0-4）
 
             # Piscine合否判定
             # results_announced=True の場合のみ合否を確定する（未発表の場合は None）
@@ -493,8 +512,11 @@ def main():
                 "review_given": review_given,
                 "outstanding_received": outstanding_received,  # Outstanding flagをもらった回数
                 "cheat_received": cheat_received,              # Cheatフラグをもらった回数
-                "feedback_count": feedback_count,              # 評価者として受け取ったFBテキスト数
-                "feedback_avg_length": feedback_avg_length,    # FBテキスト平均文字数（丁寧さの代理指標）
+                "avg_rating":      avg_rating,      # 総合満足度（1-5）
+                "avg_nice":        avg_nice,         # 感じの良さ（0-4）
+                "avg_rigorous":    avg_rigorous,     # 厳密さ（0-4）
+                "avg_interested":  avg_interested,   # 興味・関心（0-4）
+                "avg_punctuality": avg_punctuality,  # 時間厳守（0-4）
                 "daily": daily,
                 "projects": projects,
                 "piscine_result": piscine_result,  # "passed" | "failed" | null
@@ -593,8 +615,11 @@ def main():
         students[login]["review_given"]           = reviews
         students[login]["outstanding_received"]   = uj.get("outstanding_received", 0)
         students[login]["cheat_received"]         = uj.get("cheat_received", 0)
-        students[login]["feedback_count"]         = uj.get("feedback_count", 0)
-        students[login]["feedback_avg_length"]    = uj.get("feedback_avg_length", 0.0)
+        students[login]["avg_rating"]             = uj.get("avg_rating")
+        students[login]["avg_nice"]               = uj.get("avg_nice")
+        students[login]["avg_rigorous"]           = uj.get("avg_rigorous")
+        students[login]["avg_interested"]         = uj.get("avg_interested")
+        students[login]["avg_punctuality"]        = uj.get("avg_punctuality")
 
     # 5. 個人JSONを Cloudflare KV にアップロード
     print(f"\n[5] Uploading {len(user_jsons)} per-user JSON to KV...")
@@ -634,8 +659,11 @@ def main():
             "review_given": None if failed else s.get("review_given", 0),
             "outstanding_received": None if failed else s.get("outstanding_received", 0),
             "cheat_received":       None if failed else s.get("cheat_received", 0),
-            "feedback_count":       None if failed else s.get("feedback_count", 0),
-            "feedback_avg_length":  None if failed else s.get("feedback_avg_length", 0.0),
+            "avg_rating":           None if failed else s.get("avg_rating"),
+            "avg_nice":             None if failed else s.get("avg_nice"),
+            "avg_rigorous":         None if failed else s.get("avg_rigorous"),
+            "avg_interested":       None if failed else s.get("avg_interested"),
+            "avg_punctuality":      None if failed else s.get("avg_punctuality"),
             "exam_score": None if failed else s.get("exam_score"),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
