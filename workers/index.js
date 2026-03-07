@@ -473,6 +473,15 @@ async function handleKvUpload(request, env) {
       });
     }
 
+    // users_batch: 全ユーザーJSONを1つのKVキーにまとめて保存（書き込み回数削減用）
+    // { "type": "users_batch", "data": { "login1": {...}, "login2": {...} } }
+    if (type === 'users_batch' && data && typeof data === 'object') {
+      await env.PISCINE_DATA.put('data:users:all', JSON.stringify(data));
+      return new Response(JSON.stringify({ ok: true, count: Object.keys(data).length }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Bad Request' }), {
       status: 400,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -513,6 +522,11 @@ async function handleGetData(request, env) {
 
 /**
  * 個人用 data/{login}.json を返す（認証必須）
+ *
+ * 取得優先順位:
+ *   1. data:user:{login}  （個別キー、旧フォーマット）
+ *   2. data:users:all     （バッチキー、新フォーマット）
+ * どちらかに存在すれば返す。
  */
 async function handleGetUserData(request, env, login) {
   const user = await checkDataAuth(request);
@@ -530,15 +544,29 @@ async function handleGetUserData(request, env, login) {
     });
   }
 
-  const val = await env.PISCINE_DATA.get(`data:user:${login}`);
-  if (!val) {
-    return new Response(JSON.stringify({ error: 'User data not found' }), {
-      status: 404,
+  // 1. 個別キーを先に試す（後方互換）
+  const individual = await env.PISCINE_DATA.get(`data:user:${login}`);
+  if (individual) {
+    return new Response(individual, {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
-  return new Response(val, {
+  // 2. バッチキーから取得（新フォーマット）
+  const batchVal = await env.PISCINE_DATA.get('data:users:all');
+  if (batchVal) {
+    try {
+      const batch = JSON.parse(batchVal);
+      if (batch[login]) {
+        return new Response(JSON.stringify(batch[login]), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+    } catch {}
+  }
+
+  return new Response(JSON.stringify({ error: 'User data not found' }), {
+    status: 404,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 }
