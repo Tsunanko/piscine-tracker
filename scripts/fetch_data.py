@@ -257,10 +257,18 @@ def main():
     # ── 合格したがpiscine cursusから消えた学生を復元 ──────────────────────
     # 42 APIでは、ピシン合格後に本科(cursus_42)へ移行するとpiscine cursusエントリが
     # 削除される場合がある。そのまま放置すると passed_count が過少計上になる。
-    # 対策: graduated_loginsにいるがstudentsに存在しない学生を最低限のデータで補填する。
-    missing_graduates = graduated_logins - set(students.keys())
+    # 対策: 「このpiscine期間中に42cursusへ入学した」学生に限定して補填する。
+    # ※ cursus_42の begin_at がPISCINE_START以降のものだけが今回のpiscine卒業生
+    # ※ 歴代卒業生（1600人超）を誤追加しないよう begin_at フィルタが必須
+    join_cutoff = PISCINE_START.strftime("%Y-%m-%d")
+    missing_graduates = set()
+    for login in (graduated_logins - set(students.keys())):
+        item = cursus42_by_login.get(login, {})
+        begin_at = (item.get("begin_at") or "")[:10]  # YYYY-MM-DD
+        if begin_at >= join_cutoff:
+            missing_graduates.add(login)
     if missing_graduates:
-        print(f"  [INFO] Restoring {len(missing_graduates)} graduates missing from piscine cursus:")
+        print(f"  [INFO] Restoring {len(missing_graduates)} graduates missing from piscine cursus (begin_at >= {join_cutoff}):")
         for login in sorted(missing_graduates):
             item = cursus42_by_login.get(login, {})
             user = item.get("user", {})
@@ -279,6 +287,8 @@ def main():
                 "daily": [],
             }
             print(f"    + {login}")
+    else:
+        print(f"  [INFO] No missing graduates to restore (join_cutoff={join_cutoff})")
 
     # Piscine生の中で42cursusに移行した人数を確認
     piscine_graduates = graduated_logins & set(students.keys())
