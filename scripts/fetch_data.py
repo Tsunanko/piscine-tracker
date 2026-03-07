@@ -476,6 +476,21 @@ def main():
             exam_project = next((p for p in projects if "final exam" in p["name"].lower()), None)
             students[login]["exam_score"] = exam_project["final_mark"] if exam_project else None
 
+            # rush/bsq/Cシリーズ プロジェクト完了数の集計
+            # rush: "Rush 00", "Rush 01", "Rush 02" 等のペア課題
+            # bsq: "BSQ" チーム課題
+            # c_projects: "C 00" 〜 "C 13" 個人課題
+            rush_completed = sum(1 for p in projects if "rush" in p["name"].lower() and p.get("validated"))
+            rush_attempted = sum(1 for p in projects if "rush" in p["name"].lower() and p.get("status") in ("finished", "waiting_for_correction", "in_progress"))
+            bsq_completed = 1 if any(p["name"].lower() == "bsq" and p.get("validated") for p in projects) else 0
+            bsq_attempted = 1 if any(p["name"].lower() == "bsq" and p.get("status") in ("finished", "waiting_for_correction", "in_progress") for p in projects) else 0
+            c_completed = sum(1 for p in projects if re.match(r"^c\s*\d+$", p["name"].lower()) and p.get("validated"))
+            students[login]["rush_completed"] = rush_completed
+            students[login]["rush_attempted"] = rush_attempted
+            students[login]["bsq_completed"] = bsq_completed
+            students[login]["bsq_attempted"] = bsq_attempted
+            students[login]["c_completed"] = c_completed
+
             time.sleep(0.3)  # projects_users の後
 
             # --- scale_teams でレビュー回数・フラグ・評価スコア取得 ---
@@ -741,6 +756,11 @@ def main():
             "avg_interested":       None if failed else s.get("avg_interested"),
             "avg_punctuality":      None if failed else s.get("avg_punctuality"),
             "exam_score": None if failed else s.get("exam_score"),
+            "rush_completed": None if failed else s.get("rush_completed", 0),
+            "rush_attempted": None if failed else s.get("rush_attempted", 0),
+            "bsq_completed":  None if failed else s.get("bsq_completed", 0),
+            "bsq_attempted":  None if failed else s.get("bsq_attempted", 0),
+            "c_completed":    None if failed else s.get("c_completed", 0),
             "is_active": login in active_logins,  # 直近7日1h以上来ているか（偏差値母集団フラグ）
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,

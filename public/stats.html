@@ -1515,6 +1515,9 @@ function renderFailAnalysisTab() {
     { key: 'review_given',    label: 'レビュー回数',       icon: '👥', ...pbCorr('review_given') },
     { key: 'active_days',     label: 'アクティブ日数',     icon: '📅', ...pbCorr('active_days',
       s => s.active_days != null && s.active_days > 0 ? s.active_days : null) },
+    { key: 'rush_completed',  label: 'Rush完了数',        icon: '🏃', ...pbCorr('rush_completed') },
+    { key: 'bsq_completed',   label: 'BSQ完了',           icon: '🧩', ...pbCorr('bsq_completed') },
+    { key: 'c_completed',     label: 'Cシリーズ完了数',    icon: '💻', ...pbCorr('c_completed') },
     { key: 'avg_rating',      label: '評価者満足度',       icon: '⭐', ...pbCorr('avg_rating') },
     { key: 'avg_rigorous',    label: 'Rigorous（厳密さ）', icon: '🔍', ...pbCorr('avg_rigorous') },
     { key: 'avg_interested',  label: 'Interested（関心）', icon: '💡', ...pbCorr('avg_interested') },
@@ -1914,6 +1917,106 @@ function renderFailAnalysisTab() {
         </div>
       </div>
     </div>
+
+    <!-- Rush / BSQ 詳細分析 -->
+    ${(() => {
+      const rushR = corrResults.find(c => c.key === 'rush_completed');
+      const bsqR  = corrResults.find(c => c.key === 'bsq_completed');
+      const cR    = corrResults.find(c => c.key === 'c_completed');
+      if (!rushR && !bsqR) return '';
+      const passRate = (group) => {
+        if (group.length === 0) return null;
+        const p = group.filter(s => passes[s.login] === 'pass').length;
+        return { rate: (p / group.length * 100).toFixed(1), passed: p, total: group.length };
+      };
+      const rushDid = allStudentsWithResult.filter(s => s.rush_completed != null && s.rush_completed > 0);
+      const rushNot = allStudentsWithResult.filter(s => s.rush_completed != null && s.rush_completed === 0);
+      const bsqDid  = allStudentsWithResult.filter(s => s.bsq_completed != null && s.bsq_completed > 0);
+      const bsqNot  = allStudentsWithResult.filter(s => s.bsq_completed != null && s.bsq_completed === 0);
+      const rushDidRate = passRate(rushDid); const rushNotRate = passRate(rushNot);
+      const bsqDidRate = passRate(bsqDid);  const bsqNotRate = passRate(bsqNot);
+      const avgLevel = (group) => {
+        const vals = group.map(s => s.level).filter(v => v != null && v > 0);
+        return vals.length > 0 ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : '—';
+      };
+      const avgReview = (group) => {
+        const vals = group.map(s => s.review_given).filter(v => v != null);
+        return vals.length > 0 ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : '—';
+      };
+      return `
+      <div style="margin-bottom:20px">
+        <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
+          🏃 Rush / BSQ 参加の影響分析
+        </div>
+        <div style="color:var(--text-dim);font-size:13px;margin-bottom:10px;line-height:1.8">
+          選択制のチーム課題（Rush/BSQ）をやった人 vs やらなかった人の合格率・レベル・レビュー回数を比較。<br>
+          <strong style="color:var(--text)">「やるべきか？」の判断材料</strong>になる。
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px">
+          <thead>
+            <tr style="background:rgba(108,92,231,0.1)">
+              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">グループ</th>
+              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">人数</th>
+              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">合格率</th>
+              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">平均Level</th>
+              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">平均Review数</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+              <td style="padding:8px 10px;color:var(--green)">🏃 Rush完了あり</td>
+              <td style="text-align:center">${rushDidRate?.total ?? '—'}</td>
+              <td style="text-align:center;font-weight:700;color:var(--green)">${rushDidRate?.rate ?? '—'}%</td>
+              <td style="text-align:center">${avgLevel(rushDid)}</td>
+              <td style="text-align:center">${avgReview(rushDid)}</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+              <td style="padding:8px 10px;color:var(--text-dim)">🏃 Rush未完了</td>
+              <td style="text-align:center">${rushNotRate?.total ?? '—'}</td>
+              <td style="text-align:center;font-weight:700;color:var(--text-dim)">${rushNotRate?.rate ?? '—'}%</td>
+              <td style="text-align:center">${avgLevel(rushNot)}</td>
+              <td style="text-align:center">${avgReview(rushNot)}</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+              <td style="padding:8px 10px;color:var(--green)">🧩 BSQ完了</td>
+              <td style="text-align:center">${bsqDidRate?.total ?? '—'}</td>
+              <td style="text-align:center;font-weight:700;color:var(--green)">${bsqDidRate?.rate ?? '—'}%</td>
+              <td style="text-align:center">${avgLevel(bsqDid)}</td>
+              <td style="text-align:center">${avgReview(bsqDid)}</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+              <td style="padding:8px 10px;color:var(--text-dim)">🧩 BSQ未完了</td>
+              <td style="text-align:center">${bsqNotRate?.total ?? '—'}</td>
+              <td style="text-align:center;font-weight:700;color:var(--text-dim)">${bsqNotRate?.rate ?? '—'}%</td>
+              <td style="text-align:center">${avgLevel(bsqNot)}</td>
+              <td style="text-align:center">${avgReview(bsqNot)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;color:var(--text-dim);font-size:12px;line-height:1.8">
+          ${(() => {
+            const insights = [];
+            if (rushDidRate && rushNotRate) {
+              const diff = parseFloat(rushDidRate.rate) - parseFloat(rushNotRate.rate);
+              if (diff > 10) insights.push('<span>📌 Rush完了者の合格率は未完了者より <strong style="color:var(--green)">+' + diff.toFixed(1) + 'pt高い</strong>。レビュー機会の増加やペア学習の効果が示唆される。</span>');
+              else if (diff < -10) insights.push('<span>📌 Rush完了者の合格率は未完了者より <strong style="color:#ff7675">' + diff.toFixed(1) + 'pt低い</strong>。Rushに時間を取られC系課題が遅れた可能性。</span>');
+              else insights.push('<span>📌 Rush完了の有無で合格率に大きな差はない（差: ' + (diff > 0 ? '+' : '') + diff.toFixed(1) + 'pt）。</span>');
+            }
+            if (bsqDidRate && bsqNotRate) {
+              const diff = parseFloat(bsqDidRate.rate) - parseFloat(bsqNotRate.rate);
+              if (diff > 10) insights.push('<span>📌 BSQ完了者の合格率は未完了者より <strong style="color:var(--green)">+' + diff.toFixed(1) + 'pt高い</strong>。</span>');
+              else if (diff < -10) insights.push('<span>📌 BSQ完了者の合格率は未完了者より <strong style="color:#ff7675">' + diff.toFixed(1) + 'pt低い</strong>。</span>');
+              else insights.push('<span>📌 BSQ完了の有無で合格率に大きな差はない（差: ' + (diff > 0 ? '+' : '') + diff.toFixed(1) + 'pt）。</span>');
+            }
+            if (rushR) insights.push('<span>🏃 Rush完了数の相関: r=' + rushR.r.toFixed(3) + '</span>');
+            if (bsqR)  insights.push('<span>🧩 BSQ完了の相関: r=' + bsqR.r.toFixed(3) + '</span>');
+            if (cR)    insights.push('<span>💻 Cシリーズ完了数の相関: r=' + cR.r.toFixed(3) + '</span>');
+            insights.push('<span>⚠️ 注意: 相関は因果ではない。「Rushをやったから受かった」ではなく「受かるような人がRushもやる傾向」の可能性もある。</span>');
+            return insights.join('<br>');
+          })()}
+        </div>
+      </div>`;
+    })()}
 
     <!-- 合否予測モデル & Megatoron推定 -->
     ${predData.length > 0 ? `
