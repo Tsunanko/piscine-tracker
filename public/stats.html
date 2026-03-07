@@ -1518,6 +1518,7 @@ function renderFailAnalysisTab() {
     { key: 'rush_completed',  label: 'Rush完了数',        icon: '🏃', ...pbCorr('rush_completed') },
     { key: 'bsq_completed',   label: 'BSQ完了',           icon: '🧩', ...pbCorr('bsq_completed') },
     { key: 'c_completed',     label: 'Cシリーズ完了数',    icon: '💻', ...pbCorr('c_completed') },
+    { key: 'events_attended', label: 'イベント参加数',     icon: '🎪', ...pbCorr('events_attended') },
     { key: 'avg_rating',      label: '評価者満足度',       icon: '⭐', ...pbCorr('avg_rating') },
     { key: 'avg_rigorous',    label: 'Rigorous（厳密さ）', icon: '🔍', ...pbCorr('avg_rigorous') },
     { key: 'avg_interested',  label: 'Interested（関心）', icon: '💡', ...pbCorr('avg_interested') },
@@ -1906,6 +1907,10 @@ function renderFailAnalysisTab() {
           <div style="margin-top:8px">
             <span style="color:var(--text)">👥 レビュー回数</span> — Piscine中に行った<strong style="color:var(--text)">ピア評価の累計回数</strong>。<br>
             <span style="font-size:12px">単に時間をかけるより、他者のコードを評価・対話する学習の方が相関が高い可能性を示す。</span>
+          </div>
+          <div style="margin-top:8px">
+            <span style="color:var(--text)">🎪 イベント参加数</span> — Piscine期間中に参加した<strong style="color:var(--text)">学校イベント数</strong>。<br>
+            <span style="font-size:12px">学校コミュニティへの積極性の指標。イベント参加 → 人脈形成 → Megatoron投票での認知向上、という経路も考えられる。</span>
           </div>
           <div style="margin-top:8px">
             <span style="color:var(--text)">⭐ 評価者満足度 / 🔍🕐😊💡 4項目スコア</span> — レビューを受けた側が評価者に付ける<strong style="color:var(--text)">4段階評価</strong>の平均。<br>
