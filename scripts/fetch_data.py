@@ -254,46 +254,29 @@ def main():
     except Exception as e:
         print(f"  [WARN] Failed to fetch 42cursus students: {e}")
 
-    # ── 合格したがpiscine cursusから消えた学生を復元 ──────────────────────
+    # ── 合格したがpiscine cursusから消えた学生のカウント ──────────────────
     # 42 APIでは、ピシン合格後に本科(cursus_42)へ移行するとpiscine cursusエントリが
-    # 削除される場合がある。そのまま放置すると passed_count が過少計上になる。
-    # 対策: 「このpiscine期間中に42cursusへ入学した」学生に限定して補填する。
-    # ※ cursus_42の begin_at がPISCINE_START以降のものだけが今回のpiscine卒業生
-    # ※ 歴代卒業生（1600人超）を誤追加しないよう begin_at フィルタが必須
+    # 削除される場合がある。passed_count が過少計上になるため別途カウントする。
+    # ※ studentsには追加しない → 0h/Lv0で合格表示という誤解を招くカードを防ぐ
+    # ※ begin_at フィルタでこのpiscine期間中に本科入学した学生のみを対象にする
     join_cutoff = PISCINE_START.strftime("%Y-%m-%d")
-    missing_graduates = set()
+    missing_graduate_logins = set()
     for login in (graduated_logins - set(students.keys())):
         item = cursus42_by_login.get(login, {})
         begin_at = (item.get("begin_at") or "")[:10]  # YYYY-MM-DD
         if begin_at >= join_cutoff:
-            missing_graduates.add(login)
-    if missing_graduates:
-        print(f"  [INFO] Restoring {len(missing_graduates)} graduates missing from piscine cursus (begin_at >= {join_cutoff}):")
-        for login in sorted(missing_graduates):
-            item = cursus42_by_login.get(login, {})
-            user = item.get("user", {})
-            image = user.get("image", {})
-            image_small = ""
-            if isinstance(image, dict):
-                image_small = (image.get("versions") or {}).get("small") or ""
-            elif isinstance(image, str):
-                image_small = image
-            students[login] = {
-                "login": login,
-                "display_name": user.get("usual_full_name") or user.get("displayname", login),
-                "image_small": image_small,
-                "total_hours": 0,
-                "level": round(item.get("level", 0), 2),
-                "daily": [],
-            }
-            print(f"    + {login}")
+            missing_graduate_logins.add(login)
+    if missing_graduate_logins:
+        print(f"  [INFO] {len(missing_graduate_logins)} graduates with deleted piscine cursus (counted in passed_count only): {sorted(missing_graduate_logins)}")
     else:
-        print(f"  [INFO] No missing graduates to restore (join_cutoff={join_cutoff})")
+        print(f"  [INFO] No missing graduates (join_cutoff={join_cutoff})")
 
-    # Piscine生の中で42cursusに移行した人数を確認
+    # Piscine生の中で42cursusに移行した人数を確認（カード表示あり分）
     piscine_graduates = graduated_logins & set(students.keys())
-    results_announced = len(piscine_graduates) > 0
-    print(f"  Piscine graduates (in 42cursus): {len(piscine_graduates)}")
+    # 合計合格数 = piscine cursus在籍中の合格者 + cursus削除済み合格者
+    total_graduates = len(piscine_graduates) + len(missing_graduate_logins)
+    results_announced = total_graduates > 0
+    print(f"  Piscine graduates (in 42cursus): {total_graduates} ({len(piscine_graduates)} with data + {len(missing_graduate_logins)} data deleted)")
     print(f"  Results announced: {results_announced}")
 
     # 2. アクティブロケーション取得
@@ -724,13 +707,14 @@ def main():
     offline.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
 
     # 合否集計
-    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed")
+    # missing_graduate_logins: piscine cursusから削除された合格者（カード非表示だがカウントする）
+    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed") + len(missing_graduate_logins)
     failed_count = sum(1 for s in all_students if s.get("piscine_result") == "failed")
 
     dashboard = {
         "online": online,
         "offline": offline,
-        "total_students": len(all_students),
+        "total_students": len(all_students) + len(missing_graduate_logins),  # カード非表示の合格者も含む実人数
         "total_online": len(online),
         "active_count": len(active_logins),          # 偏差値計算の母集団人数
         "deviation_base": {                           # 偏差値計算条件（stats.html表示用）
