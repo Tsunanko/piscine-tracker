@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 public/data/*.json
 public/data.json
+public/dev-data.json
