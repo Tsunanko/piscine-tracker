@@ -1663,6 +1663,35 @@ function renderFailAnalysisTab() {
       const resultBadge = isPasser
         ? `<span style="padding:1px 7px;border-radius:10px;background:rgba(0,206,201,0.15);color:var(--green);font-size:10px;font-weight:700">合格</span>`
         : `<span style="padding:1px 7px;border-radius:10px;background:rgba(255,118,117,0.15);color:var(--red);font-size:10px;font-weight:700">不合格</span>`;
+
+      // Megatoron影響推定: 数値モデルスコア - 合否閾値
+      // gap > 0 → モデルは合格予測, gap < 0 → モデルは不合格予測
+      const ps  = predData.find(p => p.login === s.login);
+      const gap = (ps && bestTh != null) ? ps.score - bestTh : null;
+      let megaCell = `<td style="text-align:center;color:var(--text-dim)">—</td>`;
+      if (gap != null) {
+        const modelSaysPass = gap >= 0;
+        const surprise = modelSaysPass !== isPasser; // 予測と実際が違う
+        let icon, color, label, mag;
+        if (!isPasser && modelSaysPass) {
+          // 数値的には合格圏 → 不合格 → 数値外要因に引き下げられた
+          icon  = '▼'; color = '#ff7675'; mag = gap;
+          label = `<div style="font-size:9px;color:#ff7675;margin-top:1px">引き下げ</div>`;
+        } else if (isPasser && !modelSaysPass) {
+          // 数値的には不合格圏 → 合格 → 数値外要因に引き上げられた
+          icon  = '▲'; color = '#00cec9'; mag = Math.abs(gap);
+          label = `<div style="font-size:9px;color:#00cec9;margin-top:1px">引き上げ</div>`;
+        } else {
+          // 予測通り → 数値で説明できた
+          icon  = '●'; color = 'var(--text-dim)'; mag = Math.abs(gap);
+          label = `<div style="font-size:9px;color:var(--text-dim);margin-top:1px">数値通り</div>`;
+        }
+        megaCell = `<td style="text-align:center;white-space:nowrap;padding:4px 6px">
+          <div style="font-size:13px;font-weight:700;color:${color}">${icon} ${mag.toFixed(2)}</div>
+          ${label}
+        </td>`;
+      }
+
       return `<tr style="${rowBg}">
         <td style="white-space:nowrap">
           <a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
@@ -1673,6 +1702,7 @@ function renderFailAnalysisTab() {
         ${stackCell(s.total_hours,  passAvgHours,  v => v.toFixed(0)+'h',   zh)}
         ${stackCell(s.level,        passAvgLevel,  v => v.toFixed(2),        zl)}
         ${stackCell(s.review_given, passAvgReview, v => Math.round(v)+'回',  zr)}
+        ${megaCell}
       </tr>`;
     }).join('');
 
@@ -1696,6 +1726,7 @@ function renderFailAnalysisTab() {
       <div style="color:var(--green);font-weight:700">${passAvgReview != null ? Math.round(passAvgReview)+'回' : '—'}</div>
       <div style="font-size:10px;color:var(--text-dim)">±${passStdReview != null ? passStdReview.toFixed(1) : '—'}</div>
     </td>
+    <td style="text-align:center;color:var(--text-dim);font-size:11px">基準</td>
   </tr>`;
 
   // --- テーブル行（条件チェック列付き）---
@@ -1992,6 +2023,7 @@ function renderFailAnalysisTab() {
             <th style="text-align:center">時間<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
             <th style="text-align:center">Level<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
             <th style="text-align:center">レビュー数<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(差分/σ)</span></th>
+            <th style="text-align:center">数値外影響<br><span style="font-size:9px;color:var(--text-dim);font-weight:400">(Megatoron等)</span></th>
           </tr></thead>
           <tbody>
             ${passRefRow}
