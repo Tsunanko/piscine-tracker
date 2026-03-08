@@ -2151,6 +2151,168 @@ function renderFailAnalysisTab() {
           <strong style="color:var(--text)">→ BSQも「登録」が重要。完了の有無は合否に影響しない。</strong>
         </div>
 
+        <!-- Rush00/01/02 × BSQ パターン分析 -->
+        <div style="display:flex;align-items:center;gap:8px;margin:14px 0 8px">
+          <span style="color:var(--text);font-weight:600;font-size:13px">🔍 チーム課題パターン分析（Rush 00/01/02 × BSQ）</span>
+          <button id="rush-pattern-toggle" onclick="
+            const el = document.getElementById('rush-pattern-body');
+            const btn = document.getElementById('rush-pattern-toggle');
+            if (el.style.display === 'none') { el.style.display=''; btn.textContent='▼ 閉じる'; }
+            else { el.style.display='none'; btn.textContent='▶ 展開'; }
+          " style="padding:2px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:rgba(255,255,255,0.05);color:var(--text-dim);cursor:pointer">▶ 展開</button>
+        </div>
+        <div id="rush-pattern-body" style="display:none">
+          ${(() => {
+            // Rush 00/01/02 × BSQ 全パターン分析
+            const hasIndividualRush = activeS.some(s => 'rush_00_attempted' in s);
+            if (!hasIndividualRush) return '<div style="color:var(--text-dim);font-size:12px;padding:8px">個別Rushデータなし（データ更新が必要です）</div>';
+
+            // 全16パターンを生成
+            const patterns = [];
+            for (let r0 = 1; r0 >= 0; r0--) {
+              for (let r1 = 1; r1 >= 0; r1--) {
+                for (let r2 = 1; r2 >= 0; r2--) {
+                  for (let bsq = 1; bsq >= 0; bsq--) {
+                    const grp = activeS.filter(s =>
+                      (s.rush_00_attempted ?? 0) === r0 &&
+                      (s.rush_01_attempted ?? 0) === r1 &&
+                      (s.rush_02_attempted ?? 0) === r2 &&
+                      (s.bsq_attempted ?? 0) === bsq
+                    );
+                    if (grp.length === 0) continue;
+                    const total_reg = r0 + r1 + r2 + bsq;
+                    patterns.push({ r0, r1, r2, bsq, grp, pr: pr(grp), total_reg,
+                      avgC: avgV(grp,'c_completed'), avgExam: avgV(grp,'exam_score'),
+                      avgDays: avgV(grp,'active_days') });
+                  }
+                }
+              }
+            }
+            patterns.sort((a,b) => b.total_reg - a.total_reg || b.grp.length - a.grp.length);
+
+            const icon = (v) => v ? '<span style="color:var(--green)">○</span>' : '<span style="color:var(--text-dim)">✕</span>';
+            const patternLabel = (p) => {
+              if (p.total_reg === 4) return '全登録';
+              if (p.total_reg === 0) return '全未登録';
+              const skipped = [];
+              if (!p.r0) skipped.push('R00');
+              if (!p.r1) skipped.push('R01');
+              if (!p.r2) skipped.push('R02');
+              if (!p.bsq) skipped.push('BSQ');
+              if (skipped.length === 1) return skipped[0] + 'のみスキップ';
+              const regged = [];
+              if (p.r0) regged.push('R00');
+              if (p.r1) regged.push('R01');
+              if (p.r2) regged.push('R02');
+              if (p.bsq) regged.push('BSQ');
+              if (regged.length <= 2) return regged.join('+') + 'のみ登録';
+              return skipped.join('+') + 'スキップ';
+            };
+
+            // チーム課題登録数別の集計
+            const regCounts = [0,1,2,3,4].map(n => {
+              const grp = activeS.filter(s => {
+                const total = (s.rush_00_attempted??0) + (s.rush_01_attempted??0) + (s.rush_02_attempted??0) + (s.bsq_attempted??0);
+                return total === n;
+              });
+              return { n, grp, pr: pr(grp) };
+            }).filter(g => g.grp.length > 0);
+
+            // 23日以上在籍者のみ
+            const stayers = activeS.filter(s => (s.active_days ?? 0) >= 23);
+            const stayRegCounts = [0,1,2,3,4].map(n => {
+              const grp = stayers.filter(s => {
+                const total = (s.rush_00_attempted??0) + (s.rush_01_attempted??0) + (s.rush_02_attempted??0) + (s.bsq_attempted??0);
+                return total === n;
+              });
+              return { n, grp, pr: pr(grp) };
+            }).filter(g => g.grp.length > 0);
+
+            return `
+            <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px;line-height:1.7">
+              Rush 00（1週目）/ Rush 01（2週目）/ Rush 02（3週目）/ BSQ（4週目）の登録パターン別に分析。<br>
+              どのチーム課題を選択的にスキップしたかの濃淡が見える。
+            </div>
+
+            <!-- パターン別テーブル -->
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">各パターンの合格率（5人以上のみ★）</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+              <thead>
+                <tr style="background:rgba(108,92,231,0.1)">
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R00</th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R01</th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R02</th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">BSQ</th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">人数</th>
+                  <th style="padding:5px 6px;text-align:left;border-bottom:1px solid var(--border);font-size:11px">合格率</th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">平均C</th>
+                  <th style="padding:5px 6px;text-align:left;border-bottom:1px solid var(--border);font-size:11px">パターン</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${patterns.map((p, i) => {
+                  const isMajor = p.grp.length >= 5;
+                  const prevReg = i > 0 ? patterns[i-1].total_reg : p.total_reg;
+                  const borderTop = p.total_reg !== prevReg ? 'border-top:2px solid rgba(108,92,231,0.3);' : '';
+                  return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);${borderTop}${!isMajor ? 'opacity:0.5;' : ''}">
+                    <td style="padding:5px 6px;text-align:center">${icon(p.r0)}</td>
+                    <td style="padding:5px 6px;text-align:center">${icon(p.r1)}</td>
+                    <td style="padding:5px 6px;text-align:center">${icon(p.r2)}</td>
+                    <td style="padding:5px 6px;text-align:center">${icon(p.bsq)}</td>
+                    <td style="padding:5px 6px;text-align:center;font-weight:${isMajor?'700':'400'}">${p.grp.length}${isMajor?' ★':''}</td>
+                    <td style="padding:5px 6px">
+                      <div style="display:flex;align-items:center;gap:4px">
+                        <div style="width:${barW(p.pr)*0.6}%;max-width:50%;height:12px;background:${rateColor(p.pr)};border-radius:2px;min-width:2px"></div>
+                        <span style="font-weight:600;color:${rateColor(p.pr)};font-size:12px">${p.pr?.rate ?? '—'}%</span>
+                      </div>
+                    </td>
+                    <td style="padding:5px 6px;text-align:center">${p.avgC}</td>
+                    <td style="padding:5px 6px;font-size:11px;color:var(--text-dim)">${patternLabel(p)}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+
+            <!-- チーム課題登録数別サマリ -->
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin:12px 0 6px">チーム課題登録数別の合格率</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+              <thead>
+                <tr style="background:rgba(108,92,231,0.1)">
+                  <th style="padding:6px 10px;text-align:center;border-bottom:1px solid var(--border)">登録数</th>
+                  <th style="padding:6px 10px;text-align:center;border-bottom:1px solid var(--border)">全体（人数/合格率）</th>
+                  <th style="padding:6px 10px;text-align:center;border-bottom:1px solid var(--border)">23日以上在籍者のみ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${regCounts.map(g => {
+                  const stay = stayRegCounts.find(s => s.n === g.n);
+                  return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                    <td style="padding:6px 10px;text-align:center;font-weight:700">${g.n}個</td>
+                    <td style="text-align:center">
+                      <span style="color:var(--text-dim)">${g.pr?.total ?? '—'}人</span>
+                      <span style="font-weight:700;color:${rateColor(g.pr)};margin-left:6px">${g.pr?.rate ?? '—'}%</span>
+                    </td>
+                    <td style="text-align:center">
+                      ${stay && stay.grp.length > 0 ?
+                        '<span style="color:var(--text-dim)">' + (stay.pr?.total ?? '—') + '人</span>' +
+                        '<span style="font-weight:700;color:' + rateColor(stay.pr) + ';margin-left:6px">' + (stay.pr?.rate ?? '—') + '%</span>'
+                        : '—'}
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+
+            <div style="padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:6px;color:var(--text-dim);font-size:11px;line-height:1.8;margin-bottom:6px">
+              📌 <strong style="color:var(--text)">注目:</strong> 全4つ登録が最多パターンだが、合格率はRush02スキップ組と大差なし。<br>
+              📌 23日以上在籍者で比較すると、登録3個と4個の差は小さい（≈2pp）。<br>
+              📌 ただし登録2個以下は合格率が大きく下がる → <strong style="color:var(--text)">最低3つは登録すべき。</strong><br>
+              ⚠️ 少人数パターン（★なし）は統計的に不安定。参考値として参照のこと。
+            </div>
+          `;
+          })()}
+        </div>
+
         <!-- 相関比較 -->
         <div style="color:var(--text);font-weight:600;font-size:13px;margin:14px 0 8px">📈 相関の比較: 登録 vs 完了</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">
@@ -2185,17 +2347,17 @@ function renderFailAnalysisTab() {
         <div style="margin-top:14px;padding:12px 14px;background:rgba(0,206,201,0.06);border:1px solid rgba(0,206,201,0.25);border-radius:8px">
           <div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:8px">📋 チーム課題の戦略まとめ</div>
           <div style="font-size:13px;line-height:1.9;color:var(--text)">
-            <strong>① Rush・BSQは登録すべき。完了できなくても問題ない。</strong><br>
+            <strong>① Rush・BSQは登録すべき（最低3つ）。完了できなくても問題ない。</strong><br>
             <span style="color:var(--text-dim);font-size:12px;margin-left:16px">
               登録の相関（Rush r=${rushAttR?.r.toFixed(2) ?? '—'}, BSQ r=${bsqAttR?.r.toFixed(2) ?? '—'}）＞ 完了の相関。不合格ペナルティは r≈0。
             </span><br>
-            <strong>② ただしC課題が最優先。</strong><br>
+            <strong>② ただしC課題が最優先。4つ目より3つ+C集中が有効な可能性。</strong><br>
             <span style="color:var(--text-dim);font-size:12px;margin-left:16px">
-              C完了数の相関 r=${cR?.r.toFixed(2) ?? '—'} はRush登録 r=${rushAttR?.r.toFixed(2) ?? '—'} の約${cR && rushAttR ? (cR.r / rushAttR.r).toFixed(1) : '—'}倍。C課題を犠牲にしてRushに注力するのは逆効果。
+              23日以上在籍者: 登録3個≈登録4個（差≈2pp）。C完了数の相関 r=${cR?.r.toFixed(2) ?? '—'} はRush登録の約${cR && rushAttR ? (cR.r / rushAttR.r).toFixed(1) : '—'}倍。
             </span><br>
             <strong>③ 時系列の意味: 毎週登録 = 継続的なengagement。</strong><br>
             <span style="color:var(--text-dim);font-size:12px;margin-left:16px">
-              Rush 00(1週目)→01(2週目)→02(3週目)→BSQ(4週目)。登録数が多い人は最終的にC完了数・試験スコアも高い傾向。
+              Rush 00(1週目)→01(2週目)→02(3週目)→BSQ(4週目)。パターン分析で個別の選択的スキップの影響も確認可能。
             </span>
           </div>
           <div style="margin-top:8px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:11px;color:var(--text-dim);line-height:1.7">
