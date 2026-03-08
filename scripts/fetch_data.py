@@ -494,6 +494,15 @@ def main():
             students[login]["bsq_attempted"] = bsq_attempted
             students[login]["c_completed"] = c_completed
 
+            # Rush 個別追跡: Rush 00/01/02 それぞれの登録・完了状況
+            # "Rush 00", "Rush 01", "Rush 02" のような名前にマッチ
+            RUSH_STATUS = ("finished", "waiting_for_correction", "in_progress")
+            for rush_num in ["00", "01", "02"]:
+                pattern = re.compile(rf"\brush\s+{rush_num}\b", re.IGNORECASE)
+                rush_p = next((p for p in projects if pattern.search(p["name"])), None)
+                students[login][f"rush_{rush_num}_attempted"] = 1 if (rush_p and rush_p.get("status") in RUSH_STATUS) else 0
+                students[login][f"rush_{rush_num}_completed"] = 1 if (rush_p and rush_p.get("validated")) else 0
+
             time.sleep(0.3)  # projects_users の後
 
             # --- scale_teams でレビュー回数・フラグ・評価スコア取得 ---
@@ -788,6 +797,12 @@ def main():
             "exam_score": None if failed else s.get("exam_score"),
             "rush_completed": None if failed else s.get("rush_completed", 0),
             "rush_attempted": None if failed else s.get("rush_attempted", 0),
+            "rush_00_attempted": None if failed else s.get("rush_00_attempted", 0),
+            "rush_00_completed": None if failed else s.get("rush_00_completed", 0),
+            "rush_01_attempted": None if failed else s.get("rush_01_attempted", 0),
+            "rush_01_completed": None if failed else s.get("rush_01_completed", 0),
+            "rush_02_attempted": None if failed else s.get("rush_02_attempted", 0),
+            "rush_02_completed": None if failed else s.get("rush_02_completed", 0),
             "bsq_completed":  None if failed else s.get("bsq_completed", 0),
             "bsq_attempted":  None if failed else s.get("bsq_attempted", 0),
             "events_attended": None if failed else s.get("events_attended", 0),
@@ -832,6 +847,15 @@ def main():
         print(f"  Uploaded data.json to KV ({len(online)} online, {len(offline)} offline)")
     except Exception as e:
         print(f"  [ERROR] KV upload failed for data.json: {e}")
+
+    # ─── ローカル開発用: WORKER_SECRET 未設定時は dev-data.json に書き出す ───
+    # これにより fetch_data.py をローカル実行するだけで stats.html がテスト可能
+    if not WORKER_SECRET:
+        dev_data_path = Path(__file__).parent.parent / "public" / "dev-data.json"
+        with open(dev_data_path, "w", encoding="utf-8") as f:
+            json.dump(dashboard, f, ensure_ascii=False, indent=2)
+        print(f"  [DEV] Written to {dev_data_path} ({len(online)} online, {len(offline)} offline)")
+
     print("\nDone!")
 
 
