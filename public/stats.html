@@ -1528,7 +1528,8 @@ function renderFailAnalysisTab() {
     { key: 'review_given',    label: 'レビュー回数',       icon: '👥', ...pbCorr('review_given') },
     { key: 'active_days',     label: 'アクティブ日数',     icon: '📅', ...pbCorr('active_days',
       s => s.active_days != null && s.active_days > 0 ? s.active_days : null) },
-    { key: 'rush_completed',  label: 'Rush完了数',        icon: '🏃', ...pbCorr('rush_completed') },
+    { key: 'rush_attempted',  label: 'Rush登録数',        icon: '🏃', ...pbCorr('rush_attempted') },
+    { key: 'rush_completed',  label: 'Rush完了数',        icon: '🏁', ...pbCorr('rush_completed') },
     { key: 'bsq_completed',   label: 'BSQ完了',           icon: '🧩', ...pbCorr('bsq_completed') },
     { key: 'c_completed',     label: 'Cシリーズ完了数',    icon: '💻', ...pbCorr('c_completed') },
     { key: 'events_attended', label: 'イベント参加数',     icon: '🎪', ...pbCorr('events_attended') },
@@ -2044,34 +2045,19 @@ function renderFailAnalysisTab() {
     <!-- Rush vs C個人課題 4象限分析 -->
     ${(() => {
       if (!hasPassData || !hasActiveField) return '';
-      // アクティブかつ合否判定のある学生に絞る
       const activeWithResult = allStudentsWithResult.filter(s => s.is_active);
       if (activeWithResult.length < 10) return '';
 
-      // rush_completed と c_completed の中央値を算出
       const median = (arr) => {
         if (arr.length === 0) return 0;
         const sorted = [...arr].sort((a, b) => a - b);
         const m = Math.floor(sorted.length / 2);
         return sorted.length % 2 === 0 ? (sorted[m-1] + sorted[m]) / 2 : sorted[m];
       };
-      const rushVals = activeWithResult.map(s => s.rush_completed ?? 0);
-      const cVals    = activeWithResult.map(s => s.c_completed    ?? 0);
-      const rushMed  = median(rushVals);
-      const cMed     = median(cVals);
-
-      // 4象限に分類 (高 = >= 中央値, 低 = < 中央値)
-      const q = (rushHigh, cHigh) =>
-        activeWithResult.filter(s => {
-          const r = s.rush_completed ?? 0;
-          const c = s.c_completed    ?? 0;
-          return (rushHigh ? r >= rushMed : r < rushMed) &&
-                 (cHigh    ? c >= cMed    : c < cMed);
-        });
-      const q11 = q(true,  true);   // Rush高+C高（両立）
-      const q10 = q(true,  false);  // Rush高+C低（Rush派）
-      const q01 = q(false, true);   // Rush低+C高（個人課題派）
-      const q00 = q(false, false);  // Rush低+C低（低活動）
+      const cVals   = activeWithResult.map(s => s.c_completed ?? 0);
+      const cMed    = median(cVals);
+      const compMed = median(activeWithResult.map(s => s.rush_completed ?? 0));
+      const attMed  = median(activeWithResult.map(s => s.rush_attempted  ?? 0));
 
       const passRate = (grp) => {
         if (grp.length === 0) return null;
@@ -2086,122 +2072,134 @@ function renderFailAnalysisTab() {
         const v = grp.map(s => s.total_hours).filter(x => x != null && x > 0);
         return v.length > 0 ? Math.round(v.reduce((a,b)=>a+b,0)/v.length) + 'h' : '—';
       };
-
-      const r11 = passRate(q11); const r10 = passRate(q10);
-      const r01 = passRate(q01); const r00 = passRate(q00);
-
-      // 色: 合格率に応じてグリーン〜レッド
       const rateColor = (r) => {
         if (!r) return 'var(--text-dim)';
         const v = parseFloat(r.rate);
-        if (v >= 75) return 'var(--green)';
-        if (v >= 55) return '#fdcb6e';
-        return '#ff7675';
+        return v >= 75 ? 'var(--green)' : v >= 55 ? '#fdcb6e' : '#ff7675';
       };
 
-      // 最重要インサイト
-      const insights = [];
-      if (r01 && r10) {
-        const diffPt = parseFloat(r01.rate) - parseFloat(r10.rate);
-        if (diffPt > 20) {
-          insights.push(`<strong style="color:var(--green)">💡 個人課題（C）重視が有利:</strong> C完了数が高い方が合格率 <strong style="color:var(--green)">+${diffPt.toFixed(1)}pt</strong> 高い。Rushだけに集中するより、C課題をしっかり進める戦略が効果的。`);
-        } else if (diffPt < -20) {
-          insights.push(`<strong style="color:var(--green)">💡 Rush重視が有利:</strong> Rush完了数が高い方が合格率 <strong style="color:var(--green)">+${(-diffPt).toFixed(1)}pt</strong> 高い。`);
-        } else {
-          insights.push(`<strong>💡 Rush vs C課題:</strong> 差は ${diffPt > 0 ? '+' : ''}${diffPt.toFixed(1)}pt。どちらか一方より <strong>両方こなすこと</strong>が重要。`);
+      // 4象限を生成するヘルパー（rushKey = 'rush_completed' or 'rush_attempted'）
+      const makeQuads = (rushKey, rushMed) => {
+        const q = (rHigh, cHigh) => activeWithResult.filter(s => {
+          const r = s[rushKey] ?? 0, c = s.c_completed ?? 0;
+          return (rHigh ? r >= rushMed : r < rushMed) && (cHigh ? c >= cMed : c < cMed);
+        });
+        const q11=q(true,true), q10=q(true,false), q01=q(false,true), q00=q(false,false);
+        const r11=passRate(q11), r10=passRate(q10), r01=passRate(q01), r00=passRate(q00);
+        const insights = [];
+        if (r01 && r10) {
+          const d = parseFloat(r01.rate) - parseFloat(r10.rate);
+          if (d > 20) insights.push(`<strong style="color:var(--green)">💡 C課題重視が有利:</strong> C完了数が高い方が <strong style="color:var(--green)">+${d.toFixed(1)}pt</strong> 高い。`);
+          else if (d < -20) insights.push(`<strong style="color:var(--green)">💡 Rush重視が有利:</strong> Rush側が <strong style="color:var(--green)">+${(-d).toFixed(1)}pt</strong> 高い。`);
+          else insights.push(`<strong>💡 Rush vs C:</strong> 差は ${d>0?'+':''}${d.toFixed(1)}pt。どちらか一方より<strong>両方こなすこと</strong>が重要。`);
         }
-      }
-      if (r11 && r00) {
-        const diffPt = parseFloat(r11.rate) - parseFloat(r00.rate);
-        insights.push(`<strong>⚡ 両立 vs 低活動:</strong> Rush・C両方こなした人と低活動の差は <strong style="color:var(--green)">+${diffPt.toFixed(1)}pt</strong>。`);
-      }
-      insights.push(`<span style="color:var(--text-dim)">中央値: Rush完了=${rushMed}件, C完了=${cMed}個 | アクティブ学生${activeWithResult.length}人での分析</span>`);
+        if (r11 && r00) {
+          const d = parseFloat(r11.rate) - parseFloat(r00.rate);
+          insights.push(`<strong>⚡ 両立 vs 低活動:</strong> 差は <strong style="color:var(--green)">+${d.toFixed(1)}pt</strong>。`);
+        }
+        insights.push(`<span style="color:var(--text-dim)">中央値: Rush=${rushMed}件, C=${cMed}個 | ${activeWithResult.length}人</span>`);
+
+        const rushLabel = rushKey === 'rush_completed' ? 'Rush完了' : 'Rush登録';
+        const gridHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+            <div style="padding:12px;background:rgba(0,206,201,0.08);border:1px solid rgba(0,206,201,0.3);border-radius:8px">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">🏃+💻 ${rushLabel}高 × C高（両立）</div>
+              <div style="font-size:26px;font-weight:700;color:${rateColor(r11)}">${r11?.rate ?? '—'}%</div>
+              <div style="font-size:11px;color:var(--text-dim)">${r11?.total ?? '—'}人 | Lv ${avgLv(q11)} | ${avgHrs(q11)}</div>
+            </div>
+            <div style="padding:12px;background:rgba(0,206,201,0.05);border:1px solid rgba(0,206,201,0.2);border-radius:8px">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">💻 ${rushLabel}低 × C高（個人課題派）</div>
+              <div style="font-size:26px;font-weight:700;color:${rateColor(r01)}">${r01?.rate ?? '—'}%</div>
+              <div style="font-size:11px;color:var(--text-dim)">${r01?.total ?? '—'}人 | Lv ${avgLv(q01)} | ${avgHrs(q01)}</div>
+            </div>
+            <div style="padding:12px;background:rgba(108,92,231,0.05);border:1px solid rgba(108,92,231,0.2);border-radius:8px">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">🏃 ${rushLabel}高 × C低（Rush派）</div>
+              <div style="font-size:26px;font-weight:700;color:${rateColor(r10)}">${r10?.rate ?? '—'}%</div>
+              <div style="font-size:11px;color:var(--text-dim)">${r10?.total ?? '—'}人 | Lv ${avgLv(q10)} | ${avgHrs(q10)}</div>
+            </div>
+            <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">📉 ${rushLabel}低 × C低（低活動）</div>
+              <div style="font-size:26px;font-weight:700;color:${rateColor(r00)}">${r00?.rate ?? '—'}%</div>
+              <div style="font-size:11px;color:var(--text-dim)">${r00?.total ?? '—'}人 | Lv ${avgLv(q00)} | ${avgHrs(q00)}</div>
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px">
+            <thead><tr style="background:rgba(108,92,231,0.1)">
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">グループ</th>
+              <th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border)">人数</th>
+              <th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border)">合格率</th>
+              <th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border)">平均Lv</th>
+              <th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border)">平均時間</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                <td style="padding:7px 10px">🏃+💻 <strong>両立</strong>（${rushLabel}高+C高）</td>
+                <td style="text-align:center">${r11?.total??'—'}</td>
+                <td style="text-align:center;font-weight:700;color:${rateColor(r11)}">${r11?.rate??'—'}%</td>
+                <td style="text-align:center">${avgLv(q11)}</td><td style="text-align:center">${avgHrs(q11)}</td>
+              </tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                <td style="padding:7px 10px">💻 <strong>個人課題派</strong>（${rushLabel}低+C高）</td>
+                <td style="text-align:center">${r01?.total??'—'}</td>
+                <td style="text-align:center;font-weight:700;color:${rateColor(r01)}">${r01?.rate??'—'}%</td>
+                <td style="text-align:center">${avgLv(q01)}</td><td style="text-align:center">${avgHrs(q01)}</td>
+              </tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                <td style="padding:7px 10px">🏃 <strong>Rush派</strong>（${rushLabel}高+C低）</td>
+                <td style="text-align:center">${r10?.total??'—'}</td>
+                <td style="text-align:center;font-weight:700;color:${rateColor(r10)}">${r10?.rate??'—'}%</td>
+                <td style="text-align:center">${avgLv(q10)}</td><td style="text-align:center">${avgHrs(q10)}</td>
+              </tr>
+              <tr>
+                <td style="padding:7px 10px;color:var(--text-dim)">📉 低活動（${rushLabel}低+C低）</td>
+                <td style="text-align:center">${r00?.total??'—'}</td>
+                <td style="text-align:center;font-weight:700;color:${rateColor(r00)}">${r00?.rate??'—'}%</td>
+                <td style="text-align:center">${avgLv(q00)}</td><td style="text-align:center">${avgHrs(q00)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;color:var(--text-dim);font-size:12px;line-height:1.8">
+            ${insights.join('<br>')}
+          </div>`;
+        return gridHTML;
+      };
+
+      const compHTML = makeQuads('rush_completed', compMed);
+      const attHTML  = makeQuads('rush_attempted',  attMed);
 
       return `
       <div style="margin-bottom:20px">
-        <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
-          🔀 Rush vs 個人課題（C）: 4象限分析 <span style="font-size:11px;font-weight:400;color:var(--text-dim)">アクティブ学生のみ</span>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+          <div style="color:var(--accent-light);font-weight:700;font-size:15px">
+            🔀 Rush vs 個人課題（C）: 4象限分析
+            <span style="font-size:11px;font-weight:400;color:var(--text-dim)">アクティブ学生のみ</span>
+          </div>
+          <div style="display:flex;gap:4px;margin-left:auto">
+            <button id="q4-btn-comp" onclick="
+              document.getElementById('q4-comp').style.display='';
+              document.getElementById('q4-att').style.display='none';
+              document.getElementById('q4-btn-comp').style.background='rgba(108,92,231,0.4)';
+              document.getElementById('q4-btn-att').style.background='rgba(255,255,255,0.05)';
+            " style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:rgba(108,92,231,0.4);color:var(--text);cursor:pointer">
+              🏁 Rush完了数
+            </button>
+            <button id="q4-btn-att" onclick="
+              document.getElementById('q4-comp').style.display='none';
+              document.getElementById('q4-att').style.display='';
+              document.getElementById('q4-btn-att').style.background='rgba(108,92,231,0.4)';
+              document.getElementById('q4-btn-comp').style.background='rgba(255,255,255,0.05)';
+            " style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:rgba(255,255,255,0.05);color:var(--text);cursor:pointer">
+              🏃 Rush登録数
+            </button>
+          </div>
         </div>
         <div style="color:var(--text-dim);font-size:13px;margin-bottom:10px;line-height:1.8">
-          アクティブ学生を Rush完了数・C課題完了数の中央値で4グループに分類。<br>
+          アクティブ学生を Rush × C課題の中央値で4グループに分類。<br>
           <strong style="color:var(--text)">「Rushをやるべきか？ C課題を優先すべきか？」</strong> の直接比較。
+          <span style="color:rgba(255,255,255,0.35);font-size:11px">　※「登録数」は合否に関係なく参加した回数</span>
         </div>
-
-        <!-- 2×2 グリッド表示 -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-          <!-- Rush高+C高（両立） -->
-          <div style="padding:12px;background:rgba(0,206,201,0.08);border:1px solid rgba(0,206,201,0.3);border-radius:8px">
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">🏃+💻 Rush高 × C高（両立）</div>
-            <div style="font-size:26px;font-weight:700;color:${rateColor(r11)}">${r11?.rate ?? '—'}%</div>
-            <div style="font-size:11px;color:var(--text-dim)">${r11?.total ?? '—'}人 | Lv ${avgLv(q11)} | ${avgHrs(q11)}</div>
-          </div>
-          <!-- Rush低+C高（個人課題派） -->
-          <div style="padding:12px;background:rgba(0,206,201,0.05);border:1px solid rgba(0,206,201,0.2);border-radius:8px">
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">💻 Rush低 × C高（個人課題派）</div>
-            <div style="font-size:26px;font-weight:700;color:${rateColor(r01)}">${r01?.rate ?? '—'}%</div>
-            <div style="font-size:11px;color:var(--text-dim)">${r01?.total ?? '—'}人 | Lv ${avgLv(q01)} | ${avgHrs(q01)}</div>
-          </div>
-          <!-- Rush高+C低（Rush派） -->
-          <div style="padding:12px;background:rgba(108,92,231,0.05);border:1px solid rgba(108,92,231,0.2);border-radius:8px">
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">🏃 Rush高 × C低（Rush派）</div>
-            <div style="font-size:26px;font-weight:700;color:${rateColor(r10)}">${r10?.rate ?? '—'}%</div>
-            <div style="font-size:11px;color:var(--text-dim)">${r10?.total ?? '—'}人 | Lv ${avgLv(q10)} | ${avgHrs(q10)}</div>
-          </div>
-          <!-- Rush低+C低（低活動） -->
-          <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px">
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">📉 Rush低 × C低（低活動）</div>
-            <div style="font-size:26px;font-weight:700;color:${rateColor(r00)}">${r00?.rate ?? '—'}%</div>
-            <div style="font-size:11px;color:var(--text-dim)">${r00?.total ?? '—'}人 | Lv ${avgLv(q00)} | ${avgHrs(q00)}</div>
-          </div>
-        </div>
-
-        <!-- 詳細テーブル -->
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px">
-          <thead>
-            <tr style="background:rgba(108,92,231,0.1)">
-              <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">グループ</th>
-              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">人数</th>
-              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">合格率</th>
-              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">平均Level</th>
-              <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)">平均時間</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-              <td style="padding:8px 10px">🏃+💻 <strong>両立</strong>（Rush高+C高）</td>
-              <td style="text-align:center">${r11?.total ?? '—'}</td>
-              <td style="text-align:center;font-weight:700;color:${rateColor(r11)}">${r11?.rate ?? '—'}%</td>
-              <td style="text-align:center">${avgLv(q11)}</td>
-              <td style="text-align:center">${avgHrs(q11)}</td>
-            </tr>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-              <td style="padding:8px 10px">💻 <strong>個人課題派</strong>（Rush低+C高）</td>
-              <td style="text-align:center">${r01?.total ?? '—'}</td>
-              <td style="text-align:center;font-weight:700;color:${rateColor(r01)}">${r01?.rate ?? '—'}%</td>
-              <td style="text-align:center">${avgLv(q01)}</td>
-              <td style="text-align:center">${avgHrs(q01)}</td>
-            </tr>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-              <td style="padding:8px 10px">🏃 <strong>Rush派</strong>（Rush高+C低）</td>
-              <td style="text-align:center">${r10?.total ?? '—'}</td>
-              <td style="text-align:center;font-weight:700;color:${rateColor(r10)}">${r10?.rate ?? '—'}%</td>
-              <td style="text-align:center">${avgLv(q10)}</td>
-              <td style="text-align:center">${avgHrs(q10)}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px 10px;color:var(--text-dim)">📉 低活動（Rush低+C低）</td>
-              <td style="text-align:center">${r00?.total ?? '—'}</td>
-              <td style="text-align:center;font-weight:700;color:${rateColor(r00)}">${r00?.rate ?? '—'}%</td>
-              <td style="text-align:center">${avgLv(q00)}</td>
-              <td style="text-align:center">${avgHrs(q00)}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <!-- インサイト -->
-        <div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;color:var(--text-dim);font-size:12px;line-height:1.8">
-          ${insights.join('<br>')}
-        </div>
+        <div id="q4-comp">${compHTML}</div>
+        <div id="q4-att" style="display:none">${attHTML}</div>
       </div>`;
     })()}
 
@@ -2262,6 +2260,72 @@ function renderFailAnalysisTab() {
           </span>
         </div>` : ''}
       </div>` : ''}
+
+      ${(() => {
+        // FalseNeg / FalsePos の Rush 状況を分析
+        if (falseNeg.length === 0 && falsePos.length === 0) return '';
+        const fnStudents = allStudentsWithResult.filter(s => falseNeg.some(p => p.login === s.login));
+        const fpStudents = allStudentsWithResult.filter(s => falsePos.some(p => p.login === s.login));
+        const avg = (grp, key) => {
+          const v = grp.map(s => s[key]).filter(x => x != null);
+          return v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toFixed(1) : '—';
+        };
+        if (fnStudents.length === 0 && fpStudents.length === 0) return '';
+        return `
+        <div style="margin-top:12px;padding:10px 12px;background:rgba(155,89,182,0.05);border:1px solid rgba(155,89,182,0.2);border-radius:8px">
+          <div style="font-size:13px;font-weight:700;color:rgba(155,89,182,0.9);margin-bottom:8px">
+            🏃 Megatoron候補者のRush状況（Rush→Megatoron仮説の検証）
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
+            Rushは1週間チームで取り組むため、<strong style="color:var(--text)">チームメンバー=Megatoron投票の母集団</strong>になる可能性がある。<br>
+            Rush登録数が多い → 接触した仲間が多い → Megatoron票が増える という因果パスの仮説。
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.04)">
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">グループ</th>
+                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">人数</th>
+                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">Rush登録数avg</th>
+                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">Rush完了数avg</th>
+                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">レビュー回数avg</th>
+                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">試験avg</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${fnStudents.length > 0 ? `
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                <td style="padding:6px 8px;color:var(--red)">▼ 数値合格圏→不合格</td>
+                <td style="text-align:center">${fnStudents.length}</td>
+                <td style="text-align:center;font-weight:700">${avg(fnStudents,'rush_attempted')}</td>
+                <td style="text-align:center">${avg(fnStudents,'rush_completed')}</td>
+                <td style="text-align:center">${avg(fnStudents,'review_given')}</td>
+                <td style="text-align:center">${avg(fnStudents,'exam_score')}</td>
+              </tr>` : ''}
+              ${fpStudents.length > 0 ? `
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                <td style="padding:6px 8px;color:var(--green)">▲ 数値不合格圏→合格</td>
+                <td style="text-align:center">${fpStudents.length}</td>
+                <td style="text-align:center;font-weight:700">${avg(fpStudents,'rush_attempted')}</td>
+                <td style="text-align:center">${avg(fpStudents,'rush_completed')}</td>
+                <td style="text-align:center">${avg(fpStudents,'review_given')}</td>
+                <td style="text-align:center">${avg(fpStudents,'exam_score')}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding:6px 8px;color:var(--text-dim)">全アクティブ平均</td>
+                <td style="text-align:center">${allStudentsWithResult.filter(s=>s.is_active).length}</td>
+                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'rush_attempted')}</td>
+                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'rush_completed')}</td>
+                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'review_given')}</td>
+                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'exam_score')}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:6px;line-height:1.6">
+            ⚠️ 「数値合格圏→不合格」グループのRush登録数が全体平均より高い場合、Rush参加だけではMegatoron有利にならないことを示す（仮説の反例）。<br>
+            逆に「数値不合格圏→合格」グループのRush登録数が高い場合、Rush→Megatoron仮説を支持する証拠となる。
+          </div>
+        </div>`;
+      })()}
 
       <div style="color:rgba(255,255,255,0.35);font-size:12px;margin-top:8px;line-height:1.6">
         ※ 予測モデルは相関係数加重zスコアの単純線形モデル。因果関係ではなく相関に基づく推定です。<br>
