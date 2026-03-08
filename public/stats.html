@@ -1528,7 +1528,7 @@ function renderFailAnalysisTab() {
     { key: 'review_given',    label: 'レビュー回数',       icon: '👥', ...pbCorr('review_given') },
     { key: 'active_days',     label: 'アクティブ日数',     icon: '📅', ...pbCorr('active_days',
       s => s.active_days != null && s.active_days > 0 ? s.active_days : null) },
-    { key: 'rush_attempted',  label: 'Rush登録数',        icon: '🏃', ...pbCorr('rush_attempted') },
+    { key: 'rush_attempted',  label: 'Rush登録数',        icon: '🏃', noPred: true, ...pbCorr('rush_attempted') },
     { key: 'rush_completed',  label: 'Rush完了数',        icon: '🏁', ...pbCorr('rush_completed') },
     { key: 'bsq_completed',   label: 'BSQ完了',           icon: '🧩', ...pbCorr('bsq_completed') },
     { key: 'c_completed',     label: 'Cシリーズ完了数',    icon: '💻', ...pbCorr('c_completed') },
@@ -1551,7 +1551,7 @@ function renderFailAnalysisTab() {
 
   // ─── 合否予測モデル（相関係数加重スコア） ───
   const factorStats = {};
-  for (const c of corrResults) {
+  for (const c of corrResults.filter(c => !c.noPred)) {
     const getVal = c.key === 'daily_avg'
       ? (s) => (s.total_hours != null && s.active_days > 0) ? s.total_hours / s.active_days : null
       : c.key === 'active_days'
