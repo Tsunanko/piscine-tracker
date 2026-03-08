@@ -482,9 +482,12 @@ def main():
             # c_projects: "C 00" 〜 "C 13" 個人課題
             rush_completed = sum(1 for p in projects if "rush" in p["name"].lower() and p.get("validated"))
             rush_attempted = sum(1 for p in projects if "rush" in p["name"].lower() and p.get("status") in ("finished", "waiting_for_correction", "in_progress"))
-            bsq_completed = 1 if any(p["name"].lower() == "bsq" and p.get("validated") for p in projects) else 0
-            bsq_attempted = 1 if any(p["name"].lower() == "bsq" and p.get("status") in ("finished", "waiting_for_correction", "in_progress") for p in projects) else 0
-            c_completed = sum(1 for p in projects if re.match(r"^c\s*\d+$", p["name"].lower()) and p.get("validated"))
+            # BSQ: 完全一致ではなく部分一致で検索（"C Piscine BSQ" のような名前に対応）
+            bsq_completed = 1 if any("bsq" in p["name"].lower() and p.get("validated") for p in projects) else 0
+            bsq_attempted = 1 if any("bsq" in p["name"].lower() and p.get("status") in ("finished", "waiting_for_correction", "in_progress") for p in projects) else 0
+            # Cシリーズ: "C Piscine C 00" のように末尾が "c <数字>" で終わるプロジェクトを対象
+            # re.search で末尾パターンを検索（"^c\s*\d+$" はプレフィックス付き名称に対応できないため修正）
+            c_completed = sum(1 for p in projects if re.search(r"\bc\s+\d+$", p["name"].lower()) and p.get("validated"))
             students[login]["rush_completed"] = rush_completed
             students[login]["rush_attempted"] = rush_attempted
             students[login]["bsq_completed"] = bsq_completed
