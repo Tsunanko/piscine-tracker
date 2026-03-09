@@ -1796,20 +1796,29 @@ function renderFailAnalysisTab() {
   };
 
   document.getElementById('mainCard').innerHTML = `
-    <div class="corr-header" style="margin-bottom:14px">
+    <div class="corr-header" style="margin-bottom:10px">
       <div class="corr-title">合否分析</div>
     </div>
 
-    <!-- 判定基準の注記 -->
-    <div style="padding:8px 14px;background:rgba(108,92,231,0.08);border:1px solid rgba(108,92,231,0.25);border-radius:8px;margin-bottom:16px;font-size:12px;color:var(--text-dim);line-height:1.7">
-      ℹ️ <strong style="color:var(--accent-light)">Piscine合否の判定基準</strong>には、以下のような要素が関わっている可能性があると推察されます。<br>
-      <span style="margin-left:16px">① Final Exam スコア（100点満点）</span><br>
-      <span style="margin-left:16px">② <strong>Megatoron 投票</strong>（仲間による相互評価）— 詳細な仕組みは非公開</span><br>
-      <span style="margin-left:16px">③ ログイン時間・課題達成度・Level など</span><br>
-      <span style="color:rgba(255,255,255,0.4);font-size:11px">※ いずれも公式に公開された情報ではなく、データから推察されるものです。</span>
+    <!-- ページ概要・目次 -->
+    <div style="padding:12px 14px;background:rgba(108,92,231,0.06);border:1px solid rgba(108,92,231,0.2);border-radius:10px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--accent-light);margin-bottom:8px">📌 このページでわかること</div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:2;display:grid;grid-template-columns:1fr 1fr;gap:2px 16px">
+        <div>① <strong style="color:var(--text)">合格者 vs 不合格者</strong> — 数値的な差は何か</div>
+        <div>② <strong style="color:var(--text)">何が合否に関係するか</strong> — 相関係数ランキング</div>
+        <div>③ <strong style="color:var(--text)">Rush/BSQ は登録すべきか</strong> — チーム課題の戦略</div>
+        <div>④ <strong style="color:var(--text)">Rush vs C課題 どちらが大事か</strong> — 4象限分析</div>
+        <div>⑤ <strong style="color:var(--text)">数値で何%説明できるか</strong> — 予測モデルの精度</div>
+        <div>⑥ <strong style="color:var(--text)">Megatoron（仲間投票）の影響</strong> — 数値外要因の正体</div>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(108,92,231,0.2);font-size:11px;color:rgba(255,255,255,0.35);line-height:1.6">
+        合否判定基準（推察）: ① Final Exam スコア &nbsp;② Megatoron 投票（仲間投票・詳細非公開）&nbsp;③ ログイン時間・課題達成度・Level など
+      </div>
     </div>
 
-    <!-- 合格 vs 不合格 比較サマリー -->
+    <!-- ① 合格 vs 不合格 比較サマリー -->
+    <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:4px">① 合格者 vs 不合格者 — 数値の差</div>
+    <div style="color:var(--text-dim);font-size:12px;margin-bottom:10px">合格した人と不合格だった人で、各指標がどれだけ違うか。<strong style="color:var(--text)">差が大きいほど合否に直結する要因</strong>と考えられる。</div>
     <div style="overflow-x:auto;margin-bottom:16px">
       <table class="corr-table" style="min-width:500px">
         <thead><tr>
@@ -1862,11 +1871,10 @@ function renderFailAnalysisTab() {
       </div>
     </div>
 
-    <!-- 相関係数ランキング -->
+    <!-- ② 相関係数ランキング -->
     <div style="margin-bottom:20px">
-      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
-        📊 合否との相関係数ランキング（点双列相関）
-      </div>
+      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:4px">② 何が合否に関係するか — 📊 相関係数ランキング</div>
+      <div style="color:var(--text-dim);font-size:12px;margin-bottom:10px">合格者と不合格者で差が出た要因の一覧。<strong style="color:var(--text)">r が大きいほど合否への関連が強い</strong>。ただし相関は因果ではない（「やると合格する」ではなく「合格する人がやっている傾向がある」）。</div>
       <div style="color:var(--text-dim);font-size:13px;margin-bottom:4px;line-height:1.8">
         各指標と合否（合格=1 / 不合格=0）の点双列相関係数 <strong style="color:var(--text)">r<sub>pb</sub></strong>。<br>
         <span style="color:var(--green)">r &gt; 0</span>（緑）= 値が高いほど合格しやすい　／　<span style="color:#ff7675">r &lt; 0（↓逆）</span> = 値が高いほど<strong style="color:#ff7675">落ちやすい（逆相関）</strong>
@@ -2015,11 +2023,18 @@ function renderFailAnalysisTab() {
       })();
       const rushPerC = (rushDelta && cSlope && parseFloat(cSlope) > 0) ? (parseFloat(rushDelta) / parseFloat(cSlope)).toFixed(1) : null;
 
+      // ── 在籍日数コントロール: 選択バイアス除去の試み ──
+      const longStayTh = 20;
+      const longStay = activeS.filter(s => (s.active_days ?? 0) >= longStayTh);
+      const longStayGroups = [0,1,2,3].map(att => {
+        const grp = longStay.filter(s => (s.rush_attempted ?? 0) === att);
+        return { att, grp, pr: pr(grp), allPr: attGroups.find(a => a.att === att)?.pr };
+      }).filter(g => g.grp.length > 0);
+
       return `
       <div style="margin-bottom:20px">
-        <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
-          🏃 Rush / BSQ 戦略分析
-        </div>
+        <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:4px">③ Rush/BSQ は登録すべきか — 🏃 チーム課題の戦略</div>
+        <div style="color:var(--text-dim);font-size:12px;margin-bottom:8px"><strong style="color:var(--green)">結論: 登録すべき。完了できなくても問題ない。</strong>登録数が多いほど合格率が上がる傾向が見られる。ただし「なぜ上がるか」には注意が必要（選択バイアスの可能性あり）。</div>
         <div style="color:var(--text-dim);font-size:13px;margin-bottom:6px;line-height:1.8">
           Piscineのチーム課題は時系列で行われる:<br>
           <strong style="color:var(--text)">Rush 00（1週目）→ Rush 01（2週目）→ Rush 02（3週目）→ BSQ（4週目）</strong><br>
@@ -2040,8 +2055,11 @@ function renderFailAnalysisTab() {
             </tr>
           </thead>
           <tbody>
-            ${attGroups.map(g => `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            ${attGroups.map(g => {
+              const rate = g.pr?.rate ?? 0;
+              const rowBg = rate >= 60 ? 'rgba(0,206,201,0.06)' : rate <= 30 ? 'rgba(255,118,117,0.06)' : 'transparent';
+              return `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${rowBg}">
               <td style="padding:7px 10px;font-weight:600">${g.att}回${g.grp.length <= 5 ? ' <span style="color:var(--text-dim);font-weight:400;font-size:11px">(少数)</span>' : ''}</td>
               <td style="text-align:center">${g.pr?.total ?? '—'}</td>
               <td style="text-align:left">
@@ -2053,7 +2071,7 @@ function renderFailAnalysisTab() {
               <td style="text-align:center">${g.avgC}</td>
               <td style="text-align:center">${g.avgExam}</td>
               <td style="text-align:center">${g.avgRev}</td>
-            </tr>`).join('')}
+            </tr>`;}).join('')}
           </tbody>
         </table>
         <div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;color:var(--text-dim);font-size:11px;line-height:1.7;margin-bottom:14px">
@@ -2062,17 +2080,66 @@ function renderFailAnalysisTab() {
           ${cSlope ? '<br>📌 Rush登録+1回 ≈ C課題 <strong style="color:var(--text)">' + rushPerC + '個分</strong>の効果（C+1個 = +' + cSlope + 'pp, Rush+1回 = +' + rushDelta + 'pp）' : ''}
         </div>
 
-        <!-- att × comp 全パターン -->
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="color:var(--text);font-weight:600;font-size:13px">📋 Rush登録数 × 完了数 全パターン</span>
-          <button id="rush-matrix-toggle" onclick="
-            const el = document.getElementById('rush-matrix-body');
-            const btn = document.getElementById('rush-matrix-toggle');
-            if (el.style.display === 'none') { el.style.display=''; btn.textContent='▼ 閉じる'; }
-            else { el.style.display='none'; btn.textContent='▶ 展開'; }
-          " style="padding:2px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:rgba(255,255,255,0.05);color:var(--text-dim);cursor:pointer">▶ 展開</button>
+        <!-- 🔬 在籍日数コントロール分析 -->
+        <div style="margin:0 0 14px;padding:10px 12px;background:rgba(108,92,231,0.04);border:1px solid rgba(108,92,231,0.2);border-radius:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--accent-light);margin-bottom:4px">🔬 在籍日数で揃えた場合のRush登録効果</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
+            アクティブ日数 ≥ ${longStayTh}日の学生（${longStay.length}人）に絞ってRush登録数別合格率を比較。<br>
+            <strong style="color:var(--text)">「最後まで居た人の中でも」Rush登録数による差が残るか？</strong>
+            残れば独立効果、消えれば在籍継続の代理指標。
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
+            <thead>
+              <tr style="background:rgba(108,92,231,0.1)">
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">Rush登録数</th>
+                <th style="padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)">人数(≥${longStayTh}日)</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">合格率（≥${longStayTh}日限定）</th>
+                <th style="padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)">全体合格率</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${longStayGroups.map(g => {
+                const rate3 = g.pr?.rate ?? 0;
+                const rowBg3 = rate3 >= 60 ? 'rgba(0,206,201,0.06)' : rate3 <= 30 ? 'rgba(255,118,117,0.06)' : 'transparent';
+                return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${rowBg3}">
+                  <td style="padding:5px 8px;font-weight:600">${g.att}回${g.grp.length <= 3 ? ' <span style="color:var(--text-dim);font-size:10px">⚠少数</span>' : ''}</td>
+                  <td style="text-align:center">${g.pr?.total ?? '—'}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:4px">
+                      <div style="width:${barW(g.pr)*0.7}%;max-width:60%;height:12px;background:${rateColor(g.pr)};border-radius:2px;min-width:2px"></div>
+                      <span style="font-weight:700;color:${rateColor(g.pr)};font-size:12px">${g.pr?.rate ?? '—'}%</span>
+                    </div>
+                  </td>
+                  <td style="text-align:center;color:var(--text-dim);font-size:11px">${g.allPr?.rate ?? '—'}%（${g.allPr?.total ?? '—'}人全体）</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          ${(() => {
+            const g0 = longStayGroups.find(g => g.att === 0);
+            const g3 = longStayGroups.find(g => g.att === 3);
+            const g2 = longStayGroups.find(g => g.att === 2);
+            const refG = g3 ?? g2;
+            if (!g0 || g0.grp.length <= 2) {
+              return `<div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;color:var(--text-dim);font-size:11px;line-height:1.7">
+                📌 ≥${longStayTh}日在籍でRush 0回の学生は<strong style="color:var(--text)">${g0?.grp?.length ?? 0}人のみ</strong>。<br>
+                → <strong style="color:var(--text)">「最後まで居た学生はほぼ全員Rush登録している」</strong>ことを示す。在籍継続 ≈ Rush登録と考えられる。<br>
+                <span style="color:var(--accent-light)">つまりRush登録は「何週目まで諦めずにいたか」のスコアとほぼ同義。</span>
+              </div>`;
+            }
+            const delta3 = refG ? (parseFloat(refG.pr.rate) - parseFloat(g0.pr.rate)).toFixed(1) : null;
+            const effectRemains = delta3 && parseFloat(delta3) >= 10;
+            return `<div style="padding:6px 10px;background:${effectRemains ? 'rgba(0,206,201,0.05)' : 'rgba(255,255,255,0.03)'};border:1px solid ${effectRemains ? 'rgba(0,206,201,0.2)' : 'transparent'};border-radius:6px;color:var(--text-dim);font-size:11px;line-height:1.7">
+              ${effectRemains
+                ? `✅ 在籍日数を揃えた後も差が残る（0回: ${g0.pr.rate}% → ${refG.att}回: ${refG.pr.rate}%, 差: +${delta3}pp）。Rush登録に独立した効果がある可能性。`
+                : `🤔 在籍日数を揃えると差が縮小（0回: ${g0.pr.rate}% → ${refG?.att ?? '?'}回: ${refG?.pr?.rate ?? '?'}%, 差: ${delta3}pp）。Rush登録の相関の多くは在籍継続の代理だった可能性。`}
+            </div>`;
+          })()}
         </div>
-        <div id="rush-matrix-body" style="display:none">
+
+        <!-- att × comp 全パターン -->
+        <div style="color:var(--text);font-weight:600;font-size:13px;margin-bottom:8px">📋 Rush登録数 × 完了数 全パターン</div>
+        <div id="rush-matrix-body">
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">
             <thead>
               <tr style="background:rgba(108,92,231,0.1)">
@@ -2087,7 +2154,9 @@ function renderFailAnalysisTab() {
             <tbody>
               ${attCompData.map((g, i) => {
                 const isNewAtt = i === 0 || attCompData[i-1].att !== g.att;
-                return `<tr style="border-bottom:1px solid rgba(255,255,255,${isNewAtt && i > 0 ? '0.12' : '0.04'})${isNewAtt && i > 0 ? ';border-top:1px solid rgba(255,255,255,0.12)' : ''}">
+                const rate2 = g.pr?.rate ?? 0;
+                const rowBg2 = rate2 >= 60 ? 'rgba(0,206,201,0.06)' : rate2 <= 30 ? 'rgba(255,118,117,0.06)' : 'transparent';
+                return `<tr style="border-bottom:1px solid rgba(255,255,255,${isNewAtt && i > 0 ? '0.12' : '0.04'})${isNewAtt && i > 0 ? ';border-top:1px solid rgba(255,255,255,0.12)' : ''};background:${rowBg2}">
                   <td style="padding:6px 8px;text-align:center;font-weight:${isNewAtt?'700':'400'}">${g.att}</td>
                   <td style="padding:6px 8px;text-align:center">${g.comp}</td>
                   <td style="padding:6px 8px;text-align:center">${g.pr?.total ?? '—'}${g.grp.length <= 5 ? ' <span style="color:var(--text-dim);font-size:10px">⚠</span>' : ''}</td>
@@ -2123,21 +2192,21 @@ function renderFailAnalysisTab() {
             </tr>
           </thead>
           <tbody>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${(bsqNoneR?.rate??0)>=60?'rgba(0,206,201,0.06)':(bsqNoneR?.rate??0)<=30?'rgba(255,118,117,0.06)':'transparent'}">
               <td style="padding:7px 10px;color:var(--text-dim)">未登録</td>
               <td style="text-align:center">${bsqNoneR?.total ?? '—'}</td>
               <td><div style="display:flex;align-items:center;gap:6px"><div style="width:${barW(bsqNoneR)*0.8}%;max-width:60%;height:14px;background:${rateColor(bsqNoneR)};border-radius:3px;min-width:2px"></div><span style="font-weight:700;color:${rateColor(bsqNoneR)}">${bsqNoneR?.rate ?? '—'}%</span></div></td>
               <td style="text-align:center">${avgV(bsqNone,'c_completed')}</td>
               <td style="text-align:center">${avgV(bsqNone,'exam_score')}</td>
             </tr>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${(bsqFailR?.rate??0)>=60?'rgba(0,206,201,0.06)':(bsqFailR?.rate??0)<=30?'rgba(255,118,117,0.06)':'transparent'}">
               <td style="padding:7px 10px;color:var(--green)">登録・未完了</td>
               <td style="text-align:center">${bsqFailR?.total ?? '—'}</td>
               <td><div style="display:flex;align-items:center;gap:6px"><div style="width:${barW(bsqFailR)*0.8}%;max-width:60%;height:14px;background:${rateColor(bsqFailR)};border-radius:3px;min-width:2px"></div><span style="font-weight:700;color:${rateColor(bsqFailR)}">${bsqFailR?.rate ?? '—'}%</span></div></td>
               <td style="text-align:center">${avgV(bsqFail,'c_completed')}</td>
               <td style="text-align:center">${avgV(bsqFail,'exam_score')}</td>
             </tr>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);background:${(bsqPassR?.rate??0)>=60?'rgba(0,206,201,0.06)':(bsqPassR?.rate??0)<=30?'rgba(255,118,117,0.06)':'transparent'}">
               <td style="padding:7px 10px;color:var(--green)">登録・完了</td>
               <td style="text-align:center">${bsqPassR?.total ?? '—'}</td>
               <td><div style="display:flex;align-items:center;gap:6px"><div style="width:${barW(bsqPassR)*0.8}%;max-width:60%;height:14px;background:${rateColor(bsqPassR)};border-radius:3px;min-width:2px"></div><span style="font-weight:700;color:${rateColor(bsqPassR)}">${bsqPassR?.rate ?? '—'}%</span></div></td>
@@ -2152,16 +2221,8 @@ function renderFailAnalysisTab() {
         </div>
 
         <!-- Rush00/01/02 × BSQ パターン分析 -->
-        <div style="display:flex;align-items:center;gap:8px;margin:14px 0 8px">
-          <span style="color:var(--text);font-weight:600;font-size:13px">🔍 チーム課題パターン分析（Rush 00/01/02 × BSQ）</span>
-          <button id="rush-pattern-toggle" onclick="
-            const el = document.getElementById('rush-pattern-body');
-            const btn = document.getElementById('rush-pattern-toggle');
-            if (el.style.display === 'none') { el.style.display=''; btn.textContent='▼ 閉じる'; }
-            else { el.style.display='none'; btn.textContent='▶ 展開'; }
-          " style="padding:2px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:rgba(255,255,255,0.05);color:var(--text-dim);cursor:pointer">▶ 展開</button>
-        </div>
-        <div id="rush-pattern-body" style="display:none">
+        <div style="color:var(--text);font-weight:600;font-size:13px;margin:14px 0 8px">🔍 どのチーム課題をスキップしたか（Rush 00/01/02 × BSQ）</div>
+        <div id="rush-pattern-body">
           ${(() => {
             // Rush 00/01/02 × BSQ 全パターン分析
             const hasIndividualRush = activeS.some(s => 'rush_00_attempted' in s);
@@ -2499,7 +2560,7 @@ function renderFailAnalysisTab() {
       <div style="margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
           <div style="color:var(--accent-light);font-weight:700;font-size:15px">
-            🔀 Rush vs 個人課題（C）: 4象限分析
+            ④ Rush vs C課題 — 🔀 4象限分析
             <span style="font-size:11px;font-weight:400;color:var(--text-dim)">アクティブ学生のみ</span>
           </div>
           <div style="display:flex;gap:4px;margin-left:auto">
@@ -2521,6 +2582,7 @@ function renderFailAnalysisTab() {
             </button>
           </div>
         </div>
+        <div style="color:var(--text-dim);font-size:12px;margin-bottom:6px"><strong style="color:var(--text)">C課題（個人課題）が最優先。</strong>Rush登録はC課題と両立できる範囲で。「RushのためにCを犠牲にする」のは逆効果の可能性がある。</div>
         <div style="color:var(--text-dim);font-size:13px;margin-bottom:10px;line-height:1.8">
           アクティブ学生を Rush × C課題の中央値で4グループに分類。<br>
           <strong style="color:var(--text)">「Rushをやるべきか？ C課題を優先すべきか？」</strong> の直接比較。
@@ -2534,9 +2596,8 @@ function renderFailAnalysisTab() {
     <!-- 合否予測モデル & Megatoron推定 -->
     ${predData.length > 0 ? `
     <div style="margin-bottom:20px">
-      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:4px">
-        🎯 数値で合否の何%が説明できるか
-      </div>
+      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:4px">⑤ 数値で何%説明できるか — 🎯 予測モデルの精度</div>
+      <div style="color:var(--text-dim);font-size:12px;margin-bottom:8px">全数値指標で合否を予測すると<strong style="color:var(--text)">何%正解できるか</strong>、そして残り何%が「数値では説明できない何か（Megatoron等）」かを推定。</div>
       <div style="color:var(--text-dim);font-size:13px;margin-bottom:10px;line-height:1.8">
         ログイン時間・C完了数・試験スコア・Rush登録数など全${corrResults.length}指標の組み合わせで合否を予測したときの精度。<br>
         <strong style="color:var(--text)">説明しきれない部分 ≈ Megatoron（仲間投票）等の数値に現れない要因</strong>と推察される。
@@ -2567,11 +2628,11 @@ function renderFailAnalysisTab() {
       </div>
 
       ${(falseNeg.length > 0 || falsePos.length > 0) ? `
-      <!-- Megatoron分析 セクションヘッダー -->
-      <div style="margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(155,89,182,0.3)">
-        <span style="color:rgba(155,89,182,0.9);font-weight:700;font-size:14px">🔮 Megatoronの影響分析</span>
-        <span style="color:var(--text-dim);font-size:12px;margin-left:8px">— 数値で説明できなかった合否の背景</span>
+      <!-- ⑥ Megatoron分析 セクションヘッダー -->
+      <div style="margin:16px 0 6px;padding-bottom:6px;border-bottom:1px solid rgba(155,89,182,0.3)">
+        <span style="color:rgba(155,89,182,0.9);font-weight:700;font-size:15px">⑥ Megatoron（仲間投票）の影響 — 🔮 数値外要因の正体</span>
       </div>
+      <div style="color:var(--text-dim);font-size:12px;margin-bottom:8px">予測モデルで誤分類された学生（<strong style="color:var(--text)">数値は合格圏なのに不合格、またはその逆</strong>）を分析。Megatoron投票等の数値に現れない要因の影響と推察。</div>
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.7;padding:8px 10px;background:rgba(155,89,182,0.04);border-radius:6px">
         <strong style="color:rgba(155,89,182,0.8)">Megatoron</strong> とは、Piscine中に「この人と一緒に入学したい」と思う仲間を選ぶ<strong style="color:var(--text)">仲間投票</strong>のこと。<br>
         詳細な仕組みは非公開だが、合否に影響するとされている。数値モデルで予測できなかった合否の差がこの要因と推察される。
