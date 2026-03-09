@@ -1879,6 +1879,11 @@ function renderFailAnalysisTab() {
         各指標と合否（合格=1 / 不合格=0）の点双列相関係数 <strong style="color:var(--text)">r<sub>pb</sub></strong>。<br>
         <span style="color:var(--green)">r &gt; 0</span>（緑）= 値が高いほど合格しやすい　／　<span style="color:#ff7675">r &lt; 0（↓逆）</span> = 値が高いほど<strong style="color:#ff7675">落ちやすい（逆相関）</strong>
       </div>
+      <div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:11px;color:rgba(255,255,255,0.4);line-height:1.8;margin-bottom:6px">
+        📐 各行の数値の読み方：<strong style="color:rgba(255,255,255,0.6)">全体σ</strong> = 合格者・不合格者 全員を合わせた標準偏差（点双列相関の計算に使用）。<br>
+        <strong style="color:rgba(255,255,255,0.6)">差÷全体σ</strong> = 合格平均と不合格平均の差が「全体のばらつき」の何倍か（= 効果量）。大きいほど合否での差が際立つ。<br>
+        ⚠ ここの「全体σ」は、上の表で使う「合格者のσ」（個人スコアを合格者基準で偏差化するための値）とは <strong style="color:rgba(255,255,255,0.6)">別物</strong>。
+      </div>
       <div style="padding:8px 0">
         ${corrResults.map(c => {
           const absR = Math.abs(c.r);
@@ -1901,7 +1906,9 @@ function renderFailAnalysisTab() {
               <span style="min-width:110px;font-size:11px;color:${cl.color}">${cl.text}</span>
             </div>
             <div style="margin-left:200px;padding-left:10px;font-size:11px;color:var(--text-dim);line-height:1.4;margin-top:2px">
-              n=${c.n}（合格${c.n1} / 不合格${c.n0}）　合格平均=${typeof c.mp==='number'?c.mp.toFixed(2):'—'}　不合格平均=${typeof c.mf==='number'?c.mf.toFixed(2):'—'}　σ=${typeof c.sn==='number'?c.sn.toFixed(3):'—'}
+              n=${c.n}（合格${c.n1} / 不合格${c.n0}）　合格平均=${typeof c.mp==='number'?c.mp.toFixed(2):'—'}　不合格平均=${typeof c.mf==='number'?c.mf.toFixed(2):'—'}
+              <span title="合格者・不合格者 全${c.n}人合わせた標準偏差。点双列相関の計算に使用（上の表のσとは別物）。" style="cursor:help;border-bottom:1px dotted rgba(255,255,255,0.25)">全体σ=${typeof c.sn==='number'?c.sn.toFixed(3):'—'}</span>
+              ${typeof c.mp==='number' && typeof c.mf==='number' && typeof c.sn==='number' ? `<span style="color:rgba(255,255,255,0.25)">　差=${( c.mp - c.mf).toFixed(1)}点 = ${((c.mp-c.mf)/c.sn).toFixed(2)}σ分</span>` : ''}
             </div>
           </div>`;
         }).join('')}
