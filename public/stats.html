@@ -2377,14 +2377,18 @@ function renderFailAnalysisTab() {
             </div>
 
             <!-- パターン別テーブル -->
-            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">各パターンの合格率（5人以上のみ★）</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">各パターンの合格率（5人以上のみ★）</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:6px">
+              <span style="color:var(--green)">○</span> = <strong style="color:rgba(255,255,255,0.6)">登録あり（Attempted）</strong>
+              <span style="color:var(--text-dim)">✕</span> = 登録なし　—　完了・合格の有無ではありません
+            </div>
             <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
               <thead>
                 <tr style="background:rgba(108,92,231,0.1)">
-                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R00</th>
-                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R01</th>
-                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R02</th>
-                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">BSQ</th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R00<br><span style="font-weight:400;color:rgba(255,255,255,0.3);font-size:9px">1週目</span></th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R01<br><span style="font-weight:400;color:rgba(255,255,255,0.3);font-size:9px">2週目</span></th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">R02<br><span style="font-weight:400;color:rgba(255,255,255,0.3);font-size:9px">3週目</span></th>
+                  <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">BSQ<br><span style="font-weight:400;color:rgba(255,255,255,0.3);font-size:9px">4週目</span></th>
                   <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">人数</th>
                   <th style="padding:5px 6px;text-align:left;border-bottom:1px solid var(--border);font-size:11px">合格率</th>
                   <th style="padding:5px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:11px">平均C</th>
