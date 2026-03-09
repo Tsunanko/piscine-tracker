@@ -2534,12 +2534,12 @@ function renderFailAnalysisTab() {
     <!-- 合否予測モデル & Megatoron推定 -->
     ${predData.length > 0 ? `
     <div style="margin-bottom:20px">
-      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:8px">
-        🎯 数値データによる合否予測精度
+      <div style="color:var(--accent-light);font-weight:700;font-size:15px;margin-bottom:4px">
+        🎯 数値で合否の何%が説明できるか
       </div>
       <div style="color:var(--text-dim);font-size:13px;margin-bottom:10px;line-height:1.8">
-        全${corrResults.length}指標の相関係数を重みにした予測スコアで合否を判定した場合の精度。<br>
-        <strong style="color:var(--text)">説明できない部分 ≈ Megatoron等の数値外要因の影響</strong>と推察される。
+        ログイン時間・C完了数・試験スコア・Rush登録数など全${corrResults.length}指標の組み合わせで合否を予測したときの精度。<br>
+        <strong style="color:var(--text)">説明しきれない部分 ≈ Megatoron（仲間投票）等の数値に現れない要因</strong>と推察される。
       </div>
 
       <!-- 精度メーター -->
@@ -2567,54 +2567,71 @@ function renderFailAnalysisTab() {
       </div>
 
       ${(falseNeg.length > 0 || falsePos.length > 0) ? `
-      <div style="font-size:13px;line-height:1.8">
-        <div style="color:var(--text-dim);margin-bottom:6px">
-          <strong style="color:var(--text)">🔮 Megatoron推定影響を受けた可能性のある学生:</strong>
+      <!-- Megatoron分析 セクションヘッダー -->
+      <div style="margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(155,89,182,0.3)">
+        <span style="color:rgba(155,89,182,0.9);font-weight:700;font-size:14px">🔮 Megatoronの影響分析</span>
+        <span style="color:var(--text-dim);font-size:12px;margin-left:8px">— 数値で説明できなかった合否の背景</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.7;padding:8px 10px;background:rgba(155,89,182,0.04);border-radius:6px">
+        <strong style="color:rgba(155,89,182,0.8)">Megatoron</strong> とは、Piscine中に「この人と一緒に入学したい」と思う仲間を選ぶ<strong style="color:var(--text)">仲間投票</strong>のこと。<br>
+        詳細な仕組みは非公開だが、合否に影響するとされている。数値モデルで予測できなかった合否の差がこの要因と推察される。
+      </div>
+      <div style="font-size:13px;line-height:1.8;margin-bottom:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${falseNeg.length > 0 ? `
+          <div style="flex:1;min-width:200px;padding:10px 12px;background:rgba(255,118,117,0.06);border:1px solid rgba(255,118,117,0.2);border-radius:6px">
+            <div style="color:var(--red);font-weight:700;margin-bottom:4px">▼ 引き下げられた可能性（${falseNeg.length}人）</div>
+            <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">数値は合格圏 → 実際は不合格</div>
+            <div style="font-size:12px">
+              ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join('　')}
+            </div>
+          </div>` : ''}
+          ${falsePos.length > 0 ? `
+          <div style="flex:1;min-width:200px;padding:10px 12px;background:rgba(0,206,201,0.06);border:1px solid rgba(0,206,201,0.2);border-radius:6px">
+            <div style="color:var(--green);font-weight:700;margin-bottom:4px">▲ 引き上げられた可能性（${falsePos.length}人）</div>
+            <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">数値は不合格圏 → 実際は合格</div>
+            <div style="font-size:12px">
+              ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join('　')}
+            </div>
+          </div>` : ''}
         </div>
-        ${falseNeg.length > 0 ? `
-        <div style="margin-bottom:6px;padding:8px 12px;background:rgba(255,118,117,0.05);border-radius:6px">
-          <span style="color:var(--red)">▼ 数値は合格圏だが不合格</span>（${falseNeg.length}人）
-          <span style="color:var(--text-dim);font-size:12px">— Megatoronで不利だった可能性</span><br>
-          <span style="font-size:12px;color:var(--text-dim)">
-            ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join(', ')}
-          </span>
-        </div>` : ''}
-        ${falsePos.length > 0 ? `
-        <div style="padding:8px 12px;background:rgba(0,206,201,0.05);border-radius:6px">
-          <span style="color:var(--green)">▲ 数値は不合格圏だが合格</span>（${falsePos.length}人）
-          <span style="color:var(--text-dim);font-size:12px">— Megatoronで有利だった可能性</span><br>
-          <span style="font-size:12px;color:var(--text-dim)">
-            ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join(', ')}
-          </span>
-        </div>` : ''}
       </div>` : ''}
 
       ${(() => {
-        // FalseNeg / FalsePos の Rush 状況を分析
         if (falseNeg.length === 0 && falsePos.length === 0) return '';
         const fnStudents = allStudentsWithResult.filter(s => falseNeg.some(p => p.login === s.login));
         const fpStudents = allStudentsWithResult.filter(s => falsePos.some(p => p.login === s.login));
+        const activeAll  = allStudentsWithResult.filter(s => s.is_active);
         const avg = (grp, key) => {
           const v = grp.map(s => s[key]).filter(x => x != null);
-          return v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toFixed(1) : '—';
+          return v.length ? (v.reduce((a,b)=>a+b,0)/v.length) : null;
         };
+        const fmt = v => v != null ? v.toFixed(1) : '—';
         if (fnStudents.length === 0 && fpStudents.length === 0) return '';
+
+        const fnRush = avg(fnStudents, 'rush_attempted');
+        const fpRush = avg(fpStudents, 'rush_attempted');
+        const allRush = avg(activeAll, 'rush_attempted');
+
+        // 仮説成立の判定: 引き上げ組のRush > 全体平均 AND 引き下げ組のRush < 全体平均
+        const hypoSupported = fpRush != null && allRush != null && fpRush > allRush;
+        const hypoRefuted   = fpRush != null && allRush != null && fpRush < allRush;
+
         return `
-        <div style="margin-top:12px;padding:10px 12px;background:rgba(155,89,182,0.05);border:1px solid rgba(155,89,182,0.2);border-radius:8px">
-          <div style="font-size:13px;font-weight:700;color:rgba(155,89,182,0.9);margin-bottom:8px">
-            🏃 Megatoron候補者のRush状況（Rush→Megatoron仮説の検証）
+        <div style="padding:10px 12px;background:rgba(155,89,182,0.04);border:1px solid rgba(155,89,182,0.15);border-radius:8px;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700;color:rgba(155,89,182,0.9);margin-bottom:6px">
+            💡 仮説検証: Rush登録 → Megatoron票 → 合否影響
           </div>
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
-            Rushは1週間チームで取り組むため、<strong style="color:var(--text)">チームメンバー=Megatoron投票の母集団</strong>になる可能性がある。<br>
-            Rush登録数が多い → 接触した仲間が多い → Megatoron票が増える という因果パスの仮説。
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.7">
+            Rushはチームで取り組むため「チームメンバー = Megatoron投票の母集団」になる可能性がある。<br>
+            Rush登録が多い人ほど接触した仲間が多く → Megatoron票が増える、という仮説を検証する。
           </div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
             <thead>
               <tr style="background:rgba(255,255,255,0.04)">
                 <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">グループ</th>
                 <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">人数</th>
-                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">Rush登録数avg</th>
-                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">Rush完了数avg</th>
+                <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">Rush登録avg</th>
                 <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">レビュー回数avg</th>
                 <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border)">試験avg</th>
               </tr>
@@ -2622,42 +2639,48 @@ function renderFailAnalysisTab() {
             <tbody>
               ${fnStudents.length > 0 ? `
               <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-                <td style="padding:6px 8px;color:var(--red)">▼ 数値合格圏→不合格</td>
+                <td style="padding:6px 8px;color:var(--red)">▼ 引き下げ組（数値○→実際✗）</td>
                 <td style="text-align:center">${fnStudents.length}</td>
-                <td style="text-align:center;font-weight:700">${avg(fnStudents,'rush_attempted')}</td>
-                <td style="text-align:center">${avg(fnStudents,'rush_completed')}</td>
-                <td style="text-align:center">${avg(fnStudents,'review_given')}</td>
-                <td style="text-align:center">${avg(fnStudents,'exam_score')}</td>
+                <td style="text-align:center;font-weight:700;color:${fnRush != null && allRush != null && fnRush > allRush ? 'var(--red)' : 'var(--text)'}">${fmt(fnRush)}</td>
+                <td style="text-align:center">${fmt(avg(fnStudents,'review_given'))}</td>
+                <td style="text-align:center">${fmt(avg(fnStudents,'exam_score'))}</td>
               </tr>` : ''}
               ${fpStudents.length > 0 ? `
               <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-                <td style="padding:6px 8px;color:var(--green)">▲ 数値不合格圏→合格</td>
+                <td style="padding:6px 8px;color:var(--green)">▲ 引き上げ組（数値✗→実際○）</td>
                 <td style="text-align:center">${fpStudents.length}</td>
-                <td style="text-align:center;font-weight:700">${avg(fpStudents,'rush_attempted')}</td>
-                <td style="text-align:center">${avg(fpStudents,'rush_completed')}</td>
-                <td style="text-align:center">${avg(fpStudents,'review_given')}</td>
-                <td style="text-align:center">${avg(fpStudents,'exam_score')}</td>
+                <td style="text-align:center;font-weight:700;color:${hypoSupported ? 'var(--green)' : hypoRefuted ? 'var(--red)' : 'var(--text)'}">${fmt(fpRush)}</td>
+                <td style="text-align:center">${fmt(avg(fpStudents,'review_given'))}</td>
+                <td style="text-align:center">${fmt(avg(fpStudents,'exam_score'))}</td>
               </tr>` : ''}
               <tr>
                 <td style="padding:6px 8px;color:var(--text-dim)">全アクティブ平均</td>
-                <td style="text-align:center">${allStudentsWithResult.filter(s=>s.is_active).length}</td>
-                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'rush_attempted')}</td>
-                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'rush_completed')}</td>
-                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'review_given')}</td>
-                <td style="text-align:center">${avg(allStudentsWithResult.filter(s=>s.is_active),'exam_score')}</td>
+                <td style="text-align:center">${activeAll.length}</td>
+                <td style="text-align:center;color:var(--text-dim)">${fmt(allRush)}</td>
+                <td style="text-align:center;color:var(--text-dim)">${fmt(avg(activeAll,'review_given'))}</td>
+                <td style="text-align:center;color:var(--text-dim)">${fmt(avg(activeAll,'exam_score'))}</td>
               </tr>
             </tbody>
           </table>
-          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:6px;line-height:1.6">
-            ⚠️ 「数値合格圏→不合格」グループのRush登録数が全体平均より高い場合、Rush参加だけではMegatoron有利にならないことを示す（仮説の反例）。<br>
-            逆に「数値不合格圏→合格」グループのRush登録数が高い場合、Rush→Megatoron仮説を支持する証拠となる。
+          <!-- 結論ボックス（データに基づいて動的に生成） -->
+          <div style="padding:8px 12px;border-radius:6px;font-size:12px;line-height:1.8;${hypoRefuted ? 'background:rgba(255,118,117,0.06);border:1px solid rgba(255,118,117,0.2)' : hypoSupported ? 'background:rgba(0,206,201,0.06);border:1px solid rgba(0,206,201,0.2)' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1)'}">
+            <strong style="color:${hypoRefuted ? 'var(--red)' : hypoSupported ? 'var(--green)' : 'var(--text)'}">
+              ${hypoRefuted ? '❌ 仮説は成立しなかった' : hypoSupported ? '✅ 仮説を支持するデータ' : '⚠️ 判定不明'}
+            </strong><br>
+            <span style="color:var(--text-dim)">
+              ${hypoRefuted
+                ? `引き上げ組のRush登録数（${fmt(fpRush)}回）が全体平均（${fmt(allRush)}回）を<strong style="color:var(--text)">下回っている</strong>。Rush登録が多いほどMegatoron有利になるとは言えない。<br>Rush登録と合格率の相関は「Rushに多く登録する人が他の指標も高い」という共通原因の可能性が高い。`
+                : hypoSupported
+                ? `引き上げ組のRush登録数（${fmt(fpRush)}回）が全体平均（${fmt(allRush)}回）を<strong style="color:var(--text)">上回っている</strong>。Rush登録がMegatoron票を通じて合否に影響している可能性がある。`
+                : 'データが不十分のため判定できない。'}
+            </span>
           </div>
         </div>`;
       })()}
 
-      <div style="color:rgba(255,255,255,0.35);font-size:12px;margin-top:8px;line-height:1.6">
+      <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:6px;line-height:1.6">
         ※ 予測モデルは相関係数加重zスコアの単純線形モデル。因果関係ではなく相関に基づく推定です。<br>
-        ※ 「Megatoron」とは仲間による推薦投票のこと。Piscine期間中に「この人と一緒に入学したい」と思う仲間を選ぶ投票で、結果が合否に影響するとされています（詳細は非公開）。
+        ※ 「引き上げ/引き下げ」は予測スコアと合否閾値の差分。数値的には合否できていたはずが逆だった場合に非数値要因（Megatoron等）の影響と推察。
       </div>
     </div>` : ''}
 
