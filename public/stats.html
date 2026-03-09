@@ -2787,6 +2787,42 @@ function renderFailAnalysisTab() {
       <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">
         数値が近いのに結果が違う行に注目すると、数値以外の評価基準の影響が見えてきます。
       </div>
+
+      <!-- 数値外影響列の説明 -->
+      <div style="padding:10px 12px;background:rgba(155,89,182,0.05);border:1px solid rgba(155,89,182,0.15);border-radius:8px;margin-bottom:10px;font-size:12px">
+        <div style="font-weight:700;color:rgba(155,89,182,0.9);margin-bottom:6px">📐 「数値外影響」列の読み方</div>
+        <div style="color:var(--text-dim);line-height:1.8;margin-bottom:8px">
+          数値モデル（Exam・時間・Level・レビュー数・Rush等を相関係数で加重した合成スコア）が
+          計算した <strong style="color:var(--text)">予測スコア</strong> と
+          <strong style="color:var(--text)">最適閾値</strong>（合否境界 = ${bestTh != null ? bestTh.toFixed(2) : '—'}）の差を
+          <strong style="color:var(--text)">gap</strong> とする。<br>
+          gap &gt; 0 → 数値的には合格圏　／　gap &lt; 0 → 数値的には不合格圏
+        </div>
+        <div style="display:grid;grid-template-columns:56px 1fr;gap:6px 12px;align-items:start">
+          <div style="color:#00cec9;font-weight:700;font-size:13px;padding-top:1px">▲ n<br><span style="font-size:9px">引き上げ</span></div>
+          <div style="color:var(--text-dim);line-height:1.7">
+            数値モデルは不合格予測（gap &lt; 0）なのに実際は<strong style="color:#00cec9">合格</strong>。
+            <strong style="color:var(--text)">n = 閾値をどれだけ下回っていたか</strong>（大きいほど「数値から見れば意外な合格」）。<br>
+            <span style="font-size:11px">Megatoron票などの非数値評価が合否を引き上げた可能性がある。</span>
+          </div>
+          <div style="color:#ff7675;font-weight:700;font-size:13px;padding-top:1px">▼ n<br><span style="font-size:9px">引き下げ</span></div>
+          <div style="color:var(--text-dim);line-height:1.7">
+            数値モデルは合格予測（gap &gt; 0）なのに実際は<strong style="color:#ff7675">不合格</strong>。
+            <strong style="color:var(--text)">n = 閾値をどれだけ上回っていたか</strong>（大きいほど「数値から見れば意外な不合格」）。<br>
+            <span style="font-size:11px">Megatoron票の不足などが合否を引き下げた可能性がある。</span>
+          </div>
+          <div style="color:var(--text-dim);font-weight:700;font-size:13px;padding-top:1px">● n<br><span style="font-size:9px">数値通り</span></div>
+          <div style="color:var(--text-dim);line-height:1.7">
+            モデルの予測通りの結果（合格予測→合格 or 不合格予測→不合格）。
+            <strong style="color:var(--text)">n = 閾値からの余裕</strong>（大きいほど数値が結果を強く支持している）。<br>
+            <span style="font-size:11px">Megatoron等による逆転はなかったと推察。</span>
+          </div>
+        </div>
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(155,89,182,0.15);color:rgba(255,255,255,0.3);font-size:10px;line-height:1.6">
+          ※ 数値モデルの精度は ${predAccPct}%（${predData.length}人中 ${Math.round(bestAcc * predData.length)}人を正しく予測）。残り ${unexplainedPct}% が「数値では説明できない」部分で、▲/▼ の学生がこれに相当する。
+        </div>
+      </div>
+
       <div style="overflow-x:auto">
         <table class="corr-table" style="font-size:12px">
           <thead><tr>
