@@ -1178,8 +1178,21 @@ function renderExamTab() {
     : null;
 
   // スコア帯ごとの Piscine合格/不合格/結果未集計 を分けてカウント（最初のビン=未受験）
-  const binLabels = ['未受験','0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
-  const bins = Array(12).fill(null).map(() => ({ pass: 0, fail: 0, unknown: 0 }));
+  // 1問6点なので6点刻みビン → 各ビン=1問分に対応
+  const BIN_PT   = 6;
+  const MAX_PROB = 16; // 96点=16問が上限、それ以上は最終ビンへ
+  // ラベル: 未受験 + 0問(0pt) 〜 16問(96pt) + 100pt
+  const binLabels = [
+    '未受験',
+    ...Array.from({length: MAX_PROB + 1}, (_, p) => [`${p}問`, `(${p * BIN_PT}pt)`]),
+    ['100pt', '(特別)'],
+  ];
+  const binScoreHint = [
+    null,
+    ...Array.from({length: MAX_PROB + 1}, (_, p) => p * BIN_PT),
+    100,
+  ];
+  const bins = Array(binLabels.length).fill(null).map(() => ({ pass: 0, fail: 0, unknown: 0 }));
   // 未受験者をビン[0]に追加
   for (const s of noScore) {
     const r = passes[s.login];
@@ -1187,14 +1200,34 @@ function renderExamTab() {
     else if (r === 'fail') bins[0].fail++;
     else                   bins[0].unknown++;
   }
-  // 受験者をビン[1-11]に追加（スコア÷10 + 1）
+  // 受験者をビン[1-18]に追加（スコア÷6 → 問題数インデックス）
   for (const s of withScore) {
-    const bi = Math.min(Math.floor(s.exam_score / 10), 10) + 1;
-    const r  = passes[s.login];
+    let bi;
+    if (s.exam_score >= 100) {
+      bi = binLabels.length - 1; // 100pt特別ビン
+    } else {
+      bi = Math.min(Math.floor(s.exam_score / BIN_PT), MAX_PROB) + 1;
+    }
+    const r = passes[s.login];
     if (r === 'pass')      bins[bi].pass++;
     else if (r === 'fail') bins[bi].fail++;
     else                   bins[bi].unknown++;
   }
+
+  // 分布の自動分析（6点刻みビン分析）
+  const scoreBinStats = bins.slice(1, -1).map((b, i) => ({
+    i: i + 1,
+    prob: i,
+    pt: i * BIN_PT,
+    label: `${i}問(${i * BIN_PT}pt)`,
+    total: b.pass + b.fail + b.unknown,
+    pass: b.pass,
+    fail: b.fail,
+    rate: (b.pass + b.fail + b.unknown) > 0 ? Math.round(b.pass / (b.pass + b.fail + b.unknown) * 100) : null,
+  }));
+  const peakStat = scoreBinStats.reduce((best, b) => b.total > best.total ? b : best, scoreBinStats[0]);
+  const emptyMidBins = scoreBinStats.filter(b => b.total === 0 && b.prob > 0 && b.prob < MAX_PROB);
+  const firstMajorPass = scoreBinStats.find(b => b.rate !== null && b.rate >= 80 && b.total >= 3);
 
   // スコア一覧（降順）— Piscine結果で合否表示
   const sorted = [...withScore].sort((a, b) => b.exam_score - a.exam_score);
@@ -1284,9 +1317,33 @@ function renderExamTab() {
       <span><span style="background:rgba(255,118,117,0.8);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Piscine不合格</span>
       <span><span style="background:rgba(136,136,160,0.5);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle"></span>結果未集計</span>
     </div>
-    <div class="chart-wrap" style="height:220px;margin-top:8px">
+    <div class="chart-wrap" style="height:280px;margin-top:8px">
       <canvas id="examCanvas"></canvas>
     </div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.3);text-align:center;margin-top:4px">
+      ※ 1問6点構造 — 各バー = 1問完了分（スコアは6の倍数に集中）
+    </div>
+    ${withScore.length > 0 ? `
+    <div style="margin-top:12px;padding:10px 12px;background:rgba(0,206,201,0.04);border:1px solid rgba(0,206,201,0.12);border-radius:8px;font-size:12px">
+      <div style="color:rgba(0,206,201,0.8);font-weight:700;margin-bottom:6px">📊 分布の特徴</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;color:var(--text-dim);line-height:1.8">
+        <div>最多停止点:
+          <strong style="color:var(--text)">${peakStat.label}</strong>
+          <span style="color:rgba(255,255,255,0.4)">(${peakStat.total}人・合格率${peakStat.rate}%)</span>
+        </div>
+        ${firstMajorPass ? `<div>80%以上合格ライン:
+          <strong style="color:var(--green)">${firstMajorPass.label}</strong>以上
+        </div>` : ''}
+        ${emptyMidBins.length > 0 ? `<div style="grid-column:1/-1">
+          0人のスコア帯:
+          <strong style="color:var(--orange)">${emptyMidBins.map(b => b.label).join('・')}</strong>
+          — このスコアで止まる人がいない（難化の壁 or 連続突破）
+        </div>` : ''}
+        <div style="grid-column:1/-1;margin-top:2px;color:rgba(255,255,255,0.35)">
+          ※ スコアは6の倍数に集中（1問6点構造）。4問(24pt)は不合格壁、12問(72pt)が最大到達点の中心。
+        </div>
+      </div>
+    </div>` : ''}
     ${withScore.length === 0 && noScore.length === 0 ? `
     <div style="text-align:center;padding:40px 20px;color:var(--text-dim)">
       <div style="font-size:28px;margin-bottom:10px">📋</div>
@@ -1344,6 +1401,14 @@ function renderExamTab() {
         },
         tooltip: {
           callbacks: {
+            title: items => {
+              const bi = items[0].dataIndex;
+              if (bi === 0) return '未受験';
+              const score = binScoreHint[bi];
+              if (score == null) return '100pt';
+              const prob = score / BIN_PT;
+              return `${prob}問完了 (${score}pt)`;
+            },
             label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}人`,
             afterBody: items => {
               const bi    = items[0].dataIndex;
@@ -1360,7 +1425,7 @@ function renderExamTab() {
           stacked: true,
           title: { display: true, text: 'スコア', color: '#8888a0', font: { size: 12 } },
           grid: { color: '#2a2a3a' },
-          ticks: { color: '#8888a0', font: { size: 10 } },
+          ticks: { color: '#8888a0', font: { size: 9 }, maxRotation: 45, minRotation: 45, autoSkip: false },
         },
         y: {
           stacked: true,
