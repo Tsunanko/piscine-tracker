@@ -181,12 +181,13 @@ export default {
 
     // ─── データ取得 API（フロントエンドが使用）────────────────────────
     // 42 OAuthトークン or piscine:トークンで認証後にKVのデータを返す
+    // ?month=03 を付けると3月Piscineデータ（管理者のみ）
     if (url.pathname === '/api/data' && request.method === 'GET') {
-      return handleGetData(request, env);
+      return handleGetData(request, env, url);
     }
     if (url.pathname.startsWith('/api/data/') && request.method === 'GET') {
       const login = decodeURIComponent(url.pathname.slice('/api/data/'.length));
-      return handleGetUserData(request, env, login);
+      return handleGetUserData(request, env, login, url);
     }
 
     // ─── ログイン記録 API ──────────────────────────────────────────────
@@ -211,6 +212,11 @@ export default {
     // ─── 同意記録一覧 API（管理者のみ）────────────────────────────────
     if (url.pathname === '/api/consents' && request.method === 'GET') {
       return handleGetConsents(request, env);
+    }
+
+    // ─── 座席隣接分析 API（管理者のみ）─────────────────────────────────
+    if (url.pathname.startsWith('/api/neighbors') && request.method === 'GET') {
+      return handleGetNeighbors(request, env, url);
     }
 
     // ─── デフォルト: ルート (/) → ログイン画面 ────────────────────────
@@ -358,6 +364,33 @@ async function handleGetConsents(request, env) {
   });
 }
 
+/** 座席隣接分析データを返す（管理者のみ）
+ * GET /api/neighbors?month=02  → data:neighbors_02
+ * GET /api/neighbors           → data:neighbors_02 (default)
+ */
+async function handleGetNeighbors(request, env, url) {
+  if (!await isAdmin(request, env)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const month = url.searchParams.get('month') || '02';
+  const kvKey = `data:neighbors_${month}`;
+  const val = await env.PISCINE_DATA.get(kvKey);
+  if (!val) {
+    return new Response(JSON.stringify({ error: 'Neighbor data not found' }), {
+      status: 404,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  return new Response(val, {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
 /**
  * 合言葉認証（Piscine生向けシンプルログイン）
  *
@@ -451,10 +484,13 @@ async function handleKvUpload(request, env) {
 
   try {
     const body = await request.json();
-    const { type, data, login } = body;
+    const { type, data, login, month } = body;
+    const m = /^0[1-9]$/.test(month) ? month : '02';  // デフォルト02、バリデーション付き
 
     if (type === 'summary') {
-      await env.PISCINE_DATA.put('data:summary', JSON.stringify(data));
+      // 月別キーに保存。02は後方互換のため旧キーにも保存
+      await env.PISCINE_DATA.put(`data:summary:${m}`, JSON.stringify(data));
+      if (m === '02') await env.PISCINE_DATA.put('data:summary', JSON.stringify(data));
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
@@ -474,10 +510,21 @@ async function handleKvUpload(request, env) {
     }
 
     // users_batch: 全ユーザーJSONを1つのKVキーにまとめて保存（書き込み回数削減用）
-    // { "type": "users_batch", "data": { "login1": {...}, "login2": {...} } }
+    // { "type": "users_batch", "month": "03", "data": { "login1": {...}, ... } }
     if (type === 'users_batch' && data && typeof data === 'object') {
-      await env.PISCINE_DATA.put('data:users:all', JSON.stringify(data));
+      await env.PISCINE_DATA.put(`data:users:all:${m}`, JSON.stringify(data));
+      if (m === '02') await env.PISCINE_DATA.put('data:users:all', JSON.stringify(data));
       return new Response(JSON.stringify({ ok: true, count: Object.keys(data).length }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // neighbors: 座席隣接分析データ（管理者専用）
+    // { "type": "neighbors", "key": "neighbors_02", "data": {...} }
+    if (type === 'neighbors' && data) {
+      const kvKey = body.key || 'neighbors';
+      await env.PISCINE_DATA.put(`data:${kvKey}`, JSON.stringify(data));
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }
@@ -497,8 +544,9 @@ async function handleKvUpload(request, env) {
 
 /**
  * 全体ダッシュボード用 data.json を返す（認証必須）
+ * ?month=03 を指定すると3月Piscineデータ（管理者のみ）
  */
-async function handleGetData(request, env) {
+async function handleGetData(request, env, url) {
   const user = await checkDataAuth(request);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -507,7 +555,19 @@ async function handleGetData(request, env) {
     });
   }
 
-  const val = await env.PISCINE_DATA.get('data:summary');
+  const month = url?.searchParams?.get('month') || '02';
+  // 02以外は管理者のみ
+  if (month !== '02' && !user.isAdmin) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // 月別キーを優先。02の場合は旧キーにもフォールバック
+  const val = await env.PISCINE_DATA.get(`data:summary:${month}`)
+    || (month === '02' ? await env.PISCINE_DATA.get('data:summary') : null);
+
   if (!val) {
     return new Response(JSON.stringify({ error: 'Data not found' }), {
       status: 404,
@@ -528,7 +588,7 @@ async function handleGetData(request, env) {
  *   2. data:users:all     （バッチキー、新フォーマット）
  * どちらかに存在すれば返す。
  */
-async function handleGetUserData(request, env, login) {
+async function handleGetUserData(request, env, login, url) {
   const user = await checkDataAuth(request);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -544,16 +604,18 @@ async function handleGetUserData(request, env, login) {
     });
   }
 
-  // 1. 個別キーを先に試す（後方互換）
-  const individual = await env.PISCINE_DATA.get(`data:user:${login}`);
-  if (individual) {
-    return new Response(individual, {
+  const month = url?.searchParams?.get('month') || '02';
+  // 02以外は管理者のみ
+  if (month !== '02' && !user.isAdmin) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
-  // 2. バッチキーから取得（新フォーマット）
-  const batchVal = await env.PISCINE_DATA.get('data:users:all');
+  // 1. 月別バッチキーを先に試す（最新データ優先）
+  const batchVal = await env.PISCINE_DATA.get(`data:users:all:${month}`)
+    || (month === '02' ? await env.PISCINE_DATA.get('data:users:all') : null);
   if (batchVal) {
     try {
       const batch = JSON.parse(batchVal);
@@ -563,6 +625,16 @@ async function handleGetUserData(request, env, login) {
         });
       }
     } catch {}
+  }
+
+  // 2. 02月のみ: 個別キーにフォールバック（後方互換）
+  if (month === '02') {
+    const individual = await env.PISCINE_DATA.get(`data:user:${login}`);
+    if (individual) {
+      return new Response(individual, {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   return new Response(JSON.stringify({ error: 'User data not found' }), {
@@ -688,8 +760,8 @@ async function handleCallback(request, env, url) {
   // この POST リクエストで CLIENT_SECRET を使う（ブラウザには渡さない）
   const tokenResp = await fetch(TOKEN_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
       grant_type:    'authorization_code',         // フロー種別
       client_id:     env.FORTY_TWO_CLIENT_ID,
       client_secret: env.FORTY_TWO_CLIENT_SECRET,  // 秘密鍵（Workers Secretから取得）

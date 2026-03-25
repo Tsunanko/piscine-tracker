@@ -424,6 +424,7 @@
 const CIRCUMFERENCE = 2 * Math.PI * 85;
 const params = new URLSearchParams(window.location.search);
 const LOGIN = params.get('login') || 'yuichika';
+const PAGE_MONTH = params.get('month') || '02'; // 3月Piscineの場合 '03'
 
 // 初期表示の統計リンクにもloginを付ける
 const initStatsLink = document.getElementById('statsLinkInit');
@@ -773,7 +774,8 @@ async function loadData() {
 
   try {
     const token = getToken();
-    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}`, {
+    const monthParam = PAGE_MONTH !== '02' ? `?month=${PAGE_MONTH}` : '';
+    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) throw new Error(`User "${LOGIN}" not found (HTTP ${resp.status})`);
@@ -793,7 +795,8 @@ let miniChartInstance = null;
 async function renderMiniChart(login) {
   try {
     const token = getToken();
-    const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    const monthParam = PAGE_MONTH !== '02' ? `?month=${PAGE_MONTH}` : '';
+    const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const d = await res.json();

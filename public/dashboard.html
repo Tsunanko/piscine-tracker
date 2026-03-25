@@ -482,6 +482,11 @@
         <div class="header-label">42 Tokyo</div>
         <h1>Piscine Dashboard</h1>
         <div class="header-sub" id="headerSub"></div>
+        <!-- 月切り替えタブ（管理者のみ表示） -->
+        <div id="monthTabs" style="display:none;margin-top:10px;display:none;gap:6px;justify-content:center">
+          <button id="tab02" onclick="switchMonth('02')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(110,168,254,0.4);background:rgba(110,168,254,0.15);color:var(--accent-light);font-size:12px;cursor:pointer">2月</button>
+          <button id="tab03" onclick="switchMonth('03')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">3月</button>
+        </div>
       </div>
       <div class="summary fade-in">
         <div class="summary-item">
@@ -535,6 +540,7 @@ let showDev = localStorage.getItem('showDev') !== 'false';
 let showExam = localStorage.getItem('showExam') !== 'false';
 let showResult = localStorage.getItem('showResult') === 'true'; // 合否表示（デフォルトOFF）
 let loggedInUser = null; // ログイン中ユーザー情報
+let currentMonth = '02'; // 表示中のPiscine月（管理者のみ切り替え可）
 
 function esc(str) {
   return String(str)
@@ -677,7 +683,11 @@ function renderDashboard() {
   const clusters = [...new Set(d.online.map(s => s.cluster).filter(Boolean))].sort();
 
   // Update header
-  document.getElementById('headerSub').textContent = 'Feb 2 - Feb 27, 2026';
+  const periodLabel = currentMonth === '03' ? 'Mar 11 - Apr 5, 2026' : 'Feb 2 - Feb 27, 2026';
+  document.getElementById('headerSub').textContent = periodLabel;
+  // 管理者のみ月タブを表示
+  const monthTabs = document.getElementById('monthTabs');
+  if (monthTabs && isAdmin) monthTabs.style.display = 'flex';
   document.getElementById('onlineCount').textContent = d.total_online;
   document.getElementById('totalCount').textContent = d.total_students;
 
@@ -853,7 +863,8 @@ function onSearch(value) {
 }
 
 function goToStudent(login) {
-  window.location.href = `index.html?login=${encodeURIComponent(login)}`;
+  const monthParam = currentMonth !== '02' ? `&month=${currentMonth}` : '';
+  window.location.href = `index.html?login=${encodeURIComponent(login)}${monthParam}`;
 }
 
 async function loadDashboard() {
@@ -861,9 +872,9 @@ async function loadDashboard() {
   btn.classList.add('spinning');
 
   try {
-    // データ取得
     const token = sessionStorage.getItem('piscine_42_token') || '';
-    const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    const monthParam = currentMonth !== '02' ? `?month=${currentMonth}` : '';
+    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -876,6 +887,27 @@ async function loadDashboard() {
   } finally {
     btn.classList.remove('spinning');
   }
+}
+
+function switchMonth(month) {
+  if (currentMonth === month) return;
+  currentMonth = month;
+  currentFilter = 'all';
+  // タブのスタイル切り替え
+  ['02', '03'].forEach(m => {
+    const tab = document.getElementById(`tab${m}`);
+    if (!tab) return;
+    if (m === month) {
+      tab.style.background = 'rgba(110,168,254,0.15)';
+      tab.style.color = 'var(--accent-light)';
+      tab.style.borderColor = 'rgba(110,168,254,0.4)';
+    } else {
+      tab.style.background = 'transparent';
+      tab.style.color = 'var(--text-dim)';
+      tab.style.borderColor = 'rgba(136,136,160,0.3)';
+    }
+  });
+  loadDashboard();
 }
 
 function showError(msg) {

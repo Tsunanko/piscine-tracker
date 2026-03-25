@@ -3,10 +3,10 @@ name: Update Piscine Data
 # このワークフローの役割:
 #   42 API から Piscine 生のデータを取得して Cloudflare KV にアップロードする。
 #
-# 【注意】Piscine 終了のため schedule は無効化済み。
-#   必要な場合は GitHub → Actions タブ → "Run workflow" で手動実行。
-#
 # 手動実行: GitHub → Actions タブ → "Update Piscine Data" → "Run workflow"
+#   month を指定可能: "02"（2月） or "03"（3月）
+#
+# 自動実行: 3月Piscine進行中は1時間ごとに自動実行（UTC 0-15時 = JST 9-24時）
 #
 # 必要な GitHub Secrets:
 #   CLIENT_ID      → 42 Intra OAuth App UID
@@ -15,7 +15,16 @@ name: Update Piscine Data
 # ───────────────────────────────────────────────────────────────────────────
 
 on:
-  workflow_dispatch:  # 手動実行のみ（Piscine 終了のため schedule は停止）
+  workflow_dispatch:
+    inputs:
+      month:
+        description: 'Piscine月 ("02" or "03")'
+        required: false
+        default: '03'
+  schedule:
+    # 3月Piscine進行中（2026-03-11〜2026-04-05）は1時間ごと自動実行
+    # JST 9:00〜24:00 = UTC 0:00〜15:00
+    - cron: '0 0-15 * * *'
 
 permissions:
   contents: read
@@ -40,11 +49,10 @@ jobs:
         run: pip install requests
 
       # ─── Step 4: データ取得 → Cloudflare KV にアップロード ───────────
-      # WORKER_SECRET: fetch_data.py が Worker API /api/kv/upload に認証するためのキー
-      # → GitHub Secrets に登録が必要（Settings → Secrets → WORKER_SECRET）
       - name: Fetch piscine data and upload to KV
         env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}          # 42 Intra OAuth App UID
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}  # 42 Intra OAuth App Secret
-          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}  # Cloudflare Worker アップロード認証キー
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
         run: python scripts/fetch_data.py

@@ -49,11 +49,30 @@ TOKEN_URL = f"{INTRA_API_BASE}/oauth/token"
 
 JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 
-# Piscine 期間: この値を毎年更新する
-# PISCINE_END は「最終日の翌日 00:00」を指定する（範囲の終端として使うため）
-PISCINE_START = datetime(2026, 2, 2, 0, 0, 0, tzinfo=JST)   # Piscine 初日
-PISCINE_END   = datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST)  # 最終日の翌日
-PISCINE_DAYS  = 26          # 実際の登校日数（土日含む全日数）
+# PISCINE_MONTH: どの月のPiscineを処理するか（環境変数で切り替え）
+# "02" → 2月Piscine（2026-02-02〜2026-02-27）
+# "03" → 3月Piscine（2026-03-11〜2026-04-05）
+PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
+
+_PISCINE_CONFIG = {
+    "02": {
+        "start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
+        "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),  # 最終日の翌日
+        "days":  26,
+    },
+    "03": {
+        "start": datetime(2026, 3, 11, 0, 0, 0, tzinfo=JST),
+        "end":   datetime(2026, 4, 6,  0, 0, 0, tzinfo=JST),  # 4/5の翌日
+        "days":  26,
+    },
+}
+
+if PISCINE_MONTH not in _PISCINE_CONFIG:
+    raise ValueError(f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. Use '02' or '03'.")
+
+PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
+PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
+PISCINE_DAYS  = _PISCINE_CONFIG[PISCINE_MONTH]["days"]
 TARGET_HOURS_PER_DAY = 8    # 1日の目標学習時間
 
 CAMPUS_ID         = 26  # 42 Tokyo のキャンパスID
@@ -748,7 +767,7 @@ def main():
     # 新方式: 全ユーザーJSONを1つのオブジェクト {login: data} にまとめて1回で送信 → KV書き込みは1回のみ。
     print(f"\n[5] Uploading {len(user_jsons)} per-user JSONs to KV (batch mode)...")
     try:
-        upload_to_kv({"type": "users_batch", "data": user_jsons})
+        upload_to_kv({"type": "users_batch", "month": PISCINE_MONTH, "data": user_jsons})
         print(f"  Uploaded all {len(user_jsons)} user JSONs as batch (1 KV write)")
     except Exception as e:
         print(f"  [ERROR] Batch KV upload failed: {e}")
@@ -843,7 +862,7 @@ def main():
     }
 
     try:
-        upload_to_kv({"type": "summary", "data": dashboard})
+        upload_to_kv({"type": "summary", "month": PISCINE_MONTH, "data": dashboard})
         print(f"  Uploaded data.json to KV ({len(online)} online, {len(offline)} offline)")
     except Exception as e:
         print(f"  [ERROR] KV upload failed for data.json: {e}")
