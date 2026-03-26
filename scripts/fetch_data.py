@@ -157,14 +157,24 @@ def get_token():
     return resp.json()["access_token"]
 
 
-def api_get(token, path, params=None):
+def api_get(token, path, params=None, _retry=3):
     """42 API に GET リクエストを送る。
 
     Authorization: Bearer {token} ヘッダーを付けてリクエストする。
     42 API はページネーション（page[size], page[number]）を使う。
+    429 Too Many Requests の場合は指数バックオフでリトライする。
     """
     headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(f"{INTRA_API_BASE}{path}", headers=headers, params=params)
+    for attempt in range(_retry):
+        resp = requests.get(f"{INTRA_API_BASE}{path}", headers=headers, params=params)
+        if resp.status_code == 429:
+            wait = 15 * (2 ** attempt)  # 15s, 30s, 60s
+            print(f"  [429] rate limited on {path} → wait {wait}s (attempt {attempt+1}/{_retry})")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    # 全リトライ失敗
     resp.raise_for_status()
     return resp.json()
 
@@ -446,7 +456,7 @@ def main():
                 d += timedelta(days=1)
             students[login]["daily"] = daily  # 偏差値計算で使用
 
-            time.sleep(0.3)  # locations_stats の後
+            time.sleep(0.5)  # locations_stats の後
 
             # --- プロジェクト取得（429の場合は1回リトライ）---
             try:

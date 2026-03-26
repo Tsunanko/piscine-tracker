@@ -431,6 +431,13 @@
     <a href="dashboard.html" class="back-btn">← Dashboard</a>
     <div class="header-title">📊 統計分析</div>
     <div class="header-sub" id="headerSub">読み込み中...</div>
+    <!-- 月インジケーター（管理者向け切り替えタブ） -->
+    <div id="statsMonthTabs" style="display:none;margin-top:8px;gap:6px;justify-content:center;flex-wrap:wrap">
+      <button id="statTab02" onclick="switchStatsMonth('02')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(110,168,254,0.4);background:rgba(110,168,254,0.15);color:var(--accent-light);font-size:12px;cursor:pointer">2月</button>
+      <button id="statTab03" onclick="switchStatsMonth('03')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">3月</button>
+    </div>
+    <!-- 月ラベル（非管理者向け読み取り専用表示） -->
+    <div id="statsMonthLabel" style="display:none;margin-top:6px;font-size:11px;color:var(--text-dim)"></div>
   </div>
 
   <!-- タブ -->
@@ -505,6 +512,7 @@ let isComposing   = false; // IME composition中フラグ（スマホ2重入力�
 let suppressInput = false; // compositionend直後のinput誤発火を防ぐフラグ
 let currentUser   = null;  // ログイン中ユーザー（管理者チェック用）
 const ADMIN_LOGIN = 'admin_user';  // 試験スコアタブを閲覧できる管理者ログイン名
+let statsMonth = new URLSearchParams(window.location.search).get('month') || '02'; // グローバルで参照
 
 // 現在のフィルタ設定に基づく母集団を返す
 function currentStudents() {
@@ -644,7 +652,7 @@ async function loadData(currentUser = null) {
 
   // ?dev=1 でローカルファイルを使用（開発用・Cloudflare KV不要）
   const useLocalData = new URLSearchParams(window.location.search).get('dev') === '1';
-  const statsMonth = new URLSearchParams(window.location.search).get('month') || '02';
+  // statsMonth はグローバル変数（宣言済み）
   let d;
   if (useLocalData) {
     const res = await fetch('./dev-data.json');
@@ -697,6 +705,20 @@ async function loadData(currentUser = null) {
 
   buildAllCorrTable();
 
+  // 月インジケーター初期化
+  const monthLabel = statsMonth === '03' ? '3月ピシン (Mar 11 - Apr 5, 2026)' : '2月ピシン (Feb 2 - Feb 27, 2026)';
+  if (isAdmin) {
+    const tabs = document.getElementById('statsMonthTabs');
+    if (tabs) {
+      tabs.style.display = 'flex';
+      updateStatsMonthTabStyle(statsMonth);
+    }
+  } else if (statsMonth === '03') {
+    // 非管理者でも3月参照時は月ラベル表示
+    const lbl = document.getElementById('statsMonthLabel');
+    if (lbl) { lbl.textContent = monthLabel; lbl.style.display = 'block'; }
+  }
+
   // URL パラメータ ?login=XXX があれば自動ハイライト
   const urlLogin = new URLSearchParams(window.location.search).get('login');
   if (urlLogin) {
@@ -709,6 +731,39 @@ async function loadData(currentUser = null) {
   }
 
   render();
+}
+
+// ─────────────────────────────────────────────
+// 月切り替え（管理者専用）
+// ─────────────────────────────────────────────
+function updateStatsMonthTabStyle(month) {
+  ['02','03'].forEach(m => {
+    const btn = document.getElementById(`statTab${m}`);
+    if (!btn) return;
+    if (m === month) {
+      btn.style.background = 'rgba(110,168,254,0.15)';
+      btn.style.color = 'var(--accent-light)';
+      btn.style.borderColor = 'rgba(110,168,254,0.4)';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-dim)';
+      btn.style.borderColor = 'rgba(136,136,160,0.3)';
+    }
+  });
+}
+
+function switchStatsMonth(month) {
+  if (statsMonth === month) return;
+  statsMonth = month;
+  updateStatsMonthTabStyle(month);
+  // URLを更新（履歴に追加せず置換）
+  const u = new URL(window.location.href);
+  if (month === '02') { u.searchParams.delete('month'); }
+  else { u.searchParams.set('month', month); }
+  window.history.replaceState({}, '', u.toString());
+  // データ再取得
+  document.getElementById('headerSub').textContent = '読み込み中...';
+  loadData(currentUser);
 }
 
 // ─────────────────────────────────────────────
@@ -1094,7 +1149,8 @@ function renderChart(cached) {
         const el = elements.find(e => e.datasetIndex === 0);
         if (el) {
           const login = pts[el.index].login;
-          window.location.href = `index.html?login=${encodeURIComponent(login)}`;
+          const mSuffix = statsMonth !== '02' ? `&month=${statsMonth}` : '';
+          window.location.href = `index.html?login=${encodeURIComponent(login)}${mSuffix}`;
         }
       },
       onHover(event, elements) {
@@ -1245,7 +1301,7 @@ function renderExamTab() {
     const scoreColor = r === 'pass' ? 'var(--green)' : r === 'fail' ? 'var(--red)' : 'var(--text)';
     return `<tr>
       <td style="color:var(--text-dim)">${i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="font-weight:700;color:${scoreColor};font-size:16px">${s.exam_score}</td>
       <td>${makeResultBadge(r)}</td>
     </tr>`;
@@ -1256,7 +1312,7 @@ function renderExamTab() {
     const r = passes[s.login];
     return `<tr style="opacity:0.7">
       <td style="color:var(--text-dim)">${sorted.length + i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="color:var(--text-dim);font-size:16px">—</td>
       <td>${makeResultBadge(r)}</td>
     </tr>`;
@@ -1264,7 +1320,7 @@ function renderExamTab() {
 
   // 未受験で合格した人リスト
   const noScorePassRows = noScoreButPass.map(s =>
-    `<a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--green);text-decoration:none;margin-right:8px">${s.login}</a>`
+    `<a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--green);text-decoration:none;margin-right:8px">${s.login}</a>`
   ).join('');
 
   document.getElementById('mainCard').innerHTML = `
@@ -1789,7 +1845,7 @@ function renderFailAnalysisTab() {
 
       return `<tr style="${rowBg}">
         <td style="white-space:nowrap">
-          <a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
+          <a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
           <span style="margin-left:4px">${resultBadge}</span>
         </td>
         <td style="text-align:center;font-weight:700;color:${czColor};white-space:nowrap;font-size:13px">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2)+'σ' : '—'}</td>
@@ -1833,7 +1889,7 @@ function renderFailAnalysisTab() {
     const cntColor = cnt === 3 ? 'var(--orange)' : cnt === 2 ? 'var(--accent-light)' : 'var(--text-dim)';
     return `<tr>
       <td style="color:var(--text-dim)">${i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="font-weight:700;color:${scoreColor};font-size:14px">${s.exam_score}</td>
       <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
       <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
@@ -1848,7 +1904,7 @@ function renderFailAnalysisTab() {
     const cnt = (c.exam ? 1 : 0) + (c.hours ? 1 : 0) + (c.level ? 1 : 0);
     return `<tr style="opacity:0.6">
       <td style="color:var(--text-dim)">${sortedFail.length + i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="color:var(--text-dim)">—</td>
       <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
       <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
@@ -2731,7 +2787,7 @@ function renderFailAnalysisTab() {
             <div style="color:var(--red);font-weight:700;margin-bottom:4px">▼ 引き下げられた可能性（${falseNeg.length}人）</div>
             <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">数値は合格圏 → 実際は不合格</div>
             <div style="font-size:12px">
-              ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join('　')}
+              ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join('　')}
             </div>
           </div>` : ''}
           ${falsePos.length > 0 ? `
@@ -2739,7 +2795,7 @@ function renderFailAnalysisTab() {
             <div style="color:var(--green);font-weight:700;margin-bottom:4px">▲ 引き上げられた可能性（${falsePos.length}人）</div>
             <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">数値は不合格圏 → 実際は合格</div>
             <div style="font-size:12px">
-              ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join('　')}
+              ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join('　')}
             </div>
           </div>` : ''}
         </div>
