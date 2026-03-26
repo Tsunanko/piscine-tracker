@@ -323,7 +323,9 @@ def main():
 
     # Piscine生（147人）の中で42cursusに移行した人数を確認
     piscine_graduates = graduated_logins & set(students.keys())
-    results_announced = len(piscine_graduates) > 0
+    # results_announced: Piscine終了後かつ合格者が存在する場合のみ true
+    # 進行中に誰かが移行しても「結果発表」扱いにしない
+    results_announced = (now >= PISCINE_END) and (len(piscine_graduates) > 0)
     print(f"  Piscine graduates (in 42cursus): {len(piscine_graduates)}")
     print(f"  Results announced: {results_announced}")
 
@@ -653,7 +655,8 @@ def main():
                 "events_attended": events_attended,   # Piscine期間中のイベント参加数
                 "daily": daily,
                 "projects": projects,
-                "piscine_result": piscine_result,  # "passed" | "failed" | null
+                "piscine_result": piscine_result,       # "passed" | "failed" | null
+                "results_announced": results_announced, # 合否発表済みフラグ
                 "updated_at": now.isoformat(),
                 # level_deviation, hours_deviation はポスト処理で追加
             }
@@ -695,7 +698,9 @@ def main():
     # 設計意図: 序盤で離脱した学生を除き、最終週まで継続して参加した学生を母集団とする。
     # ピシン進行中・終了後いずれも同じ基準で固定（実行タイミングに依存しない安定した母集団）。
     # 例: 最終日=2/27 → 対象期間 2/21〜2/27 の7日間に1h以上来た学生
-    reference_time = PISCINE_END - timedelta(days=1)  # 最終日（Feb 27）
+    # Piscine進行中は「今日」を基準にする（未来の日付だと誰もアクティブにならないバグ対策）
+    # Piscine終了後は最終日固定（安定した母集団）
+    reference_time = min(now, PISCINE_END - timedelta(days=1))
     window_start = (reference_time - timedelta(days=ACTIVE_DAYS_THRESHOLD - 1)).strftime("%Y-%m-%d")
     active_logins = set()
     for login, s in students.items():
@@ -709,9 +714,10 @@ def main():
                      if login in active_logins and s.get("level", 0) > 0]
     if len(active_levels) >= 2:
         level_mean = statistics.mean(active_levels)
-        level_std = statistics.stdev(active_levels) if statistics.stdev(active_levels) > 0 else 1
+        level_std  = statistics.stdev(active_levels) or 1.0
+        level_ok   = True
     else:
-        level_mean, level_std = 0.0, 1.0
+        level_mean, level_std, level_ok = 0.0, 1.0, False
     print(f"  Level: mean={level_mean:.2f}, std={level_std:.2f}, n={len(active_levels)}")
 
     # 時間偏差値: アクティブ学生（total_hours > 0）を母集団
@@ -720,9 +726,10 @@ def main():
                     and s.get("total_hours") is not None and s["total_hours"] > 0]
     if len(active_hours) >= 2:
         hours_mean = statistics.mean(active_hours)
-        hours_std = statistics.stdev(active_hours) if statistics.stdev(active_hours) > 0 else 1
+        hours_std  = statistics.stdev(active_hours) or 1.0
+        hours_ok   = True
     else:
-        hours_mean, hours_std = 0.0, 1.0
+        hours_mean, hours_std, hours_ok = 0.0, 1.0, False
     print(f"  Hours: mean={hours_mean:.1f}h, std={hours_std:.1f}h, n={len(active_hours)}")
 
     # レビュー偏差値: アクティブ学生を母集団（0回含む）
@@ -730,23 +737,25 @@ def main():
                       for login in active_logins if login in user_jsons]
     if len(active_reviews) >= 2:
         review_mean = statistics.mean(active_reviews)
-        review_std = statistics.stdev(active_reviews) if statistics.stdev(active_reviews) > 0 else 1
+        review_std  = statistics.stdev(active_reviews) or 1.0
+        review_ok   = True
     else:
-        review_mean, review_std = 0.0, 1.0
+        review_mean, review_std, review_ok = 0.0, 1.0, False
     print(f"  Review: mean={review_mean:.1f}, std={review_std:.1f}, n={len(active_reviews)}")
 
-    # 各学生に偏差値を付与
+    # 各学生に偏差値を付与（母集団 < 2 の場合は null → フロントで '-' 表示）
     for login, uj in user_jsons.items():
-        level = students[login].get("level", 0)
-        hours = students[login].get("total_hours", 0)
+        level   = students[login].get("level", 0)
+        hours   = students[login].get("total_hours") or 0
         reviews = uj.get("review_given", 0)
-        level_dev = calc_deviation(level, level_mean, level_std)
-        hours_dev = calc_deviation(hours, hours_mean, hours_std)
-        review_dev = calc_deviation(reviews, review_mean, review_std)
-        composite_dev = round((level_dev + hours_dev + review_dev) / 3, 1)
-        uj["level_deviation"] = level_dev
-        uj["hours_deviation"] = hours_dev
-        uj["review_deviation"] = review_dev
+        level_dev   = calc_deviation(level,   level_mean,  level_std)  if level_ok  else None
+        hours_dev   = calc_deviation(hours,   hours_mean,  hours_std)  if hours_ok  else None
+        review_dev  = calc_deviation(reviews, review_mean, review_std) if review_ok else None
+        valid_devs  = [d for d in [level_dev, hours_dev, review_dev] if d is not None]
+        composite_dev = round(sum(valid_devs) / len(valid_devs), 1) if valid_devs else None
+        uj["level_deviation"]     = level_dev
+        uj["hours_deviation"]     = hours_dev
+        uj["review_deviation"]    = review_dev
         uj["composite_deviation"] = composite_dev
         # dashboard JSON 生成で使うためstudentsにも保存
         students[login]["level_deviation"]    = level_dev

@@ -428,7 +428,8 @@ const PAGE_MONTH = params.get('month') || '02'; // 3月Piscineの場合 '03'
 
 // 初期表示の統計リンクにもloginを付ける
 const initStatsLink = document.getElementById('statsLinkInit');
-if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}`;
+const monthSuffix = PAGE_MONTH !== '02' ? `&month=${PAGE_MONTH}` : '';
+if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}${monthSuffix}`;
 
 let currentStudentData = null;
 
@@ -542,7 +543,7 @@ function render(d) {
   app.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
-      <a href="stats.html?login=${encodeURIComponent(d.login)}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
+      <a href="stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
     </div>
 
     <!-- ヘッダー -->
@@ -553,8 +554,8 @@ function render(d) {
       <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
     </div>
 
-    <!-- 合否バナー（自分のプロフィールを見た時のみ表示） -->
-    ${(d.piscine_result && (loggedInUser?.login === d.login || isAdmin)) ? (() => {
+    <!-- 合否バナー（結果発表済み かつ 自分のプロフィール or 管理者のみ） -->
+    ${(d.piscine_result && d.results_announced && (loggedInUser?.login === d.login || isAdmin)) ? (() => {
       if (d.piscine_result === 'passed') {
         return `<div class="fade-in" style="
           background: linear-gradient(135deg, rgba(253,203,110,0.15), rgba(253,203,110,0.05));
@@ -634,11 +635,11 @@ function render(d) {
         &nbsp;&nbsp;
         <span style="display:inline-block;border-top:2px dashed rgba(0,206,201,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>Level平均
       </div>
-      <div style="position:relative;height:200px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}'">
+      <div style="position:relative;height:200px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}'">
         <canvas id="miniScatterCanvas"></canvas>
       </div>
       <div style="text-align:center;margin-top:8px">
-        <a href="stats.html?login=${encodeURIComponent(d.login)}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
+        <a href="stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
       </div>
     </div>
 
@@ -888,8 +889,8 @@ async function renderMiniChart(login) {
       },
     });
 
-    // 合格ライン参考（isAdminのみ）
-    if (currentStudentData && isAdmin) {
+    // 合格ライン参考（管理者かつ結果発表済みのみ）
+    if (currentStudentData && isAdmin && d.results_announced) {
       const passed = all.filter(s => s.piscine_result === 'passed');
       renderThresholds(currentStudentData, passed, all.length);
     }

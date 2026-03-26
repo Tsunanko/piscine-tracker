@@ -644,12 +644,14 @@ async function loadData(currentUser = null) {
 
   // ?dev=1 でローカルファイルを使用（開発用・Cloudflare KV不要）
   const useLocalData = new URLSearchParams(window.location.search).get('dev') === '1';
+  const statsMonth = new URLSearchParams(window.location.search).get('month') || '02';
   let d;
   if (useLocalData) {
     const res = await fetch('./dev-data.json');
     d = await res.json();
   } else {
-    const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    const monthParam = statsMonth !== '02' ? `?month=${statsMonth}` : '';
+    const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     d = await res.json();
