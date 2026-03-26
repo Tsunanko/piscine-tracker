@@ -48,3 +48,27 @@ scripts/github_pr_merge.sh <PR番号>
 # Update Piscine Data 実行
 scripts/github_run_workflow.sh update-data.yml
 ```
+
+---
+
+## Claude への運用指示（毎回必ず守ること）
+
+### データ更新が必要な場面では自動実行する
+以下のような場面では、ユーザーに確認せず **Claude 自身が `update-data.yml` を実行する**：
+
+- ユーザーが「データが古い」「表示がおかしい」「合否が正しく出ていない」と言ったとき
+- piscine_result の矛盾（合格者が「お疲れ様」と表示されるなど）が疑われるとき
+- ユーザーが「更新して」「データを取り直して」と依頼したとき
+
+```bash
+# 実行コマンド（GITHUB_TOKEN が必要）
+bash scripts/github_run_workflow.sh update-data.yml
+```
+
+実行後はワークフローの完了を確認して結果を報告する。
+
+### GITHUB_TOKEN が未設定の場合
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+```
+を実行するようユーザーに依頼してから、ワークフローを実行する。

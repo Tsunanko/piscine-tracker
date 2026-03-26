@@ -124,7 +124,7 @@ async function checkDataAuth(request) {
     });
     if (res.ok) {
       const user = await res.json();
-      return { login: user.login, type: 'oauth' };
+      return { login: user.login, type: 'oauth', isAdmin: user.login === 'admin_user' };
     }
   } catch {}
   return null;
