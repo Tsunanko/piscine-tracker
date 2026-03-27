@@ -439,7 +439,6 @@ function calcWeekly(daily) {
   for (let i = 0; i < daily.length; i += 7) {
     const slice = daily.slice(i, i + 7);
     const hours = +slice.reduce((s, d) => s + d.hours, 0).toFixed(1);
-    // 週の開始日・終了日を取得（表示用）
     const startDate = slice[0]?.date || '';
     const endDate   = slice[slice.length - 1]?.date || '';
     const fmt = ds => {
@@ -447,7 +446,7 @@ function calcWeekly(daily) {
       const [, m, dd] = ds.split('-');
       return `${+m}/${+dd}`;
     };
-    weeks.push({ hours, label: `${fmt(startDate)}-${fmt(endDate)}` });
+    weeks.push({ hours, label: `${fmt(startDate)}-${fmt(endDate)}`, startDate, endDate });
   }
   return weeks;
 }
@@ -504,43 +503,73 @@ function render(d) {
 
   // ── 伸び率（週別）事前計算（isAdminのみ） ──
   const weeklyData = isAdmin ? calcWeekly(d.daily) : [];
-  const weeklyHours = weeklyData.map(w => w.hours); // 後方互換
   let growthHTML = '';
   if (weeklyData.length >= 2) {
+    const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD (JST近似)
+
+    // 各週の「実際に経過した日数」を計算（未来の日は除外）
+    const weeklyWithDays = weeklyData.map(w => {
+      // w.label = "3/11-3/17" のような形式
+      const slice = d.daily.filter(day => day.date >= w.startDate && day.date <= w.endDate);
+      const elapsedDays = slice.filter(day => day.date <= todayStr).length;
+      const avgPerDay = elapsedDays > 0 ? +(w.hours / elapsedDays).toFixed(1) : 0;
+      return { ...w, elapsedDays, totalDays: slice.length, avgPerDay };
+    });
+
+    // 前半/後半：1日あたり平均で比較（進行中でも公平）
     const half = Math.floor(d.daily.length / 2);
-    const firstH = +d.daily.slice(0, half).reduce((s, x) => s + x.hours, 0).toFixed(1);
-    const secondH = +d.daily.slice(half).reduce((s, x) => s + x.hours, 0).toFixed(1);
-    const trendPct = firstH > 0 ? (secondH - firstH) / firstH * 100 : null;
+    const firstDays = d.daily.slice(0, half);
+    const secondDays = d.daily.slice(half);
+    const firstElapsed  = firstDays.filter(day => day.date <= todayStr).length;
+    const secondElapsed = secondDays.filter(day => day.date <= todayStr).length;
+    const firstH  = +firstDays.reduce((s, x) => s + x.hours, 0).toFixed(1);
+    const secondH = +secondDays.reduce((s, x) => s + x.hours, 0).toFixed(1);
+    // 1日あたり平均で比較
+    const firstAvg  = firstElapsed  > 0 ? firstH  / firstElapsed  : 0;
+    const secondAvg = secondElapsed > 0 ? secondH / secondElapsed : 0;
+    // 後半が3日未満しか経過していない場合は比較しない（不完全すぎる）
+    const canCompare = secondElapsed >= 3;
+    const trendPct = (canCompare && firstAvg > 0) ? (secondAvg - firstAvg) / firstAvg * 100 : null;
     const trendStr = trendPct !== null ? (trendPct >= 0 ? '+' : '') + trendPct.toFixed(1) + '%' : null;
     const trendColor = trendPct === null ? 'var(--text-dim)'
                      : trendPct >= 5 ? 'var(--green)'
                      : trendPct >= -5 ? 'var(--orange)' : 'var(--red)';
     const trendLabel = trendPct === null ? '' : trendPct >= 5 ? '後半に向けて活発化' : trendPct >= -5 ? '安定したペース' : '後半にペースダウン';
-    const maxW = Math.max(0.1, ...weeklyHours);
+
+    // 週バー：1日あたり平均で比較（未来週はスキップ）
+    const validWeeks = weeklyWithDays.filter(w => w.elapsedDays > 0);
+    const maxAvg = Math.max(0.1, ...validWeeks.map(w => w.avgPerDay));
     const wNumbers = ['1週目', '2週目', '3週目', '4週目'];
-    const weekBars = weeklyData.map((w, i) => {
-      const pct = (w.hours / maxW * 100).toFixed(1);
-      const isLast = i === weeklyData.length - 1;
+    const weekBars = weeklyWithDays.map((w, i) => {
+      if (w.elapsedDays === 0) return ''; // 未来週は表示しない
+      const pct = (w.avgPerDay / maxAvg * 100).toFixed(1);
+      const isPartial = w.elapsedDays < w.totalDays;
+      const partialNote = isPartial ? `<span style="color:var(--orange);font-size:9px"> (${w.elapsedDays}日)</span>` : '';
       return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <div style="font-size:10px;color:var(--text-dim);width:36px">${wNumbers[i]}</div>
         <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
-          <div style="width:${pct}%;height:100%;background:${isLast ? 'var(--orange)' : 'var(--accent)'};opacity:0.85;border-radius:4px;transition:width 0.5s"></div>
+          <div style="width:${pct}%;height:100%;background:${isPartial ? 'var(--orange)' : 'var(--accent)'};opacity:0.85;border-radius:4px;transition:width 0.5s"></div>
         </div>
-        <div style="font-size:11px;color:var(--text);width:40px;text-align:right">${w.hours}h</div>
-        <div style="font-size:9px;color:var(--text-dim);width:60px">${w.label}</div>
+        <div style="font-size:11px;color:var(--text);width:52px;text-align:right">${w.avgPerDay}h/日${partialNote}</div>
+        <div style="font-size:9px;color:var(--text-dim);width:54px">${w.label}</div>
       </div>`;
     }).join('');
+
     const trendRow = trendStr ? `
       <div style="margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px">前半(1〜13日) → 後半(14〜26日)</div>
-          <div style="font-size:12px;color:var(--text-dim)">${firstH}h → ${secondH}h &nbsp;<span style="color:${trendColor};font-size:11px">${trendLabel}</span></div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px">前半(1〜13日) → 後半(14〜26日)　※1日平均で比較</div>
+          <div style="font-size:12px;color:var(--text-dim)">${firstAvg.toFixed(1)}h/日 → ${secondAvg.toFixed(1)}h/日 &nbsp;<span style="color:${trendColor};font-size:11px">${trendLabel}</span></div>
         </div>
         <div style="font-size:24px;font-weight:800;color:${trendColor};margin-left:12px">${trendStr}</div>
-      </div>` : '';
+      </div>` : (!canCompare && secondElapsed > 0 ? `
+      <div style="margin-top:10px;padding:8px 14px;background:var(--surface2);border-radius:10px;font-size:11px;color:var(--text-dim);text-align:center">
+        後半(${secondElapsed}日経過) - 比較にはあと${3 - secondElapsed}日以上のデータが必要
+      </div>` : '');
+
     growthHTML = `
     <div class="card fade-in">
-      <div class="card-title">活動の推移（週別・伸び率）</div>
+      <div class="card-title">活動の推移（週別 · 1日平均）</div>
       ${weekBars}
       ${trendRow}
     </div>`;
