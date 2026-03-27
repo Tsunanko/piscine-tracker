@@ -935,13 +935,13 @@ async function renderMiniChart(login) {
     });
 
     // 合格ライン参考（管理者かつ結果発表済みのみ）
-    if (currentStudentData && isAdmin && d.results_announced) {
+    if (currentStudentData && loggedInUser?.login === 'admin_user' && d.results_announced) {
       const passed = all.filter(s => s.piscine_result === 'passed');
       renderThresholds(currentStudentData, passed, all.length);
     }
 
     // 近くにいた人（管理者専用）
-    if (isAdmin) {
+    if (loggedInUser?.login === 'admin_user') {
       renderNeighbors(LOGIN, PAGE_MONTH);
     }
   } catch(e) {
