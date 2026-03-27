@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>コホート比較 - Piscine Tracker</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="auth.js"></script>
 <style>
   :root {
     --bg: #0f0f14;
@@ -470,20 +471,13 @@ let token   = '';
 // 初期化
 // ─────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
+  // auth.js の requireAuth() でログイン確認（未ログインなら login.html へリダイレクト）
+  const me = await requireAuth();
+  if (!me) return;
+
   token = sessionStorage.getItem('piscine_42_token') || '';
 
-  // ログインユーザー確認
-  let me = null;
-  if (token) {
-    try {
-      const r = await fetch(`${WORKER}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (r.ok) me = await r.json();
-    } catch (_) {}
-  }
-
-  if (!me || me.login !== ADMIN) {
+  if (me.login !== ADMIN) {
     document.getElementById('loading').style.display = 'none';
     const err = document.getElementById('errorMsg');
     err.style.display = 'block';
