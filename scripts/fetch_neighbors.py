@@ -208,6 +208,7 @@ def main():
 
     # ─── Step 2b: セッションデータのパース ────────────────────────────────────
     sessions = []  # list of { login, cluster, row, seat, begin, end }
+    avatar_map = {}  # login → image_small URL（ロケーションデータから収集）
     skipped = 0
     for loc in all_locations:
         user = loc.get("user") or {}
@@ -219,6 +220,13 @@ def main():
         if not login or not host or not begin_at:
             skipped += 1
             continue
+
+        # アバターURL収集（ロケーションAPIのuserオブジェクトから）
+        if login not in avatar_map:
+            image = user.get("image") or {}
+            img_small = image.get("versions", {}).get("small") if isinstance(image, dict) else None
+            if img_small:
+                avatar_map[login] = img_small
 
         cluster, row, seat = parse_host_detailed(host)
         if cluster is None:
@@ -307,18 +315,8 @@ def main():
         total_hours_by_login[s["login"]] += hours
 
     # 個人指標
-    # アバター URL をメインデータから取得（dev-data.json がある場合）
-    avatar_map = {}
-    dev_data_path = Path(__file__).parent.parent / "public" / "dev-data.json"
-    if dev_data_path.exists():
-        try:
-            with open(dev_data_path) as f:
-                dev_data_tmp = json.load(f)
-            for s in dev_data_tmp.get("online", []) + dev_data_tmp.get("offline", []):
-                if s.get("login") and s.get("image_small"):
-                    avatar_map[s["login"]] = s["image_small"]
-        except Exception:
-            pass
+    # avatar_map は Step 2b のセッションパース時に収集済み
+    print(f"  Avatar URLs collected: {len(avatar_map)}")
 
     per_student = {}
     for login in all_logins:
