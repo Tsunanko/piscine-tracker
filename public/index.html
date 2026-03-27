@@ -781,6 +781,9 @@ function render(d) {
     <!-- 伸び率 -->
     ${growthHTML}
 
+    <!-- 近くにいた人（管理者専用・neighbor データ取得後に挿入） -->
+    <div id="neighbors-section"></div>
+
     <!-- 合格ライン参考（isAdminのみ・グローバルデータ取得後に挿入） -->
     <div id="thresholds-section"></div>
 
@@ -936,9 +939,96 @@ async function renderMiniChart(login) {
       const passed = all.filter(s => s.piscine_result === 'passed');
       renderThresholds(currentStudentData, passed, all.length);
     }
+
+    // 近くにいた人（管理者専用）
+    if (isAdmin) {
+      renderNeighbors(LOGIN, PAGE_MONTH);
+    }
   } catch(e) {
     console.warn('mini chart error:', e);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 近くにいた人（座席隣接分析）管理者専用
+// ─────────────────────────────────────────────────────────────────────────────
+const _neighborCache = {};
+
+async function renderNeighbors(login, month) {
+  const section = document.getElementById('neighbors-section');
+  if (!section) return;
+
+  const token = sessionStorage.getItem('piscine_42_token') || '';
+  if (!token) return;
+
+  // キャッシュ確認（同月のデータは1度だけ取得）
+  const cacheKey = `neighbors_${month}`;
+  if (!_neighborCache[cacheKey]) {
+    try {
+      const monthParam = month !== '02' ? `?month=${month}` : '';
+      const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/neighbors${monthParam}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return; // データがない場合は非表示
+      const data = await res.json();
+      _neighborCache[cacheKey] = data;
+    } catch (_) { return; }
+  }
+
+  const neighborData = _neighborCache[cacheKey];
+  const studentNeighbors = neighborData?.per_student?.[login];
+  if (!studentNeighbors || !studentNeighbors.top_neighbors?.length) return;
+
+  // 近接度ごとの色・ラベル
+  const PROX = {
+    adjacent:     { color: '#a29bfe', border: 'rgba(162,155,254,0.6)', label: '直隣り',   emoji: '🟣' },
+    same_row:     { color: '#6c5ce7', border: 'rgba(108, 92,231,0.4)', label: '同じ行',   emoji: '🔵' },
+    same_cluster: { color: '#636e72', border: 'rgba(99,110,114, 0.3)', label: '同クラスター', emoji: '⚪' },
+  };
+
+  const top = studentNeighbors.top_neighbors.slice(0, 12);
+  const mSuffix = month !== '02' ? `&month=${month}` : '';
+
+  const avatarCards = top.map(n => {
+    const p = PROX[n.proximity] || PROX.same_cluster;
+    const hoursStr = n.hours >= 10 ? `${Math.round(n.hours)}h` : `${n.hours.toFixed(1)}h`;
+    const initials = n.login[0].toUpperCase();
+    const imgTag = n.avatar
+      ? `<img src="${n.avatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block" onerror="this.outerHTML='<div style=\\'width:48px;height:48px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--text-dim)\\'>${initials}</div>'">`
+      : `<div style="width:48px;height:48px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--text-dim)">${initials}</div>`;
+    return `
+      <a href="index.html?login=${encodeURIComponent(n.login)}${mSuffix}"
+         style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"
+         title="${n.login}（${p.label}・${hoursStr}）">
+        <div style="position:relative">
+          <div style="border-radius:50%;border:2px solid ${p.border};padding:2px">
+            ${imgTag}
+          </div>
+          <div style="position:absolute;bottom:-2px;right:-2px;font-size:9px;line-height:1">${p.emoji}</div>
+        </div>
+        <div style="font-size:9px;color:var(--text-dim);max-width:54px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.login}</div>
+        <div style="font-size:9px;color:${p.color}">${hoursStr}</div>
+      </a>`;
+  }).join('');
+
+  // 凡例
+  const legend = Object.entries(PROX).map(([k, v]) =>
+    `<span style="font-size:9px;color:var(--text-dim)">${v.emoji} ${v.label}</span>`
+  ).join('<span style="color:var(--border);margin:0 6px">|</span>');
+
+  section.innerHTML = `
+    <div class="card fade-in">
+      <div class="card-title">近くにいた人（共存時間 Top${top.length}）</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-start;padding:4px 0 8px">
+        ${avatarCards}
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
+        ${legend}
+        <span style="margin-left:auto;font-size:9px;color:var(--text-dim)">
+          接触学生数: ${studentNeighbors.unique_neighbors}人 / 計 ${studentNeighbors.total_neighbor_hours.toFixed(1)}h
+        </span>
+      </div>
+    </div>`;
 }
 
 function renderThresholds(student, passed, totalCount) {

@@ -190,6 +190,11 @@ export default {
       return handleGetUserData(request, env, login, url);
     }
 
+    // ─── 座席隣接分析 API（管理者専用）────────────────────────────────
+    if (url.pathname === '/api/neighbors' && request.method === 'GET') {
+      return handleGetNeighbors(request, env, url);
+    }
+
     // ─── ログイン記録 API ──────────────────────────────────────────────
     // GitHub Pages の各ページがログイン成功時に呼び出す
     // KV に { login, method, timestamp, ip, ua } を保存

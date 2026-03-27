@@ -56,3 +56,13 @@ jobs:
           WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
           PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
         run: python scripts/fetch_data.py
+
+      # ─── Step 5: 座席隣接分析 → KV にアップロード（エラーでも続行）──
+      - name: Fetch seat neighbor analysis and upload to KV
+        continue-on-error: true
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
+        run: python scripts/fetch_neighbors.py
