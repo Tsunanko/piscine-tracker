@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>コホート比較 - Piscine Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a24;
+    --surface2: #22222e;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00cec9;
+    --green-dim: #00b8941a;
+    --red: #ff7675;
+    --red-dim: #ff76751a;
+    --orange: #fdcb6e;
+    --gradient: linear-gradient(135deg, #6c5ce7, #00cec9);
+    --feb-color: #a29bfe;    /* 2月: 紫 */
+    --feb-dim: rgba(162,155,254,0.12);
+    --mar-color: #00cec9;    /* 3月: シアン */
+    --mar-dim: rgba(0,206,201,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+
+  /* ── ヘッダー ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .back-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .back-btn:hover { color: var(--text); border-color: var(--accent); }
+  .header-title {
+    font-size: 18px;
+    font-weight: 700;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header-sub {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ── タブ ── */
+  .tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .tab-btn:hover:not(.active) { border-color: var(--accent-light); color: var(--text); }
+
+  /* ── 凡例ピル ── */
+  .legend-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    justify-content: center;
+  }
+  .legend-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* ── サマリーカード ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .cohort-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .cohort-card.feb { border-top: 3px solid var(--feb-color); }
+  .cohort-card.mar { border-top: 3px solid var(--mar-color); }
+  .cohort-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .cohort-period {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--text-dim); }
+  .stat-value { font-weight: 600; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.purple { color: var(--feb-color); }
+  .stat-value.cyan { color: var(--mar-color); }
+
+  /* ── セクションタイトル ── */
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+    margin-top: 24px;
+  }
+
+  /* ── チャートコンテナ ── */
+  .chart-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .chart-wrap canvas {
+    max-height: 280px;
+  }
+  .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+
+  /* ── ランキング比較テーブル ── */
+  .top-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .top-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .top-card-title {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .top-row:last-child { border-bottom: none; }
+  .top-rank { color: var(--text-dim); font-size: 10px; width: 22px; }
+  .top-login { flex: 1; }
+  .top-val { color: var(--text-dim); font-size: 11px; }
+
+  /* ── 散布図 ── */
+  .scatter-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .scatter-wrap canvas { max-height: 320px; }
+
+  /* ── ローディング ── */
+  #loading {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  #mainContent { display: none; }
+  #errorMsg {
+    display: none;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--red);
+    font-size: 14px;
+  }
+
+  /* ── メトリクス比較バー ── */
+  .metric-compare {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .mc-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .mc-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .mc-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mc-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mc-bar-label {
+    font-size: 10px;
+    width: 24px;
+    color: var(--text-dim);
+  }
+  .mc-bar-bg {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .mc-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+  .mc-val {
+    font-size: 11px;
+    font-weight: 600;
+    width: 52px;
+    text-align: right;
+  }
+
+  /* ── pass rate ── */
+  .pass-section {
+    margin-bottom: 20px;
+  }
+  .pass-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .pass-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .pass-pct {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .pass-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .pass-detail {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+  .not-yet {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  @media (max-width: 600px) {
+    .summary-grid, .top-grid, .pass-grid { grid-template-columns: 1fr; }
+    .header { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <a href="dashboard.html" class="back-btn">← Dashboard</a>
+    <div class="header-title">🔬 コホート比較</div>
+    <div class="header-sub" id="headerSub">読み込み中...</div>
+  </div>
+
+  <!-- ローディング -->
+  <div id="loading">データを読み込んでいます...</div>
+  <div id="errorMsg"></div>
+
+  <!-- メインコンテンツ -->
+  <div id="mainContent">
+
+    <!-- タブ -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab(0)">📊 サマリー</button>
+      <button class="tab-btn" onclick="switchTab(1)">⏱ 時間分布</button>
+      <button class="tab-btn" onclick="switchTab(2)">🎯 Level分布</button>
+      <button class="tab-btn" onclick="switchTab(3)">🔵 散布図</button>
+      <button class="tab-btn" id="tabPassBtn" onclick="switchTab(4)" style="display:none">🏆 合否比較</button>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="legend-bar">
+      <div class="legend-pill">
+        <div class="legend-dot" style="background:var(--feb-color)"></div>
+        <span>2月ピシン</span>
+      </div>
+      <div class="legend-pill">
+        <div class="legend-dot" style="background:var(--mar-color)"></div>
+        <span>3月ピシン</span>
+      </div>
+    </div>
+
+    <!-- ── タブ0: サマリー ── -->
+    <div id="tab0">
+      <div class="summary-grid">
+        <div class="cohort-card feb">
+          <div class="cohort-title" style="color:var(--feb-color)">2月ピシン</div>
+          <div class="cohort-period">Feb 2 – Feb 27, 2026</div>
+          <div id="febStats"></div>
+        </div>
+        <div class="cohort-card mar">
+          <div class="cohort-title" style="color:var(--mar-color)">3月ピシン</div>
+          <div class="cohort-period">Mar 11 – Apr 5, 2026</div>
+          <div id="marStats"></div>
+        </div>
+      </div>
+
+      <div class="section-title">メトリクス比較</div>
+      <div class="metric-compare" id="metricCompare"></div>
+    </div>
+
+    <!-- ── タブ1: 時間分布 ── -->
+    <div id="tab1" style="display:none">
+      <div class="chart-wrap">
+        <div class="chart-title">ログイン時間の分布（ヒストグラム）</div>
+        <canvas id="hoursHistChart"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">週別平均ログイン時間</div>
+        <canvas id="weeklyChart"></canvas>
+      </div>
+    </div>
+
+    <!-- ── タブ2: Level分布 ── -->
+    <div id="tab2" style="display:none">
+      <div class="chart-wrap">
+        <div class="chart-title">Level分布（ヒストグラム）</div>
+        <canvas id="levelHistChart"></canvas>
+      </div>
+      <div class="section-title">トップ10 比較</div>
+      <div class="top-grid">
+        <div class="top-card">
+          <div class="top-card-title"><span style="color:var(--feb-color)">●</span> 2月 Level TOP10</div>
+          <div id="febTopLevel"></div>
+        </div>
+        <div class="top-card">
+          <div class="top-card-title"><span style="color:var(--mar-color)">●</span> 3月 Level TOP10</div>
+          <div id="marTopLevel"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── タブ3: 散布図 ── -->
+    <div id="tab3" style="display:none">
+      <div class="scatter-wrap">
+        <div class="chart-title">時間 × Level（両コホートオーバーレイ）</div>
+        <canvas id="scatterChart"></canvas>
+      </div>
+    </div>
+
+    <!-- ── タブ4: 合否比較 ── -->
+    <div id="tab4" style="display:none">
+      <div class="pass-section">
+        <div class="pass-grid" id="passGrid"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">合格者 vs 不合格者の時間分布</div>
+        <canvas id="passHoursChart"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">合格者 vs 不合格者の Level分布</div>
+        <canvas id="passLevelChart"></canvas>
+      </div>
+    </div>
+
+  </div><!-- /mainContent -->
+</div><!-- /container -->
+
+<script>
+const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
+const ADMIN  = 'admin_user';
+
+let currentTab = 0;
+let febData = null;
+let marData = null;
+let token   = '';
+
+// ─────────────────────────────────────────
+// 初期化
+// ─────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  token = sessionStorage.getItem('piscine_42_token') || '';
+
+  // ログインユーザー確認
+  let me = null;
+  if (token) {
+    try {
+      const r = await fetch(`${WORKER}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) me = await r.json();
+    } catch (_) {}
+  }
+
+  if (!me || me.login !== ADMIN) {
+    document.getElementById('loading').style.display = 'none';
+    const err = document.getElementById('errorMsg');
+    err.style.display = 'block';
+    err.innerHTML = '🔒 このページは管理者専用です。<br><a href="dashboard.html" style="color:var(--accent-light);text-decoration:none">← Dashboard に戻る</a>';
+    return;
+  }
+
+  // 両月のデータを並行取得
+  try {
+    const [r02, r03] = await Promise.all([
+      fetch(`${WORKER}/api/data`,         { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${WORKER}/api/data?month=03`, { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    febData = r02.ok ? await r02.json() : null;
+    marData = r03.ok ? await r03.json() : null;
+
+    if (!febData && !marData) throw new Error('データを取得できませんでした');
+  } catch (e) {
+    document.getElementById('loading').style.display = 'none';
+    const err = document.getElementById('errorMsg');
+    err.style.display = 'block';
+    err.textContent = `エラー: ${e.message}`;
+    return;
+  }
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+
+  const febAll = febData ? [...(febData.online||[]), ...(febData.offline||[])] : [];
+  const marAll = marData ? [...(marData.online||[]), ...(marData.offline||[])] : [];
+
+  const hasPass = febAll.some(s => s.piscine_result === 'passed' || s.piscine_result === 'failed')
+               || marAll.some(s => s.piscine_result === 'passed' || s.piscine_result === 'failed');
+  if (hasPass) document.getElementById('tabPassBtn').style.display = '';
+
+  const updAt = marData?.updated_at || febData?.updated_at || '';
+  document.getElementById('headerSub').textContent = updAt
+    ? `更新: ${new Date(updAt).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`
+    : '管理者専用';
+
+  renderSummary(febAll, marAll);
+  renderHoursHist(febAll, marAll);
+  renderWeekly(febAll, marAll);
+  renderLevelHist(febAll, marAll);
+  renderTopLevel(febAll, marAll);
+  renderScatter(febAll, marAll);
+  if (hasPass) renderPassTab(febAll, marAll);
+});
+
+// ─────────────────────────────────────────
+// タブ切り替え
+// ─────────────────────────────────────────
+function switchTab(i) {
+  currentTab = i;
+  document.querySelectorAll('.tab-btn').forEach((b, j) => {
+    b.classList.toggle('active', j === i);
+  });
+  for (let k = 0; k <= 4; k++) {
+    const el = document.getElementById(`tab${k}`);
+    if (el) el.style.display = k === i ? '' : 'none';
+  }
+}
+
+// ─────────────────────────────────────────
+// ユーティリティ
+// ─────────────────────────────────────────
+function activeStudents(arr) {
+  return arr.filter(s => s.is_active && !s.fetch_failed && s.total_hours > 0);
+}
+
+function avg(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─────────────────────────────────────────
+// タブ0: サマリー
+// ─────────────────────────────────────────
+function renderSummary(feb, mar) {
+  renderCohortStats('febStats', feb, 'feb');
+  renderCohortStats('marStats', mar, 'mar');
+  renderMetricCompare(feb, mar);
+}
+
+function renderCohortStats(id, arr, which) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const color = which === 'feb' ? 'var(--feb-color)' : 'var(--mar-color)';
+
+  const active = activeStudents(arr);
+  const hasHours = arr.filter(s => !s.fetch_failed && s.total_hours != null && s.total_hours > 0);
+  const hours = hasHours.map(s => s.total_hours);
+  const levels = arr.filter(s => s.level != null).map(s => s.level);
+  const passed = arr.filter(s => s.piscine_result === 'passed').length;
+  const failed = arr.filter(s => s.piscine_result === 'failed').length;
+  const announced = arr.some(s => s.results_announced);
+  const failedFetch = arr.filter(s => s.fetch_failed).length;
+
+  const rows = [
+    ['参加者総数', `${arr.length}人`],
+    ['アクティブ（偏差値母集団）', `${active.length}人`],
+    ['平均ログイン時間', hours.length ? `${avg(hours).toFixed(1)}h` : '-'],
+    ['中央値ログイン時間', hours.length ? `${median(hours).toFixed(1)}h` : '-'],
+    ['平均Level', levels.length ? avg(levels).toFixed(2) : '-'],
+    ['データ取得失敗', failedFetch > 0 ? `${failedFetch}人` : '0人'],
+  ];
+
+  if (announced) {
+    rows.push(['合格者', `${passed}人`]);
+    rows.push(['合格率', arr.length ? `${(passed/arr.length*100).toFixed(1)}%` : '-']);
+  } else {
+    rows.push(['合否', '発表前']);
+  }
+
+  el.innerHTML = rows.map(([label, val]) =>
+    `<div class="stat-row">
+      <span class="stat-label">${label}</span>
+      <span class="stat-value" style="color:${color}">${val}</span>
+    </div>`
+  ).join('');
+}
+
+function renderMetricCompare(feb, mar) {
+  const el = document.getElementById('metricCompare');
+  if (!el) return;
+
+  const febActive = activeStudents(feb);
+  const marActive = activeStudents(mar);
+  const febHours  = febActive.map(s => s.total_hours).filter(Boolean);
+  const marHours  = marActive.map(s => s.total_hours).filter(Boolean);
+  const febLevels = feb.filter(s => s.level != null).map(s => s.level);
+  const marLevels = mar.filter(s => s.level != null).map(s => s.level);
+  const febReviews= febActive.map(s => s.review_given||0);
+  const marReviews= marActive.map(s => s.review_given||0);
+
+  const metrics = [
+    { label: '平均ログイン時間（アクティブ）',
+      feb: avg(febHours), mar: avg(marHours),
+      fmt: v => `${v.toFixed(1)}h`,
+      max: Math.max(avg(febHours), avg(marHours)) * 1.1 || 1 },
+    { label: '中央値ログイン時間',
+      feb: median(febHours), mar: median(marHours),
+      fmt: v => `${v.toFixed(1)}h`,
+      max: Math.max(median(febHours), median(marHours)) * 1.1 || 1 },
+    { label: '平均Level',
+      feb: avg(febLevels), mar: avg(marLevels),
+      fmt: v => v.toFixed(2),
+      max: Math.max(avg(febLevels), avg(marLevels)) * 1.1 || 1 },
+    { label: '平均レビュー回数',
+      feb: avg(febReviews), mar: avg(marReviews),
+      fmt: v => v.toFixed(1),
+      max: Math.max(avg(febReviews), avg(marReviews)) * 1.1 || 1 },
+    { label: 'アクティブ学生数',
+      feb: febActive.length, mar: marActive.length,
+      fmt: v => `${v}人`,
+      max: Math.max(febActive.length, marActive.length) * 1.1 || 1 },
+  ];
+
+  el.innerHTML = metrics.map(m => `
+    <div class="mc-row">
+      <div class="mc-label">${m.label}</div>
+      <div class="mc-bars">
+        <div class="mc-bar-row">
+          <div class="mc-bar-label" style="color:var(--feb-color)">2月</div>
+          <div class="mc-bar-bg">
+            <div class="mc-bar-fill" style="width:${(m.feb/m.max*100).toFixed(1)}%;background:var(--feb-color)"></div>
+          </div>
+          <div class="mc-val" style="color:var(--feb-color)">${m.fmt(m.feb)}</div>
+        </div>
+        <div class="mc-bar-row">
+          <div class="mc-bar-label" style="color:var(--mar-color)">3月</div>
+          <div class="mc-bar-bg">
+            <div class="mc-bar-fill" style="width:${(m.mar/m.max*100).toFixed(1)}%;background:var(--mar-color)"></div>
+          </div>
+          <div class="mc-val" style="color:var(--mar-color)">${m.fmt(m.mar)}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────
+// タブ1: 時間ヒストグラム
+// ─────────────────────────────────────────
+function makeHistBins(values, binWidth, maxVal) {
+  const bins = [];
+  for (let v = 0; v < maxVal; v += binWidth) bins.push(0);
+  for (const h of values) {
+    const idx = Math.min(Math.floor(h / binWidth), bins.length - 1);
+    if (idx >= 0) bins[idx]++;
+  }
+  return bins;
+}
+
+function renderHoursHist(feb, mar) {
+  const febH = feb.filter(s => !s.fetch_failed && s.total_hours > 0).map(s => s.total_hours);
+  const marH = mar.filter(s => !s.fetch_failed && s.total_hours > 0).map(s => s.total_hours);
+  const maxH = Math.ceil(Math.max(...febH, ...marH, 200) / 20) * 20;
+  const BIN  = 20;
+  const bins = Array.from({length: maxH/BIN}, (_, i) => `${i*BIN}–${i*BIN+BIN}h`);
+  const febBins = makeHistBins(febH, BIN, maxH);
+  const marBins = makeHistBins(marH, BIN, maxH);
+
+  new Chart(document.getElementById('hoursHistChart'), {
+    type: 'bar',
+    data: {
+      labels: bins,
+      datasets: [
+        { label: '2月', data: febBins, backgroundColor: 'rgba(162,155,254,0.5)', borderColor: 'rgba(162,155,254,0.8)', borderWidth: 1 },
+        { label: '3月', data: marBins, backgroundColor: 'rgba(0,206,201,0.4)',   borderColor: 'rgba(0,206,201,0.7)',   borderWidth: 1 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8888a0', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function renderWeekly(feb, mar) {
+  // Piscine開始日インデックスベース（daily[0]=Day1, daily[7]=Day8...）で週を計算
+  // カレンダー週（月〜日）ではなく、開始日から7日単位で区切る
+  function weeklyAvgByIndex(arr) {
+    // weekMap[weekNum] = { total: 0, students: 0 }
+    // 1人の学生の週合計を studentごとに集計し、最後に平均を取る
+    const perStudent = [];
+    for (const s of arr) {
+      if (!s.daily || s.fetch_failed) continue;
+      const studentWeeks = {};
+      for (let i = 0; i < s.daily.length; i++) {
+        const w = Math.floor(i / 7) + 1;
+        studentWeeks[w] = (studentWeeks[w] || 0) + (s.daily[i].hours || 0);
+      }
+      perStudent.push(studentWeeks);
+    }
+    if (!perStudent.length) return [];
+    const allWeekNums = [...new Set(perStudent.flatMap(s => Object.keys(s).map(Number)))].sort((a,b)=>a-b);
+    return allWeekNums.map(w => ({
+      week: w,
+      avg: perStudent.reduce((sum, s) => sum + (s[w] || 0), 0) / perStudent.length
+    }));
+  }
+
+  const febW = weeklyAvgByIndex(feb);
+  const marW = weeklyAvgByIndex(mar);
+
+  const allWeeks = [...new Set([...febW.map(w=>w.week), ...marW.map(w=>w.week)])].sort((a,b)=>a-b);
+  const febMap = Object.fromEntries(febW.map(w=>[w.week, w.avg]));
+  const marMap = Object.fromEntries(marW.map(w=>[w.week, w.avg]));
+
+  new Chart(document.getElementById('weeklyChart'), {
+    type: 'line',
+    data: {
+      labels: allWeeks.map(w => `Week ${w}`),
+      datasets: [
+        { label: '2月', data: allWeeks.map(w => febMap[w] ?? null), borderColor: 'rgba(162,155,254,0.8)', backgroundColor: 'rgba(162,155,254,0.1)', pointRadius: 4, tension: 0.3, spanGaps: true },
+        { label: '3月', data: allWeeks.map(w => marMap[w] ?? null), borderColor: 'rgba(0,206,201,0.8)',   backgroundColor: 'rgba(0,206,201,0.1)',   pointRadius: 4, tension: 0.3, spanGaps: true },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8888a0', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: {
+          ticks: { color: '#8888a0', font: { size: 10 }, callback: v => `${v.toFixed(1)}h` },
+          grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────
+// タブ2: Level ヒストグラム + TOP10
+// ─────────────────────────────────────────
+function renderLevelHist(feb, mar) {
+  const febL = feb.filter(s => s.level != null).map(s => s.level);
+  const marL = mar.filter(s => s.level != null).map(s => s.level);
+  const maxL = Math.ceil(Math.max(...febL, ...marL, 7) / 1) * 1;
+  const BIN  = 0.5;
+  const count = Math.ceil(maxL / BIN);
+  const bins  = Array.from({length: count}, (_, i) => `${(i*BIN).toFixed(1)}–${((i+1)*BIN).toFixed(1)}`);
+  const febBins = makeHistBins(febL, BIN, maxL);
+  const marBins = makeHistBins(marL, BIN, maxL);
+
+  new Chart(document.getElementById('levelHistChart'), {
+    type: 'bar',
+    data: {
+      labels: bins,
+      datasets: [
+        { label: '2月', data: febBins, backgroundColor: 'rgba(162,155,254,0.5)', borderColor: 'rgba(162,155,254,0.8)', borderWidth: 1 },
+        { label: '3月', data: marBins, backgroundColor: 'rgba(0,206,201,0.4)',   borderColor: 'rgba(0,206,201,0.7)',   borderWidth: 1 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8888a0', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8888a0', font: { size: 9 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function renderTopLevel(feb, mar) {
+  function topRows(arr, limit = 10) {
+    return [...arr]
+      .filter(s => s.level != null)
+      .sort((a, b) => b.level - a.level)
+      .slice(0, limit);
+  }
+  function buildHTML(students) {
+    if (!students.length) return '<div style="color:var(--text-dim);font-size:12px;padding:4px 0">データなし</div>';
+    return students.map((s, i) => `
+      <div class="top-row">
+        <span class="top-rank">#${i+1}</span>
+        <span class="top-login">${esc(s.login)}</span>
+        <span class="top-val">Lv ${s.level.toFixed(2)}</span>
+      </div>`).join('');
+  }
+  document.getElementById('febTopLevel').innerHTML = buildHTML(topRows(feb));
+  document.getElementById('marTopLevel').innerHTML = buildHTML(topRows(mar));
+}
+
+// ─────────────────────────────────────────
+// タブ3: 散布図
+// ─────────────────────────────────────────
+function renderScatter(feb, mar) {
+  const toPoints = arr => arr
+    .filter(s => !s.fetch_failed && s.total_hours > 0 && s.level != null)
+    .map(s => ({ x: s.total_hours, y: s.level, login: s.login }));
+
+  const febPts = toPoints(feb);
+  const marPts = toPoints(mar);
+
+  new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: '2月', data: febPts,
+          backgroundColor: 'rgba(162,155,254,0.5)', borderColor: 'rgba(162,155,254,0.7)',
+          pointRadius: 5, pointHoverRadius: 7 },
+        { label: '3月', data: marPts,
+          backgroundColor: 'rgba(0,206,201,0.4)',   borderColor: 'rgba(0,206,201,0.7)',
+          pointRadius: 5, pointHoverRadius: 7 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8888a0', font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const d = ctx.raw;
+              const cohort = ctx.datasetIndex === 0 ? '2月' : '3月';
+              return ` [${cohort}] ${d.login}  (${d.x.toFixed(1)}h, Lv${d.y.toFixed(2)})`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'ログイン時間 (h)', color: '#8888a0', font: { size: 11 } },
+          ticks: { color: '#8888a0', font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          title: { display: true, text: 'Level', color: '#8888a0', font: { size: 11 } },
+          ticks: { color: '#8888a0', font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────
+// タブ4: 合否比較
+// ─────────────────────────────────────────
+function renderPassTab(feb, mar) {
+  const passGrid = document.getElementById('passGrid');
+
+  function passCard(arr, label, color) {
+    const passed  = arr.filter(s => s.piscine_result === 'passed').length;
+    const failed  = arr.filter(s => s.piscine_result === 'failed').length;
+    const total   = passed + failed;
+    const pct     = total > 0 ? (passed / total * 100).toFixed(1) : null;
+    const announced = arr.some(s => s.results_announced);
+
+    if (!announced || total === 0) {
+      return `<div class="pass-card">
+        <div class="pass-pct not-yet" style="color:${color}">発表前</div>
+        <div class="pass-label">${label}</div>
+      </div>`;
+    }
+    return `<div class="pass-card">
+      <div class="pass-pct" style="color:${color}">${pct}%</div>
+      <div class="pass-label">${label}</div>
+      <div class="pass-detail">${passed}人合格 / ${total}人中</div>
+    </div>`;
+  }
+
+  passGrid.innerHTML = passCard(feb, '2月ピシン 合格率', 'var(--feb-color)')
+                     + passCard(mar, '3月ピシン 合格率', 'var(--mar-color)');
+
+  // 合否別 時間分布
+  const febPassed = feb.filter(s => s.piscine_result === 'passed' && s.total_hours > 0).map(s => s.total_hours);
+  const febFailed = feb.filter(s => s.piscine_result === 'failed' && s.total_hours > 0).map(s => s.total_hours);
+  const marPassed = mar.filter(s => s.piscine_result === 'passed' && s.total_hours > 0).map(s => s.total_hours);
+  const marFailed = mar.filter(s => s.piscine_result === 'failed' && s.total_hours > 0).map(s => s.total_hours);
+
+  const allH  = [...febPassed, ...febFailed, ...marPassed, ...marFailed];
+  const maxH  = allH.length ? Math.ceil(Math.max(...allH) / 20) * 20 : 200;
+  const BIN   = 20;
+  const bins  = Array.from({length: maxH/BIN}, (_, i) => `${i*BIN}–${i*BIN+BIN}h`);
+
+  new Chart(document.getElementById('passHoursChart'), {
+    type: 'bar',
+    data: {
+      labels: bins,
+      datasets: [
+        { label: '2月 合格', data: makeHistBins(febPassed, BIN, maxH), backgroundColor: 'rgba(162,155,254,0.6)' },
+        { label: '2月 不合格', data: makeHistBins(febFailed, BIN, maxH), backgroundColor: 'rgba(162,155,254,0.2)' },
+        { label: '3月 合格', data: makeHistBins(marPassed, BIN, maxH), backgroundColor: 'rgba(0,206,201,0.6)' },
+        { label: '3月 不合格', data: makeHistBins(marFailed, BIN, maxH), backgroundColor: 'rgba(0,206,201,0.2)' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8888a0', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // 合否別 Level分布
+  const febPassedL = feb.filter(s => s.piscine_result === 'passed' && s.level != null).map(s => s.level);
+  const febFailedL = feb.filter(s => s.piscine_result === 'failed' && s.level != null).map(s => s.level);
+  const marPassedL = mar.filter(s => s.piscine_result === 'passed' && s.level != null).map(s => s.level);
+  const marFailedL = mar.filter(s => s.piscine_result === 'failed' && s.level != null).map(s => s.level);
+
+  const allL  = [...febPassedL, ...febFailedL, ...marPassedL, ...marFailedL];
+  const maxL  = allL.length ? Math.ceil(Math.max(...allL)) + 1 : 8;
+  const LBIN  = 0.5;
+  const lBins = Array.from({length: Math.ceil(maxL/LBIN)}, (_, i) => `${(i*LBIN).toFixed(1)}`);
+
+  new Chart(document.getElementById('passLevelChart'), {
+    type: 'bar',
+    data: {
+      labels: lBins,
+      datasets: [
+        { label: '2月 合格', data: makeHistBins(febPassedL, LBIN, maxL), backgroundColor: 'rgba(162,155,254,0.6)' },
+        { label: '2月 不合格', data: makeHistBins(febFailedL, LBIN, maxL), backgroundColor: 'rgba(162,155,254,0.2)' },
+        { label: '3月 合格', data: makeHistBins(marPassedL, LBIN, maxL), backgroundColor: 'rgba(0,206,201,0.6)' },
+        { label: '3月 不合格', data: makeHistBins(marFailedL, LBIN, maxL), backgroundColor: 'rgba(0,206,201,0.2)' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8888a0', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#8888a0', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#8888a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>

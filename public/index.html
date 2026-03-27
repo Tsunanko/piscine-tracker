@@ -436,8 +436,19 @@ let currentStudentData = null;
 function calcWeekly(daily) {
   if (!daily || daily.length === 0) return [];
   const weeks = [];
-  for (let i = 0; i < daily.length; i += 7)
-    weeks.push(+daily.slice(i, i + 7).reduce((s, d) => s + d.hours, 0).toFixed(1));
+  for (let i = 0; i < daily.length; i += 7) {
+    const slice = daily.slice(i, i + 7);
+    const hours = +slice.reduce((s, d) => s + d.hours, 0).toFixed(1);
+    // 週の開始日・終了日を取得（表示用）
+    const startDate = slice[0]?.date || '';
+    const endDate   = slice[slice.length - 1]?.date || '';
+    const fmt = ds => {
+      if (!ds) return '';
+      const [, m, dd] = ds.split('-');
+      return `${+m}/${+dd}`;
+    };
+    weeks.push({ hours, label: `${fmt(startDate)}-${fmt(endDate)}` });
+  }
   return weeks;
 }
 
@@ -492,9 +503,10 @@ function render(d) {
   const offset = CIRCUMFERENCE - (d.progress_pct / 100) * CIRCUMFERENCE;
 
   // ── 伸び率（週別）事前計算（isAdminのみ） ──
-  const weeklyHours = isAdmin ? calcWeekly(d.daily) : [];
+  const weeklyData = isAdmin ? calcWeekly(d.daily) : [];
+  const weeklyHours = weeklyData.map(w => w.hours); // 後方互換
   let growthHTML = '';
-  if (weeklyHours.length >= 2) {
+  if (weeklyData.length >= 2) {
     const half = Math.floor(d.daily.length / 2);
     const firstH = +d.daily.slice(0, half).reduce((s, x) => s + x.hours, 0).toFixed(1);
     const secondH = +d.daily.slice(half).reduce((s, x) => s + x.hours, 0).toFixed(1);
@@ -505,16 +517,17 @@ function render(d) {
                      : trendPct >= -5 ? 'var(--orange)' : 'var(--red)';
     const trendLabel = trendPct === null ? '' : trendPct >= 5 ? '後半に向けて活発化' : trendPct >= -5 ? '安定したペース' : '後半にペースダウン';
     const maxW = Math.max(0.1, ...weeklyHours);
-    const wLabels = ['1週目', '2週目', '3週目', '4週目'];
-    const weekBars = weeklyHours.map((h, i) => {
-      const pct = (h / maxW * 100).toFixed(1);
-      const isLast = i === weeklyHours.length - 1;
+    const wNumbers = ['1週目', '2週目', '3週目', '4週目'];
+    const weekBars = weeklyData.map((w, i) => {
+      const pct = (w.hours / maxW * 100).toFixed(1);
+      const isLast = i === weeklyData.length - 1;
       return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <div style="font-size:10px;color:var(--text-dim);width:36px">${wLabels[i]}</div>
+        <div style="font-size:10px;color:var(--text-dim);width:36px">${wNumbers[i]}</div>
         <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:${isLast ? 'var(--orange)' : 'var(--accent)'};opacity:0.85;border-radius:4px;transition:width 0.5s"></div>
         </div>
-        <div style="font-size:11px;color:var(--text);width:40px;text-align:right">${h}h</div>
+        <div style="font-size:11px;color:var(--text);width:40px;text-align:right">${w.hours}h</div>
+        <div style="font-size:9px;color:var(--text-dim);width:60px">${w.label}</div>
       </div>`;
     }).join('');
     const trendRow = trendStr ? `

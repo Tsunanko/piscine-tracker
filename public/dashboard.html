@@ -532,6 +532,7 @@
 
 <script>
 let dashboardData = null;
+let loadSeq = 0; // 競合状態防止：最新のフェッチだけ反映する
 let currentFilter = 'all';
 let searchQuery = '';
 let currentSort = 'hours'; // 'hours', 'level', 'composite', 'exam', 'name'
@@ -742,6 +743,7 @@ function renderDashboard() {
   ).join('');
   const adminLink = loggedInUser && loggedInUser.login === 'admin_user'
     ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+       <a href="compare.html" class="sort-btn" style="text-decoration:none;color:var(--green);border-color:rgba(0,206,201,0.3)">🔬 比較</a>
        <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
     : '';
   document.getElementById('sortBar').innerHTML = `
@@ -879,21 +881,29 @@ async function loadDashboard() {
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('spinning');
 
+  // 競合状態防止：このフェッチのシーケンス番号を記録し、
+  // 完了時に最新のリクエストかどうか確認する
+  const mySeq = ++loadSeq;
+  const myMonth = currentMonth; // 呼び出し時の月を記録
+
   try {
     const token = sessionStorage.getItem('piscine_42_token') || '';
-    const monthParam = currentMonth !== '02' ? `?month=${currentMonth}` : '';
+    const monthParam = myMonth !== '02' ? `?month=${myMonth}` : '';
     const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
+    // より新しいフェッチが開始されていたら、このレスポンスを捨てる
+    if (mySeq !== loadSeq) return;
+
     dashboardData = data;
     renderDashboard();
   } catch (e) {
-    showError(e.message);
+    if (mySeq === loadSeq) showError(e.message);
   } finally {
-    btn.classList.remove('spinning');
+    if (mySeq === loadSeq) btn.classList.remove('spinning');
   }
 }
 
