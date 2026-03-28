@@ -669,10 +669,13 @@ function renderDashboard() {
     _isOnline: onlineSet.has(s.login),
   }));
 
+  // 合格発表済みなら全ユーザーが合否フィルター・バッジを使用可
+  const canSeeResult = isAdmin || (d.results_announced === true);
+
   // Apply cluster / 合否 filter
-  if (isAdmin && currentFilter === 'passed') {
+  if (canSeeResult && currentFilter === 'passed') {
     allStudents = allStudents.filter(s => s.piscine_result === 'passed');
-  } else if (isAdmin && currentFilter === 'failed') {
+  } else if (canSeeResult && currentFilter === 'failed') {
     allStudents = allStudents.filter(s => s.piscine_result === 'failed');
   } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed') {
     allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
@@ -727,8 +730,8 @@ function renderDashboard() {
       `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${esc(c)}')">${esc(c)} (${count})</button>`
     );
   });
-  // 合否フィルターボタン（管理者かつ発表済みの場合のみ）
-  if (isAdmin && d.results_announced) {
+  // 合否フィルターボタン（合格発表済みなら全ユーザーに表示）
+  if (d.results_announced && canSeeResult) {
     filterBtns.push(
       `<button class="filter-btn ${currentFilter === 'passed' ? 'active' : ''}" onclick="setFilter('passed')" style="${currentFilter !== 'passed' ? 'color:var(--orange);border-color:rgba(253,203,110,0.35)' : ''}">🎉 合格 (${d.passed_count ?? 0})</button>`
     );
@@ -759,7 +762,7 @@ function renderDashboard() {
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
     <button class="sort-btn ${showExam ? 'active' : ''}" id="toggleExamBtn" onclick="toggleExam()">Exam</button>
-    ${(isAdmin && d.results_announced) ? `<button class="sort-btn ${showResult ? 'active' : ''}" id="toggleResultBtn" onclick="toggleResult()">合否</button>` : ''}
+    ${(d.results_announced && canSeeResult) ? `<button class="sort-btn ${showResult ? 'active' : ''}" id="toggleResultBtn" onclick="toggleResult()">合否</button>` : ''}
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <a id="statsNavBtn" href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
     ${adminLink}
@@ -806,8 +809,8 @@ function renderDashboard() {
     const examHTML = examScore != null
       ? `<span style="color:${examColor}">${examScore}</span>`
       : `<span style="color:var(--text-dim)">-</span>`;
-    // 合否バッジ（管理者のみ）
-    const result = isAdmin ? student.piscine_result : null;
+    // 合否バッジ（合格発表済みなら全ユーザーに表示）
+    const result = canSeeResult ? student.piscine_result : null;
     const resultCls = result === 'passed' ? 'result-passed' : result === 'failed' ? 'result-failed' : '';
     const resultBadgeHTML = result === 'passed'
       ? `<div class="result-section"><span class="result-badge passed">🎉 合格</span></div>`

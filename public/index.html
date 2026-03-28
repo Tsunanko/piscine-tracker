@@ -979,11 +979,12 @@ async function renderNeighbors(login, month) {
   const studentNeighbors = neighborData?.per_student?.[login];
   if (!studentNeighbors || !studentNeighbors.top_neighbors?.length) return;
 
-  // 近接度ごとの色・ラベル
+  // 近接度ごとの色・ラベル（重み: adjacent=1.0 / facing=0.8 / same_row=0.5 / same_cluster=0.3）
   const PROX = {
-    adjacent:     { color: '#a29bfe', border: 'rgba(162,155,254,0.6)', label: '直隣り',   emoji: '🟣' },
-    same_row:     { color: '#6c5ce7', border: 'rgba(108, 92,231,0.4)', label: '同じ行',   emoji: '🔵' },
-    same_cluster: { color: '#636e72', border: 'rgba(99,110,114, 0.3)', label: '同クラスター', emoji: '⚪' },
+    adjacent:     { color: '#a29bfe', border: 'rgba(162,155,254,0.6)', label: '直隣り(2席以内)', emoji: '🟣' },
+    facing:       { color: '#fd79a8', border: 'rgba(253,121,168,0.5)', label: '向かい側',        emoji: '🩷' },
+    same_row:     { color: '#6c5ce7', border: 'rgba(108, 92,231,0.4)', label: '同じ行',          emoji: '🔵' },
+    same_cluster: { color: '#636e72', border: 'rgba(99,110,114, 0.3)', label: '同クラスター',    emoji: '⚪' },
   };
 
   const top = studentNeighbors.top_neighbors.slice(0, 12);
@@ -991,7 +992,8 @@ async function renderNeighbors(login, month) {
 
   const avatarCards = top.map(n => {
     const p = PROX[n.proximity] || PROX.same_cluster;
-    const hoursStr = n.hours >= 10 ? `${Math.round(n.hours)}h` : `${n.hours.toFixed(1)}h`;
+    const displayHours = n.weighted_hours ?? n.hours;
+    const hoursStr = displayHours >= 10 ? `${Math.round(displayHours)}h` : `${displayHours.toFixed(1)}h`;
     const initials = n.login[0].toUpperCase();
     const imgTag = n.avatar
       ? `<img src="${n.avatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block" onerror="this.outerHTML='<div style=\\'width:48px;height:48px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--text-dim)\\'>${initials}</div>'">`
@@ -1025,7 +1027,7 @@ async function renderNeighbors(login, month) {
       <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
         ${legend}
         <span style="margin-left:auto;font-size:9px;color:var(--text-dim)">
-          接触学生数: ${studentNeighbors.unique_neighbors}人 / 計 ${studentNeighbors.total_neighbor_hours.toFixed(1)}h
+          接触学生数: ${studentNeighbors.unique_neighbors}人 / 計 ${(studentNeighbors.total_weighted_hours ?? studentNeighbors.total_neighbor_hours).toFixed(1)}h（重み付き）
         </span>
       </div>
     </div>`;
