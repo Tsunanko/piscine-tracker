@@ -80,8 +80,15 @@ async function isAdmin(request, env) {
   // 方式2: Authorization: Bearer による認証（ブラウザ向け）
   const auth = request.headers.get('Authorization');
   if (!auth) return false;
-  // "Bearer xxxx" から "xxxx" を取り出す
   const token = auth.replace(/^Bearer\s+/, '');
+
+  // KVキャッシュで /v2/me の呼び出し回数を削減（5分TTL）
+  // トークンの先頭20文字をキーにする（完全なトークンをKVキーにしない）
+  const cacheKey = `auth_cache:${token.slice(0, 20)}`;
+  try {
+    const cached = await env.PISCINE_DATA.get(cacheKey);
+    if (cached !== null) return cached === 'admin';
+  } catch {}
 
   // 42 OAuth トークンの場合: 42 API /v2/me で実際にユーザーを確認
   try {
@@ -90,7 +97,10 @@ async function isAdmin(request, env) {
     });
     if (res.ok) {
       const user = await res.json();
-      return user.login === 'admin_user';  // 管理者の login 名で照合
+      const result = user.login === 'admin_user';
+      // 結果を5分間キャッシュ（TTL=300秒）
+      await env.PISCINE_DATA.put(cacheKey, result ? 'admin' : 'user', { expirationTtl: 300 }).catch(() => {});
+      return result;
     }
   } catch {}
   return false;
@@ -787,12 +797,18 @@ async function handleCallback(request, env, url) {
     return errorPage('認証失敗', 'アクセストークンが取得できませんでした。');
   }
 
-  // ─── ユーザー情報取得（campus_id チェックのため）──────────────────
-  const userResp = await fetch(USERINFO_URL, {
-    headers: { 'Authorization': `Bearer ${access_token}` },
-  });
+  // ─── ユーザー情報取得（campus_id チェックのため）429リトライ付き ──
+  let userResp;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 3000 * attempt)); // 3s, 6s
+    userResp = await fetch(USERINFO_URL, {
+      headers: { 'Authorization': `Bearer ${access_token}` },
+    });
+    if (userResp.status !== 429) break;
+  }
   if (!userResp.ok) {
-    return errorPage('認証失敗', 'ユーザー情報の取得に失敗しました。');
+    const errBody = await userResp.text().catch(() => '');
+    return errorPage('認証失敗', `ユーザー情報の取得に失敗しました。\nステータス: ${userResp.status}\n${errBody.slice(0, 200)}`);
   }
   const user = await userResp.json();
 
