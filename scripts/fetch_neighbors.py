@@ -357,7 +357,8 @@ def main():
     # ─── Step 4b: 合格率との相関（KV の piscine_result があれば）─────────────
     # ローカルの summary データまたは KV から piscine_result を取得
     pass_data = {}
-    # dev-data.json から合否データを取得（avatar_mapで既に読んでいれば再利用）
+    # dev-data.json から合否データを取得（存在する場合のみ）
+    dev_data_path = Path(__file__).parent.parent / "public" / "dev-data.json"
     if dev_data_path.exists():
         try:
             with open(dev_data_path) as f:
