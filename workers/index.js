@@ -490,7 +490,8 @@ async function handleKvUpload(request, env) {
   try {
     const body = await request.json();
     const { type, data, login, month } = body;
-    const m = /^0[1-9]$/.test(month) ? month : '02';  // デフォルト02、バリデーション付き
+    const VALID_MONTHS = ['2408', '02', '03'];
+    const m = VALID_MONTHS.includes(month) ? month : '02';  // デフォルト02、バリデーション付き
 
     if (type === 'summary') {
       // 月別キーに保存。02は後方互換のため旧キーにも保存

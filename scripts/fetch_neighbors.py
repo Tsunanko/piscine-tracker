@@ -52,19 +52,21 @@ JST = timezone(timedelta(hours=9))
 CAMPUS_ID = 26  # 42 Tokyo
 
 # Piscine 期間（環境変数で切り替え可能）
-# PISCINE_MONTH=03 で3月Piscine、デフォルトは02
-PISCINE_MONTH_STR = os.environ.get("PISCINE_MONTH", "02")
-PISCINE_MONTH = int(PISCINE_MONTH_STR)
+# PISCINE_MONTH=03 で3月Piscine、2408 で2024年8月Piscine、デフォルトは02
+PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
 _PISCINE_CONFIG = {
-    2:  {"start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
-         "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),
-         "label": "2026-02 Piscine"},
-    3:  {"start": datetime(2026, 3, 11, 0, 0, 0, tzinfo=JST),
-         "end":   datetime(2026, 4, 6,  0, 0, 0, tzinfo=JST),
-         "label": "2026-03 Piscine"},
+    "2408": {"start": datetime(2024, 8, 5,  0, 0, 0, tzinfo=JST),
+             "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),
+             "label": "2024-08 Piscine"},
+    "02":   {"start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
+             "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),
+             "label": "2026-02 Piscine"},
+    "03":   {"start": datetime(2026, 3, 11, 0, 0, 0, tzinfo=JST),
+             "end":   datetime(2026, 4, 6,  0, 0, 0, tzinfo=JST),
+             "label": "2026-03 Piscine"},
 }
 if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(f"Unknown PISCINE_MONTH: {PISCINE_MONTH}")
+    raise ValueError(f"Unknown PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '02', or '03'.")
 PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
 PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
 PISCINE_LABEL = _PISCINE_CONFIG[PISCINE_MONTH]["label"]
@@ -451,13 +453,13 @@ def main():
     }
 
     # ローカルJSON保存
-    out_path = Path(__file__).parent.parent / f"neighbor_analysis_{PISCINE_MONTH:02d}.json"
+    out_path = Path(__file__).parent.parent / f"neighbor_analysis_{PISCINE_MONTH}.json"
     with open(out_path, "w") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     print(f"  Saved to {out_path}")
 
     # KVアップロード（WORKER_SECRET があれば）
-    kv_key = f"neighbors_{PISCINE_MONTH:02d}"
+    kv_key = f"neighbors_{PISCINE_MONTH}"
     try:
         upload_to_kv({"type": "neighbors", "key": kv_key, "data": result})
         print(f"  Uploaded to KV as {kv_key}")

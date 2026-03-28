@@ -55,6 +55,11 @@ JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
 
 _PISCINE_CONFIG = {
+    "2408": {
+        "start": datetime(2024, 8, 5,  0, 0, 0, tzinfo=JST),
+        "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),  # 8/30の翌日
+        "days":  26,
+    },
     "02": {
         "start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
         "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),  # 最終日の翌日
@@ -68,7 +73,7 @@ _PISCINE_CONFIG = {
 }
 
 if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. Use '02' or '03'.")
+    raise ValueError(f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '02', or '03'.")
 
 PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
 PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]

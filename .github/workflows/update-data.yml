@@ -4,7 +4,10 @@ name: Update Piscine Data
 #   42 API から Piscine 生のデータを取得して Cloudflare KV にアップロードする。
 #
 # 手動実行: GitHub → Actions タブ → "Update Piscine Data" → "Run workflow"
-#   month を指定可能: "02"（2月） or "03"（3月）
+#   month を指定可能:
+#     "2408" → 2024年8月Piscine
+#     "02"   → 2026年2月Piscine
+#     "03"   → 2026年3月Piscine（デフォルト）
 #
 # 自動実行: 3月Piscine進行中は1時間ごとに自動実行（UTC 0-15時 = JST 9-24時）
 #
@@ -18,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       month:
-        description: 'Piscine月 ("02" or "03")'
+        description: 'Piscine月 ("2408"=2024年8月 / "02"=2026年2月 / "03"=2026年3月)'
         required: false
         default: '03'
   schedule:
