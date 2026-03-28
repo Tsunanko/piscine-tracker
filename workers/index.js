@@ -141,6 +141,23 @@ async function checkDataAuth(request) {
 }
 
 /**
+ * piscineユーザーが対象月のバッチデータに存在するかチェック
+ * 月別バッチデータ data:users:all:{month} に login が含まれるか確認する。
+ * 02以外の月に対してpiscineユーザーがアクセスする際の認可に使用。
+ */
+async function isPiscineUserInMonth(user, month, env) {
+  if (!user || user.type !== 'piscine') return false;
+  const batchVal = await env.PISCINE_DATA.get(`data:users:all:${month}`);
+  if (!batchVal) return false;
+  try {
+    const batch = JSON.parse(batchVal);
+    return !!batch[user.login];
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Cloudflare Workers のメインエントリーポイント
  *
  * Workers は「リクエストが来るたびに fetch() が呼ばれる」サーバーレス関数。
@@ -379,12 +396,14 @@ async function handleGetConsents(request, env) {
   });
 }
 
-/** 座席隣接分析データを返す（管理者のみ）
+/** 座席隣接分析データを返す
+ * 管理者は全月アクセス可。piscineユーザーは自分が参加した月のみ。
  * GET /api/neighbors?month=02  → data:neighbors_02
  * GET /api/neighbors           → data:neighbors_02 (default)
  */
 async function handleGetNeighbors(request, env, url) {
-  if (!await isAdmin(request, env)) {
+  const user = await checkDataAuth(request);
+  if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -392,6 +411,19 @@ async function handleGetNeighbors(request, env, url) {
   }
 
   const month = url.searchParams.get('month') || '02';
+
+  // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
+  // 02はすべての認証済みユーザーがアクセス可（piscineユーザー含む）
+  if (month !== '02' && !user.isAdmin) {
+    const allowed = await isPiscineUserInMonth(user, month, env);
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   const kvKey = `data:neighbors_${month}`;
   const val = await env.PISCINE_DATA.get(kvKey);
   if (!val) {
@@ -572,12 +604,15 @@ async function handleGetData(request, env, url) {
   }
 
   const month = url?.searchParams?.get('month') || '02';
-  // 02以外は管理者のみ
+  // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   if (month !== '02' && !user.isAdmin) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
+    const allowed = await isPiscineUserInMonth(user, month, env);
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   // 月別キーを優先。02の場合は旧キーにもフォールバック
@@ -621,12 +656,15 @@ async function handleGetUserData(request, env, login, url) {
   }
 
   const month = url?.searchParams?.get('month') || '02';
-  // 02以外は管理者のみ
+  // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   if (month !== '02' && !user.isAdmin) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
+    const allowed = await isPiscineUserInMonth(user, month, env);
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   // 1. 月別バッチキーを先に試す（最新データ優先）
