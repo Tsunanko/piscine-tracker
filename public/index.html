@@ -615,9 +615,11 @@ function render(d) {
             Piscine を突破しました。<br>
             ここからが本当の始まりです。これからもよろしく！
           </div>
-          ${d.still_at_42 !== undefined ? `<div style="margin-top:10px;font-size:11px;color:${d.still_at_42 ? 'var(--green)' : 'var(--text-dim)'}">
-            ${d.still_at_42 ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}` : '⬜ 退学済み'}
-          </div>` : ''}
+          ${d.enrollment_42 != null ? `<div style="margin-top:10px;font-size:11px;color:${d.enrollment_42 === 'active' ? 'var(--green)' : 'var(--orange)'}">
+            ${d.enrollment_42 === 'active'
+              ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}`
+              : `🕳 ブラックホール${d.current_42_level != null ? `（最終 Lv ${d.current_42_level}）` : ''}`}
+          </div>` : (d.piscine_result === 'passed' ? `<div style="margin-top:10px;font-size:11px;color:var(--text-dim)">⬜ 退学済み</div>` : '')}
         </div>`;
       } else {
         return `<div class="fade-in" style="

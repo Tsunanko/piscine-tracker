@@ -640,13 +640,27 @@ def main():
                 piscine_result = None
             students[login]["piscine_result"] = piscine_result
 
-            # 生存フラグ: 現在も42本科(cursus_42)に在籍しているか
-            # piscine合格後に42本科に移行しており、まだ在籍中の場合 True
-            # 注意: cursus_42_by_login は全campus学生を対象（退学者は含まれない）
+            # 在籍状況: 42本科(cursus_42)でのステータスを3段階で判定
+            # - "active"      : 在籍中（blackholed_at が null または未来日付）
+            # - "blackholed"  : ブラックホール（blackholed_at が過去日付 → 実質除籍）
+            # - None          : Piscine不合格 or cursus_42 に存在しない
+            # ※ 42 API: cursus_users.blackholed_at が過去 = ブラックホール状態
             cursus42_entry = cursus42_by_login.get(login)
-            still_at_42 = cursus42_entry is not None
-            current_42_level = round(cursus42_entry.get("level", 0), 2) if cursus42_entry else None
+            if cursus42_entry is not None:
+                blackholed_at_str = cursus42_entry.get("blackholed_at")
+                if blackholed_at_str:
+                    blackholed_at_dt = datetime.fromisoformat(blackholed_at_str.replace("Z", "+00:00"))
+                    is_blackholed = blackholed_at_dt <= now.astimezone(timezone.utc)
+                else:
+                    is_blackholed = False
+                enrollment_42 = "blackholed" if is_blackholed else "active"
+                current_42_level = round(cursus42_entry.get("level", 0), 2)
+            else:
+                enrollment_42 = None
+                current_42_level = None
+            still_at_42 = enrollment_42 == "active"  # 後方互換: 純粋に在籍中のみ True
             students[login]["still_at_42"] = still_at_42
+            students[login]["enrollment_42"] = enrollment_42
             students[login]["current_42_level"] = current_42_level
 
             # user_json 構築（偏差値はポスト処理で追加）
@@ -685,7 +699,8 @@ def main():
                 "projects": projects,
                 "piscine_result": piscine_result,       # "passed" | "failed" | null
                 "results_announced": results_announced, # 合否発表済みフラグ
-                "still_at_42": still_at_42,             # 現在も42本科に在籍中か
+                "enrollment_42": enrollment_42,         # "active"|"blackholed"|null
+                "still_at_42": still_at_42,             # 後方互換: active=True, それ以外False
                 "current_42_level": current_42_level,   # 現在の42本科レベル（非合格者はnull）
                 "updated_at": now.isoformat(),
                 # level_deviation, hours_deviation はポスト処理で追加
@@ -704,8 +719,16 @@ def main():
             else:
                 students[login]["piscine_result"] = None
             cursus42_entry_err = cursus42_by_login.get(login)
-            students[login]["still_at_42"] = cursus42_entry_err is not None
-            students[login]["current_42_level"] = round(cursus42_entry_err.get("level", 0), 2) if cursus42_entry_err else None
+            if cursus42_entry_err is not None:
+                bh_str = cursus42_entry_err.get("blackholed_at")
+                is_bh = bool(bh_str and datetime.fromisoformat(bh_str.replace("Z", "+00:00")) <= now.astimezone(timezone.utc))
+                students[login]["enrollment_42"] = "blackholed" if is_bh else "active"
+                students[login]["still_at_42"] = not is_bh
+                students[login]["current_42_level"] = round(cursus42_entry_err.get("level", 0), 2)
+            else:
+                students[login]["enrollment_42"] = None
+                students[login]["still_at_42"] = False
+                students[login]["current_42_level"] = None
             # リトライは1回だけ実施
             time.sleep(2)
             try:
@@ -872,7 +895,8 @@ def main():
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
             "piscine_result": s.get("piscine_result"),  # "passed" | "failed" | null
-            "still_at_42": s.get("still_at_42", False),     # 現在も42本科に在籍中か
+            "enrollment_42": s.get("enrollment_42"),            # "active"|"blackholed"|null
+            "still_at_42": s.get("still_at_42", False),     # 後方互換: active=Trueのみ True
             "current_42_level": s.get("current_42_level"),  # 現在の42本科レベル
         }
         if login in online_logins:
