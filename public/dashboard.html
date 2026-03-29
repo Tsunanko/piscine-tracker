@@ -677,7 +677,9 @@ function renderDashboard() {
     allStudents = allStudents.filter(s => s.piscine_result === 'passed');
   } else if (canSeeResult && currentFilter === 'failed') {
     allStudents = allStudents.filter(s => s.piscine_result === 'failed');
-  } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed') {
+  } else if (canSeeResult && currentFilter === 'enrolled') {
+    allStudents = allStudents.filter(s => s.enrollment_42 === 'active');
+  } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed' && currentFilter !== 'enrolled') {
     allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
   }
 
@@ -738,6 +740,12 @@ function renderDashboard() {
     filterBtns.push(
       `<button class="filter-btn ${currentFilter === 'failed' ? 'active' : ''}" onclick="setFilter('failed')">🏊 次回 (${d.failed_count ?? 0})</button>`
     );
+    const enrolledCount = [...d.online, ...d.offline].filter(s => s.enrollment_42 === 'active').length;
+    if (enrolledCount > 0) {
+      filterBtns.push(
+        `<button class="filter-btn ${currentFilter === 'enrolled' ? 'active' : ''}" onclick="setFilter('enrolled')" style="${currentFilter !== 'enrolled' ? 'color:#00cec9;border-color:rgba(0,206,201,0.35)' : ''}">🏫 在籍中 (${enrolledCount})</button>`
+      );
+    }
   }
   document.getElementById('filterBar').innerHTML = filterBtns.join('');
 
@@ -816,10 +824,10 @@ function renderDashboard() {
     const bhDays = student.blackhole_days_left;
     const survivalBadge = (result === 'passed' && enrollment42 != null)
       ? (enrollment42 === 'active'
-          ? `<span style="font-size:8px;margin-left:4px;color:#00cec9;white-space:nowrap">在籍中${bhDays != null ? `<span style="color:#fdcb6e">残${bhDays}日</span>` : ''}</span>`
+          ? `<span style="font-size:8px;margin-left:4px;color:#00cec9">在籍中</span>`
           : enrollment42 === 'blackholed'
-          ? `<span style="font-size:8px;margin-left:4px;color:#e17055;white-space:nowrap">🕳BH</span>`
-          : `<span style="font-size:8px;margin-left:4px;color:#636e72;white-space:nowrap">退学</span>`)
+          ? `<span style="font-size:8px;margin-left:4px;color:#e17055">🕳BH</span>`
+          : `<span style="font-size:8px;margin-left:4px;color:#636e72">退学</span>`)
       : '';
     const resultBadgeHTML = result === 'passed'
       ? `<div class="result-section" style="white-space:nowrap"><span class="result-badge passed">🎉 合格</span>${survivalBadge}</div>`
