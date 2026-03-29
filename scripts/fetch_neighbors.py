@@ -78,12 +78,13 @@ WORKER_SECRET = os.environ.get("WORKER_SECRET", "")
 MIN_OVERLAP_MINUTES = 30
 
 # 近接度の定義（優先度順）:
-#   adjacent     (rank 0): 同行・seat差 ≤ 2 (直隣り・2個隣)        weight 1.0
-#   facing       (rank 1): |row差| == 1・seat差 ≤ 2 (向かい側・斜め向かい) weight 0.8
-#   same_row     (rank 2): 同行・seat差 ≥ 3 (同列遠め)              weight 0.5
-#   same_cluster (rank 3): |row差| ≥ 2 (同クラスター別行)            weight 0.3
-PROX_RANK   = {"adjacent": 0, "facing": 1, "same_row": 2, "same_cluster": 3}
-PROX_WEIGHT = {"adjacent": 1.0, "facing": 0.8, "same_row": 0.5, "same_cluster": 0.3}
+#   adjacent     (rank 0): 同行・seat差 == 1 (直隣り)               weight 1.0
+#   near         (rank 1): 同行・seat差 == 2 (2個隣)                weight 0.7
+#   facing       (rank 2): |row差| == 1・seat差 ≤ 1 (向かい側)      weight 0.5
+#   same_row     (rank 3): 同行・seat差 ≥ 3 (同列遠め)              weight 0.2
+#   same_cluster (rank 4): |row差| ≥ 2 (同クラスター別行)            weight 0.1
+PROX_RANK   = {"adjacent": 0, "near": 1, "facing": 2, "same_row": 3, "same_cluster": 4}
+PROX_WEIGHT = {"adjacent": 1.0, "near": 0.7, "facing": 0.5, "same_row": 0.2, "same_cluster": 0.1}
 
 # ─── 共通関数（fetch_data.py と同じパターン）────────────────────────────────
 
@@ -210,8 +211,8 @@ def main():
     # range[begin_at] でPiscine期間に絞り込み
     print("\n[2] Fetching ALL campus location history (bulk)...")
     all_locations = fetch_all_pages(token, f"/v2/campus/{CAMPUS_ID}/locations", {
-        "range[begin_at]": f"{PISCINE_START.strftime('%Y-%m-%dT%H:%M:%S.000Z')},"
-                           f"{PISCINE_END.strftime('%Y-%m-%dT%H:%M:%S.000Z')}",
+        "range[begin_at]": f"{PISCINE_START.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')},"
+                           f"{PISCINE_END.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')}",
         "sort": "begin_at",
     })
     print(f"  Total location records: {len(all_locations)}")
@@ -266,11 +267,12 @@ def main():
 
     # ─── Step 3: 近接ペアの検出 ─────────────────────────────────────────────
     # 近接度の定義（PROX_RANK / PROX_WEIGHT は上部定数参照）:
-    #   adjacent    : 同行・seat差 ≤ 2 (直隣り・2個隣)
-    #   facing      : |row差| == 1・seat差 ≤ 2 (向かい側・斜め向かい)
+    #   adjacent    : 同行・seat差 == 1 (直隣り)
+    #   near        : 同行・seat差 == 2 (2個隣)
+    #   facing      : |row差| == 1・seat差 ≤ 1 (向かい側)
     #   same_row    : 同行・seat差 ≥ 3 (同列遠め)
     #   same_cluster: |row差| ≥ 2 (同クラスター別行)
-    print("\n[3] Detecting co-presence pairs (adjacent / facing / same_row / same_cluster)...")
+    print("\n[3] Detecting co-presence pairs (adjacent / near / facing / same_row / same_cluster)...")
 
     # インデックス: cluster → list of sessions
     cluster_index = defaultdict(list)
@@ -278,7 +280,7 @@ def main():
         cluster_index[s["cluster"]].append(s)
 
     # neighbors[loginA][loginB] = { hours, weighted_hours, proximity }
-    # proximity: 最も近い接触の種類（adjacent > facing > same_row > same_cluster）
+    # proximity: 最も近い接触の種類（adjacent > near > facing > same_row > same_cluster）
     def _default_entry():
         return {"hours": 0.0, "weighted_hours": 0.0, "proximity": "same_cluster"}
     neighbors = defaultdict(lambda: defaultdict(_default_entry))
@@ -302,10 +304,15 @@ def main():
                 seat_diff = abs(sa["seat"] - sb["seat"])
                 if row_diff == 0:
                     # 同じ行: seat差で分類
-                    prox = "adjacent" if seat_diff <= 2 else "same_row"
+                    if seat_diff == 1:
+                        prox = "adjacent"    # 直隣り
+                    elif seat_diff == 2:
+                        prox = "near"        # 2個隣
+                    else:
+                        prox = "same_row"    # 同行遠め
                 elif row_diff == 1:
-                    # 隣の行（向かい側・斜め向かい）: seat差で分類
-                    prox = "facing" if seat_diff <= 2 else "same_cluster"
+                    # 隣の行（向かい側）: seat差が1以内のみ facing
+                    prox = "facing" if seat_diff <= 1 else "same_cluster"
                 else:
                     prox = "same_cluster"
 
@@ -459,7 +466,7 @@ def main():
         "piscine_end": (PISCINE_END - timedelta(days=1)).strftime("%Y-%m-%d"),
         "total_sessions": len(sessions),
         "total_students": len(all_logins),
-        "definition": "adjacent: same_row seat≤2 (w=1.0) | facing: row_diff=1 seat≤2 (w=0.8) | same_row: seat≥3 (w=0.5) | same_cluster: row_diff≥2 (w=0.3) | overlap≥30min",
+        "definition": "adjacent: same_row seat=1 (w=1.0) | near: same_row seat=2 (w=0.7) | facing: row_diff=1 seat≤1 (w=0.5) | same_row: seat≥3 (w=0.2) | same_cluster: row_diff≥2 (w=0.1) | overlap≥30min",
         "per_student": per_student,
         "global": {
             "correlation_neighbors_pass": correlation,

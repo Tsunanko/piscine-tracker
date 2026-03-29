@@ -812,8 +812,12 @@ function renderDashboard() {
     // 合否バッジ（合格発表済みなら全ユーザーに表示）
     const result = canSeeResult ? student.piscine_result : null;
     const resultCls = result === 'passed' ? 'result-passed' : result === 'failed' ? 'result-failed' : '';
+    const stillAt42 = student.still_at_42;
+    const survivalBadge = (result === 'passed' && stillAt42 !== undefined)
+      ? `<span style="font-size:8px;margin-left:4px;color:${stillAt42 ? '#00cec9' : '#636e72'}">${stillAt42 ? '在籍中' : '退学'}</span>`
+      : '';
     const resultBadgeHTML = result === 'passed'
-      ? `<div class="result-section"><span class="result-badge passed">🎉 合格</span></div>`
+      ? `<div class="result-section"><span class="result-badge passed">🎉 合格</span>${survivalBadge}</div>`
       : result === 'failed'
       ? `<div class="result-section"><span class="result-badge failed">次回へ</span></div>`
       : '';

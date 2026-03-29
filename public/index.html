@@ -615,6 +615,9 @@ function render(d) {
             Piscine を突破しました。<br>
             ここからが本当の始まりです。これからもよろしく！
           </div>
+          ${d.still_at_42 !== undefined ? `<div style="margin-top:10px;font-size:11px;color:${d.still_at_42 ? 'var(--green)' : 'var(--text-dim)'}">
+            ${d.still_at_42 ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}` : '⬜ 退学済み'}
+          </div>` : ''}
         </div>`;
       } else {
         return `<div class="fade-in" style="
@@ -934,14 +937,14 @@ async function renderMiniChart(login) {
       },
     });
 
-    // 合格ライン参考（管理者かつ結果発表済みのみ）
-    if (currentStudentData && loggedInUser?.login === 'admin_user' && d.results_announced) {
+    // 合格ライン参考（ログイン済みかつ結果発表済みのみ）
+    if (currentStudentData && loggedInUser && d.results_announced) {
       const passed = all.filter(s => s.piscine_result === 'passed');
       renderThresholds(currentStudentData, passed, all.length);
     }
 
-    // 近くにいた人（管理者専用）
-    if (loggedInUser?.login === 'admin_user') {
+    // 近くにいた人（ログイン済みユーザー全員に表示）
+    if (loggedInUser) {
       renderNeighbors(LOGIN, PAGE_MONTH);
     }
   } catch(e) {
@@ -950,7 +953,7 @@ async function renderMiniChart(login) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 近くにいた人（座席隣接分析）管理者専用
+// 近くにいた人（座席隣接分析）ログイン済みユーザー全員
 // ─────────────────────────────────────────────────────────────────────────────
 const _neighborCache = {};
 
@@ -981,10 +984,11 @@ async function renderNeighbors(login, month) {
 
   // 近接度ごとの色・ラベル（重み: adjacent=1.0 / facing=0.8 / same_row=0.5 / same_cluster=0.3）
   const PROX = {
-    adjacent:     { color: '#a29bfe', border: 'rgba(162,155,254,0.6)', label: '直隣り(2席以内)', emoji: '🟣' },
-    facing:       { color: '#fd79a8', border: 'rgba(253,121,168,0.5)', label: '向かい側',        emoji: '🩷' },
-    same_row:     { color: '#6c5ce7', border: 'rgba(108, 92,231,0.4)', label: '同じ行',          emoji: '🔵' },
-    same_cluster: { color: '#636e72', border: 'rgba(99,110,114, 0.3)', label: '同クラスター',    emoji: '⚪' },
+    adjacent:     { color: '#a29bfe', border: 'rgba(162,155,254,0.6)', label: '直隣り',       emoji: '🟣' },
+    near:         { color: '#e17055', border: 'rgba(225,112, 85,0.5)', label: '2席隣り',      emoji: '🟠' },
+    facing:       { color: '#fd79a8', border: 'rgba(253,121,168,0.5)', label: '向かい側',     emoji: '🩷' },
+    same_row:     { color: '#6c5ce7', border: 'rgba(108, 92,231,0.4)', label: '同じ行',       emoji: '🔵' },
+    same_cluster: { color: '#636e72', border: 'rgba(99,110,114, 0.3)', label: '同クラスター', emoji: '⚪' },
   };
 
   const top = studentNeighbors.top_neighbors.slice(0, 12);

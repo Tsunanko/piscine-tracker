@@ -370,8 +370,8 @@ def main():
     #    ※ scale_teams追加分はStep3削除と相殺→合計API呼び出し数は同じ
     print("\n[3] Fetching per-student data (locations_stats + projects + scale_teams)...")
     loc_params = {
-        "begin_at": PISCINE_START.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-        "end_at":   PISCINE_END.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "begin_at": PISCINE_START.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "end_at":   PISCINE_END.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
     }
     login_list = list(students.keys())
     user_jsons = {}  # 偏差値計算後にまとめて書き込む
@@ -463,19 +463,23 @@ def main():
 
             time.sleep(0.5)  # locations_stats の後
 
-            # --- プロジェクト取得（429の場合は1回リトライ）---
+            # --- プロジェクト取得（全ページ取得・期間フィルタ付き）---
+            # page[size]=50 だと本科移行後に100件超えるユーザーのPiscine最終試験が
+            # 取得できないバグを修正 → fetch_all_pages + created_at range で全件取得
+            proj_range_start = (PISCINE_START - timedelta(days=7)).strftime("%Y-%m-%d")
+            proj_range_end   = (PISCINE_END   + timedelta(days=14)).strftime("%Y-%m-%d")
             try:
                 try:
-                    projects_raw = api_get(token, f"/v2/users/{login}/projects_users", {
-                        "page[size]": 50,
+                    projects_raw = fetch_all_pages(token, f"/v2/users/{login}/projects_users", {
+                        "range[created_at]": f"{proj_range_start},{proj_range_end}",
                     })
                 except Exception as proj_e:
                     # 429 Too Many Requests → 10秒待ってリトライ
                     if "429" in str(proj_e):
                         print(f"  [WARN] {login} projects 429, retry in 10s...")
                         time.sleep(10)
-                        projects_raw = api_get(token, f"/v2/users/{login}/projects_users", {
-                            "page[size]": 50,
+                        projects_raw = fetch_all_pages(token, f"/v2/users/{login}/projects_users", {
+                            "range[created_at]": f"{proj_range_start},{proj_range_end}",
                         })
                     else:
                         raise
@@ -636,6 +640,15 @@ def main():
                 piscine_result = None
             students[login]["piscine_result"] = piscine_result
 
+            # 生存フラグ: 現在も42本科(cursus_42)に在籍しているか
+            # piscine合格後に42本科に移行しており、まだ在籍中の場合 True
+            # 注意: cursus_42_by_login は全campus学生を対象（退学者は含まれない）
+            cursus42_entry = cursus42_by_login.get(login)
+            still_at_42 = cursus42_entry is not None
+            current_42_level = round(cursus42_entry.get("level", 0), 2) if cursus42_entry else None
+            students[login]["still_at_42"] = still_at_42
+            students[login]["current_42_level"] = current_42_level
+
             # user_json 構築（偏差値はポスト処理で追加）
             user_json = {
                 "login": login,
@@ -672,6 +685,8 @@ def main():
                 "projects": projects,
                 "piscine_result": piscine_result,       # "passed" | "failed" | null
                 "results_announced": results_announced, # 合否発表済みフラグ
+                "still_at_42": still_at_42,             # 現在も42本科に在籍中か
+                "current_42_level": current_42_level,   # 現在の42本科レベル（非合格者はnull）
                 "updated_at": now.isoformat(),
                 # level_deviation, hours_deviation はポスト処理で追加
             }
@@ -682,12 +697,15 @@ def main():
             # fetch失敗をNoneでマーク（0と区別する）
             students[login]["total_hours"] = None
             students[login]["fetch_failed"] = True
-            # ★ piscine_result はAPIエラーと無関係（graduated_logins判定は常に有効）
+            # ★ piscine_result / still_at_42 はAPIエラーと無関係（graduated_logins判定は常に有効）
             #   ここで設定しないと合格者がpassed_countに入らなくなるバグを防ぐ
             if results_announced:
                 students[login]["piscine_result"] = "passed" if login in graduated_logins else "failed"
             else:
                 students[login]["piscine_result"] = None
+            cursus42_entry_err = cursus42_by_login.get(login)
+            students[login]["still_at_42"] = cursus42_entry_err is not None
+            students[login]["current_42_level"] = round(cursus42_entry_err.get("level", 0), 2) if cursus42_entry_err else None
             # リトライは1回だけ実施
             time.sleep(2)
             try:
@@ -854,6 +872,8 @@ def main():
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
             "piscine_result": s.get("piscine_result"),  # "passed" | "failed" | null
+            "still_at_42": s.get("still_at_42", False),     # 現在も42本科に在籍中か
+            "current_42_level": s.get("current_42_level"),  # 現在の42本科レベル
         }
         if login in online_logins:
             loc = active_map[login]
