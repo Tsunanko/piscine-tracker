@@ -44,6 +44,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: workers
+        continue-on-error: true  # トークン未設定時もGitHub Pages deployを止めない
 
       # ─── Step 3: GitHub Pages へデプロイ ─────────────────────────────
       # コード（HTML/JS/CSS）+ 復元したデータ（JSON）を合わせて gh-pages にデプロイ
