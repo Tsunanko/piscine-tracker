@@ -35,18 +35,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ─── Step 2: Cloudflare Worker をデプロイ ────────────────────────
-      # workers/index.js の変更を Cloudflare Worker に反映する
-      # 必要 Secret: CLOUDFLARE_API_TOKEN（Cloudflare Dashboard で発行）
-      - name: Deploy Cloudflare Worker
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: workers
-        continue-on-error: true  # トークン未設定時もGitHub Pages deployを止めない
-
-      # ─── Step 3: GitHub Pages へデプロイ ─────────────────────────────
+      # ─── Step 2: GitHub Pages へデプロイ ─────────────────────────────
+      # NOTE: Cloudflare Worker の自動デプロイは CLOUDFLARE_API_TOKEN を
+      # GitHub Secrets に登録後、別途 wrangler deploy を設定予定
       # コード（HTML/JS/CSS）+ 復元したデータ（JSON）を合わせて gh-pages にデプロイ
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
