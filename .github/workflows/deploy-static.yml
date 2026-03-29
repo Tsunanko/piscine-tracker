@@ -1,8 +1,9 @@
 name: Deploy Static Pages
 # ───────────────────────────────────────────────────────────────────────────
 # このワークフローの役割:
-#   main ブランチへの push 時に HTML/JS/CSS/Python のコード変更を
-#   即座に GitHub Pages へデプロイする。
+#   main ブランチへの push 時に以下を自動デプロイ:
+#   1. GitHub Pages (HTML/JS/CSS) - public/ ディレクトリ
+#   2. Cloudflare Worker (workers/index.js) - workers/ ディレクトリ
 #
 # 【重要】データと分離した理由:
 #   - main ブランチ: コード（HTML/JS/Python）のみ。データ(*.json)は含まない
@@ -34,7 +35,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ─── Step 2: GitHub Pages へデプロイ ─────────────────────────────
+      # ─── Step 2: Cloudflare Worker をデプロイ ────────────────────────
+      # workers/index.js の変更を Cloudflare Worker に反映する
+      # 必要 Secret: CLOUDFLARE_API_TOKEN（Cloudflare Dashboard で発行）
+      - name: Deploy Cloudflare Worker
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: workers
+
+      # ─── Step 3: GitHub Pages へデプロイ ─────────────────────────────
       # コード（HTML/JS/CSS）+ 復元したデータ（JSON）を合わせて gh-pages にデプロイ
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
