@@ -66,8 +66,8 @@ _PISCINE_CONFIG = {
         "days":  26,
     },
     "03": {
-        "start": datetime(2026, 3, 11, 0, 0, 0, tzinfo=JST),
-        "end":   datetime(2026, 4, 6,  0, 0, 0, tzinfo=JST),  # 4/5の翌日
+        "start": datetime(2026, 3, 16, 0, 0, 0, tzinfo=JST),
+        "end":   datetime(2026, 4, 11, 0, 0, 0, tzinfo=JST),  # 4/10の翌日
         "days":  26,
     },
 }
@@ -284,6 +284,15 @@ def main():
         login = user.get("login", "")
         if not login:
             continue
+        new_level = round(item.get("level", 0), 2)
+        # 重複エントリ対策: 同一loginが複数返ってきた場合はレベルが高い方を採用
+        # （ページネーション境界の重複 or 複数Piscine登録が原因）
+        if login in students:
+            existing_level = students[login]["level"]
+            if existing_level >= new_level:
+                print(f"  [WARN] Duplicate cursus entry for {login}: keeping lv{existing_level} over lv{new_level}")
+                continue
+            print(f"  [WARN] Duplicate cursus entry for {login}: upgrading lv{existing_level} → lv{new_level}")
         image = (user.get("image") or {})
         image_small = image.get("versions", {}).get("small", "") if image else ""
         students[login] = {
@@ -291,7 +300,7 @@ def main():
             "display_name": user.get("usual_full_name") or user.get("displayname", ""),
             "image_small": image_small or "",
             "total_hours": 0,
-            "level": round(item.get("level", 0), 2),  # cursus_usersから直接取得
+            "level": new_level,
             "daily": [],  # 偏差値計算で使用するため保存
         }
     print(f"  Total piscine students: {len(students)}")

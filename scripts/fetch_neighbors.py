@@ -61,8 +61,8 @@ _PISCINE_CONFIG = {
     "02":   {"start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
              "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),
              "label": "2026-02 Piscine"},
-    "03":   {"start": datetime(2026, 3, 11, 0, 0, 0, tzinfo=JST),
-             "end":   datetime(2026, 4, 6,  0, 0, 0, tzinfo=JST),
+    "03":   {"start": datetime(2026, 3, 16, 0, 0, 0, tzinfo=JST),
+             "end":   datetime(2026, 4, 11, 0, 0, 0, tzinfo=JST),
              "label": "2026-03 Piscine"},
 }
 if PISCINE_MONTH not in _PISCINE_CONFIG:
