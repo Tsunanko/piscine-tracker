@@ -671,7 +671,8 @@ def main():
                     if blackholed_at_str:
                         bh_dt = datetime.fromisoformat(blackholed_at_str.replace("Z", "+00:00"))
                         days_left = (bh_dt - now.astimezone(timezone.utc)).days
-                        blackhole_days_left = max(0, days_left)
+                        # 過去日付は古い計算値（活動でリセット済み）→ None で非表示
+                        blackhole_days_left = days_left if days_left > 0 else None
                     else:
                         blackhole_days_left = None
             else:
@@ -751,7 +752,8 @@ def main():
                     enroll_err = "active"
                     if bh_str_err:
                         bh_dt_err = datetime.fromisoformat(bh_str_err.replace("Z", "+00:00"))
-                        bh_days_err = max(0, (bh_dt_err - now.astimezone(timezone.utc)).days)
+                        _d = (bh_dt_err - now.astimezone(timezone.utc)).days
+                        bh_days_err = _d if _d > 0 else None  # 過去日付は非表示
                     else:
                         bh_days_err = None
                 students[login]["enrollment_42"] = enroll_err
