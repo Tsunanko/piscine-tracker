@@ -679,7 +679,9 @@ function renderDashboard() {
     allStudents = allStudents.filter(s => s.piscine_result === 'failed');
   } else if (canSeeResult && currentFilter === 'enrolled') {
     allStudents = allStudents.filter(s => s.enrollment_42 === 'active');
-  } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed' && currentFilter !== 'enrolled') {
+  } else if (canSeeResult && currentFilter === 'cc_done') {
+    allStudents = allStudents.filter(s => s.common_core_done === true);
+  } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed' && currentFilter !== 'enrolled' && currentFilter !== 'cc_done') {
     allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
   }
 
@@ -744,6 +746,12 @@ function renderDashboard() {
     if (enrolledCount > 0) {
       filterBtns.push(
         `<button class="filter-btn ${currentFilter === 'enrolled' ? 'active' : ''}" onclick="setFilter('enrolled')" style="${currentFilter !== 'enrolled' ? 'color:#00cec9;border-color:rgba(0,206,201,0.35)' : ''}">🏫 在籍中 (${enrolledCount})</button>`
+      );
+    }
+    const ccCount = [...d.online, ...d.offline].filter(s => s.common_core_done === true).length;
+    if (ccCount > 0) {
+      filterBtns.push(
+        `<button class="filter-btn ${currentFilter === 'cc_done' ? 'active' : ''}" onclick="setFilter('cc_done')" style="${currentFilter !== 'cc_done' ? 'color:#a29bfe;border-color:rgba(162,155,254,0.35)' : ''}">🎓 CC完了 (${ccCount})</button>`
       );
     }
   }
@@ -829,8 +837,11 @@ function renderDashboard() {
           ? `<span style="font-size:8px;margin-left:4px;color:#e17055">🕳BH</span>`
           : `<span style="font-size:8px;margin-left:4px;color:#636e72">退学</span>`)
       : '';
+    const ccBadge = (result === 'passed' && student.common_core_done)
+      ? `<span style="font-size:8px;margin-left:4px;color:#a29bfe">🎓</span>`
+      : '';
     const resultBadgeHTML = result === 'passed'
-      ? `<div class="result-section" style="white-space:nowrap"><span class="result-badge passed">🎉 合格</span>${survivalBadge}</div>`
+      ? `<div class="result-section" style="white-space:nowrap"><span class="result-badge passed">🎉 合格</span>${survivalBadge}${ccBadge}</div>`
       : result === 'failed'
       ? `<div class="result-section"><span class="result-badge failed">次回へ</span></div>`
       : '';

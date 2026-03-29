@@ -661,28 +661,33 @@ def main():
                 end_at_str = cursus42_entry.get("end_at")
                 blackholed_at_str = cursus42_entry.get("blackholed_at")
                 current_42_level = round(cursus42_entry.get("level", 0), 2)
+                grade_42 = cursus42_entry.get("grade")  # "Learner" | "Member" | null
                 if end_at_str:
-                    # カリキュラム終了 → BH or 自主退学
                     enrollment_42 = "blackholed" if blackholed_at_str else "withdrawn"
                     blackhole_days_left = None
                 else:
-                    # まだ在籍中
                     enrollment_42 = "active"
                     if blackholed_at_str:
                         bh_dt = datetime.fromisoformat(blackholed_at_str.replace("Z", "+00:00"))
                         days_left = (bh_dt - now.astimezone(timezone.utc)).days
-                        # 過去日付は古い計算値（活動でリセット済み）→ None で非表示
                         blackhole_days_left = days_left if days_left > 0 else None
                     else:
                         blackhole_days_left = None
+                # コモンコア完了判定:
+                # grade="Member" が公式判定、level>=21 をフォールバックで使用
+                common_core_done = (grade_42 == "Member") or (current_42_level >= 21.0)
             else:
                 enrollment_42 = None
                 current_42_level = None
+                grade_42 = None
                 blackhole_days_left = None
-            still_at_42 = enrollment_42 == "active"  # 後方互換: active のみ True
+                common_core_done = False
+            still_at_42 = enrollment_42 == "active"
             students[login]["still_at_42"] = still_at_42
             students[login]["enrollment_42"] = enrollment_42
             students[login]["current_42_level"] = current_42_level
+            students[login]["grade_42"] = grade_42
+            students[login]["common_core_done"] = common_core_done
             students[login]["blackhole_days_left"] = blackhole_days_left
 
             # user_json 構築（偏差値はポスト処理で追加）
@@ -721,9 +726,11 @@ def main():
                 "projects": projects,
                 "piscine_result": piscine_result,       # "passed" | "failed" | null
                 "results_announced": results_announced, # 合否発表済みフラグ
-                "enrollment_42": enrollment_42,           # "active"|"blackholed"|"withdrawn"|null
-                "still_at_42": still_at_42,               # 後方互換: active=Trueのみ True
-                "current_42_level": current_42_level,     # 現在の42本科レベル（非合格者はnull）
+                "enrollment_42": enrollment_42,             # "active"|"blackholed"|"withdrawn"|null
+                "still_at_42": still_at_42,                 # 後方互換: active=Trueのみ True
+                "current_42_level": current_42_level,       # 現在の42本科レベル
+                "grade_42": grade_42,                       # "Learner"|"Member"|null
+                "common_core_done": common_core_done,       # コモンコア完了フラグ
                 "blackhole_days_left": blackhole_days_left, # BHまでの残り日数（active時のみ）
                 "updated_at": now.isoformat(),
                 # level_deviation, hours_deviation はポスト処理で追加
@@ -756,14 +763,20 @@ def main():
                         bh_days_err = _d if _d > 0 else None  # 過去日付は非表示
                     else:
                         bh_days_err = None
+                lv_err = round(cursus42_entry_err.get("level", 0), 2)
+                gr_err = cursus42_entry_err.get("grade")
                 students[login]["enrollment_42"] = enroll_err
                 students[login]["still_at_42"] = enroll_err == "active"
-                students[login]["current_42_level"] = round(cursus42_entry_err.get("level", 0), 2)
+                students[login]["current_42_level"] = lv_err
+                students[login]["grade_42"] = gr_err
+                students[login]["common_core_done"] = (gr_err == "Member") or (lv_err >= 21.0)
                 students[login]["blackhole_days_left"] = bh_days_err
             else:
                 students[login]["enrollment_42"] = None
                 students[login]["still_at_42"] = False
                 students[login]["current_42_level"] = None
+                students[login]["grade_42"] = None
+                students[login]["common_core_done"] = False
                 students[login]["blackhole_days_left"] = None
             # リトライは1回だけ実施
             time.sleep(2)
@@ -931,9 +944,11 @@ def main():
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
             "piscine_result": s.get("piscine_result"),  # "passed" | "failed" | null
-            "enrollment_42": s.get("enrollment_42"),              # "active"|"blackholed"|"withdrawn"|null
-            "still_at_42": s.get("still_at_42", False),       # 後方互換: active=Trueのみ True
-            "current_42_level": s.get("current_42_level"),    # 現在の42本科レベル
+            "enrollment_42": s.get("enrollment_42"),               # "active"|"blackholed"|"withdrawn"|null
+            "still_at_42": s.get("still_at_42", False),        # 後方互換
+            "current_42_level": s.get("current_42_level"),     # 現在の42本科レベル
+            "grade_42": s.get("grade_42"),                      # "Learner"|"Member"|null
+            "common_core_done": s.get("common_core_done", False), # コモンコア完了フラグ
             "blackhole_days_left": s.get("blackhole_days_left"), # BHまでの残り日数
         }
         if login in online_logins:
