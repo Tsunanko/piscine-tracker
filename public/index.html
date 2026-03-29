@@ -615,10 +615,12 @@ function render(d) {
             Piscine を突破しました。<br>
             ここからが本当の始まりです。これからもよろしく！
           </div>
-          ${d.enrollment_42 != null ? `<div style="margin-top:10px;font-size:11px;color:${d.enrollment_42 === 'active' ? 'var(--green)' : 'var(--orange)'}">
+          ${d.enrollment_42 != null ? `<div style="margin-top:10px;font-size:11px;color:${d.enrollment_42 === 'active' ? 'var(--green)' : d.enrollment_42 === 'blackholed' ? 'var(--orange)' : 'var(--text-dim)'}">
             ${d.enrollment_42 === 'active'
-              ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}`
-              : `🕳 ブラックホール${d.current_42_level != null ? `（最終 Lv ${d.current_42_level}）` : ''}`}
+              ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}${d.blackhole_days_left != null ? ` <span style="color:var(--orange)">BHまで残${d.blackhole_days_left}日</span>` : ''}`
+              : d.enrollment_42 === 'blackholed'
+              ? `🕳 ブラックホール${d.current_42_level != null ? `（最終 Lv ${d.current_42_level}）` : ''}`
+              : `⬜ 退学済み`}
           </div>` : (d.piscine_result === 'passed' ? `<div style="margin-top:10px;font-size:11px;color:var(--text-dim)">⬜ 退学済み</div>` : '')}
         </div>`;
       } else {

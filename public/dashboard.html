@@ -813,10 +813,13 @@ function renderDashboard() {
     const result = canSeeResult ? student.piscine_result : null;
     const resultCls = result === 'passed' ? 'result-passed' : result === 'failed' ? 'result-failed' : '';
     const enrollment42 = student.enrollment_42;
+    const bhDays = student.blackhole_days_left;
     const survivalBadge = (result === 'passed' && enrollment42 != null)
       ? (enrollment42 === 'active'
-          ? `<span style="font-size:8px;margin-left:4px;color:#00cec9">在籍中</span>`
-          : `<span style="font-size:8px;margin-left:4px;color:#e17055">🕳 BH</span>`)
+          ? `<span style="font-size:8px;margin-left:4px;color:#00cec9">在籍中${bhDays != null ? `<span style="color:#fdcb6e">（残${bhDays}日）</span>` : ''}</span>`
+          : enrollment42 === 'blackholed'
+          ? `<span style="font-size:8px;margin-left:4px;color:#e17055">🕳 BH</span>`
+          : `<span style="font-size:8px;margin-left:4px;color:#636e72">退学</span>`)
       : '';
     const resultBadgeHTML = result === 'passed'
       ? `<div class="result-section"><span class="result-badge passed">🎉 合格</span>${survivalBadge}</div>`

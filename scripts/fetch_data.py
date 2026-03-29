@@ -640,28 +640,40 @@ def main():
                 piscine_result = None
             students[login]["piscine_result"] = piscine_result
 
-            # 在籍状況: 42本科(cursus_42)でのステータスを3段階で判定
-            # - "active"      : 在籍中（blackholed_at が null または未来日付）
-            # - "blackholed"  : ブラックホール（blackholed_at が過去日付 → 実質除籍）
-            # - None          : Piscine不合格 or cursus_42 に存在しない
-            # ※ 42 API: cursus_users.blackholed_at が過去 = ブラックホール状態
+            # 在籍状況: 42本科(cursus_42)でのステータスを判定
+            # 判定基準: end_at フィールド（cursusが終了したかどうか）
+            # - end_at = null   → 在籍中 ("active")  ← blackholed_at が過去でも在籍中の場合あり
+            # - end_at = 設定済 + blackholed_at あり → BH ("blackholed")
+            # - end_at = 設定済 + blackholed_at なし → 自主退学 ("withdrawn")
+            # - cursus_42 に存在しない → None（Piscine不合格 or 別ルート）
+            # ※ blackholed_at は残り日数の計算にのみ使用（active判定には使わない）
             cursus42_entry = cursus42_by_login.get(login)
             if cursus42_entry is not None:
+                end_at_str = cursus42_entry.get("end_at")
                 blackholed_at_str = cursus42_entry.get("blackholed_at")
-                if blackholed_at_str:
-                    blackholed_at_dt = datetime.fromisoformat(blackholed_at_str.replace("Z", "+00:00"))
-                    is_blackholed = blackholed_at_dt <= now.astimezone(timezone.utc)
-                else:
-                    is_blackholed = False
-                enrollment_42 = "blackholed" if is_blackholed else "active"
                 current_42_level = round(cursus42_entry.get("level", 0), 2)
+                if end_at_str:
+                    # カリキュラム終了 → BH or 自主退学
+                    enrollment_42 = "blackholed" if blackholed_at_str else "withdrawn"
+                    blackhole_days_left = None
+                else:
+                    # まだ在籍中
+                    enrollment_42 = "active"
+                    if blackholed_at_str:
+                        bh_dt = datetime.fromisoformat(blackholed_at_str.replace("Z", "+00:00"))
+                        days_left = (bh_dt - now.astimezone(timezone.utc)).days
+                        blackhole_days_left = max(0, days_left)
+                    else:
+                        blackhole_days_left = None
             else:
                 enrollment_42 = None
                 current_42_level = None
-            still_at_42 = enrollment_42 == "active"  # 後方互換: 純粋に在籍中のみ True
+                blackhole_days_left = None
+            still_at_42 = enrollment_42 == "active"  # 後方互換: active のみ True
             students[login]["still_at_42"] = still_at_42
             students[login]["enrollment_42"] = enrollment_42
             students[login]["current_42_level"] = current_42_level
+            students[login]["blackhole_days_left"] = blackhole_days_left
 
             # user_json 構築（偏差値はポスト処理で追加）
             user_json = {
@@ -699,9 +711,10 @@ def main():
                 "projects": projects,
                 "piscine_result": piscine_result,       # "passed" | "failed" | null
                 "results_announced": results_announced, # 合否発表済みフラグ
-                "enrollment_42": enrollment_42,         # "active"|"blackholed"|null
-                "still_at_42": still_at_42,             # 後方互換: active=True, それ以外False
-                "current_42_level": current_42_level,   # 現在の42本科レベル（非合格者はnull）
+                "enrollment_42": enrollment_42,           # "active"|"blackholed"|"withdrawn"|null
+                "still_at_42": still_at_42,               # 後方互換: active=Trueのみ True
+                "current_42_level": current_42_level,     # 現在の42本科レベル（非合格者はnull）
+                "blackhole_days_left": blackhole_days_left, # BHまでの残り日数（active時のみ）
                 "updated_at": now.isoformat(),
                 # level_deviation, hours_deviation はポスト処理で追加
             }
@@ -720,15 +733,27 @@ def main():
                 students[login]["piscine_result"] = None
             cursus42_entry_err = cursus42_by_login.get(login)
             if cursus42_entry_err is not None:
-                bh_str = cursus42_entry_err.get("blackholed_at")
-                is_bh = bool(bh_str and datetime.fromisoformat(bh_str.replace("Z", "+00:00")) <= now.astimezone(timezone.utc))
-                students[login]["enrollment_42"] = "blackholed" if is_bh else "active"
-                students[login]["still_at_42"] = not is_bh
+                end_at_err = cursus42_entry_err.get("end_at")
+                bh_str_err = cursus42_entry_err.get("blackholed_at")
+                if end_at_err:
+                    enroll_err = "blackholed" if bh_str_err else "withdrawn"
+                    bh_days_err = None
+                else:
+                    enroll_err = "active"
+                    if bh_str_err:
+                        bh_dt_err = datetime.fromisoformat(bh_str_err.replace("Z", "+00:00"))
+                        bh_days_err = max(0, (bh_dt_err - now.astimezone(timezone.utc)).days)
+                    else:
+                        bh_days_err = None
+                students[login]["enrollment_42"] = enroll_err
+                students[login]["still_at_42"] = enroll_err == "active"
                 students[login]["current_42_level"] = round(cursus42_entry_err.get("level", 0), 2)
+                students[login]["blackhole_days_left"] = bh_days_err
             else:
                 students[login]["enrollment_42"] = None
                 students[login]["still_at_42"] = False
                 students[login]["current_42_level"] = None
+                students[login]["blackhole_days_left"] = None
             # リトライは1回だけ実施
             time.sleep(2)
             try:
@@ -895,9 +920,10 @@ def main():
             "active_days": None if failed else active_days,  # 1h以上来た日数（1日平均計算用）
             "fetch_failed": failed,
             "piscine_result": s.get("piscine_result"),  # "passed" | "failed" | null
-            "enrollment_42": s.get("enrollment_42"),            # "active"|"blackholed"|null
-            "still_at_42": s.get("still_at_42", False),     # 後方互換: active=Trueのみ True
-            "current_42_level": s.get("current_42_level"),  # 現在の42本科レベル
+            "enrollment_42": s.get("enrollment_42"),              # "active"|"blackholed"|"withdrawn"|null
+            "still_at_42": s.get("still_at_42", False),       # 後方互換: active=Trueのみ True
+            "current_42_level": s.get("current_42_level"),    # 現在の42本科レベル
+            "blackhole_days_left": s.get("blackhole_days_left"), # BHまでの残り日数
         }
         if login in online_logins:
             loc = active_map[login]
