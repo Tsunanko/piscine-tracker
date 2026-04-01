@@ -543,6 +543,7 @@ let showDev = localStorage.getItem('showDev') !== 'false';
 let showExam = localStorage.getItem('showExam') !== 'false';
 let showResult = localStorage.getItem('showResult') === 'true'; // 合否表示（デフォルトOFF）
 let loggedInUser = null; // ログイン中ユーザー情報
+let userMonths = [];     // ユーザーが参加しているピシン月リスト
 // URLパラメータ ?month=2408 等が指定されていれば初期月として使用
 let currentMonth = (() => {
   const m = new URLSearchParams(location.search).get('month');
@@ -705,12 +706,24 @@ function renderDashboard() {
 
   // Update header
   const periodLabel = currentMonth === '2408' ? 'Aug 5 - Aug 30, 2024'
-                    : currentMonth === '03'   ? 'Mar 11 - Apr 5, 2026'
+                    : currentMonth === '2409' ? 'Sep 2 - Sep 27, 2024'
+                    : currentMonth === '03'   ? 'Mar 16 - Apr 10, 2026'
                     :                          'Feb 2 - Feb 27, 2026';
   document.getElementById('headerSub').textContent = periodLabel;
-  // 管理者のみ月タブを表示
+  // 月タブ表示: 管理者は全タブ、一般ユーザーは参加月のタブのみ
   const monthTabs = document.getElementById('monthTabs');
-  if (monthTabs && isAdmin) monthTabs.style.display = 'flex';
+  if (monthTabs && (isAdmin || (userMonths && userMonths.length > 0))) {
+    if (isAdmin) {
+      monthTabs.style.display = 'flex';
+    } else {
+      // 一般ユーザー: 参加月のタブだけ表示（02は常に表示）
+      ['2408', '2409', '02', '03'].forEach(m => {
+        const tab = document.getElementById(`tab${m}`);
+        if (tab) tab.style.display = (m === '02' || userMonths.includes(m)) ? '' : 'none';
+      });
+      monthTabs.style.display = 'flex';
+    }
+  }
   document.getElementById('onlineCount').textContent = d.total_online;
   document.getElementById('totalCount').textContent = d.total_students;
 
@@ -993,11 +1006,24 @@ function sendConsentSilently(user) {
 }
 
 // 認証確認後にダッシュボード読み込み
-requireAuth().then(user => {
+requireAuth().then(async user => {
   if (!user) return;
   loggedInUser = user; // 管理者リンク表示判定に使用
   initSearchInput(); // 検索入力欄のイベントを一度だけ登録
   sendConsentSilently(user);
+
+  // ユーザーの参加月を取得（月タブ表示に使用）
+  try {
+    const token = getToken();
+    const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/my-months', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      userMonths = data.months || [];
+    }
+  } catch {}
+
   // URLパラメータで月が指定されていた場合、タブのスタイルと統計リンクを初期化
   if (currentMonth !== '02') {
     ['2408', '2409', '02', '03'].forEach(m => {

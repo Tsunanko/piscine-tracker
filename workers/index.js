@@ -206,6 +206,13 @@ export default {
       return handleKvUpload(request, env);
     }
 
+    // ─── ユーザー参加月取得 API ──────────────────────────────────────
+    // ログインユーザーがどの月のピシンに参加しているかを返す
+    // 管理者は全月、一般ユーザーは参加月のみ
+    if (url.pathname === '/api/my-months' && request.method === 'GET') {
+      return handleGetMyMonths(request, env);
+    }
+
     // ─── データ取得 API（フロントエンドが使用）────────────────────────
     // 42 OAuthトークン or piscine:トークンで認証後にKVのデータを返す
     // ?month=03 を付けると3月Piscineデータ（管理者のみ）
@@ -589,6 +596,44 @@ async function handleKvUpload(request, env) {
     });
   }
 }
+
+/**
+ * ログインユーザーの参加月リストを返す
+ * 管理者: 全月 + isAdmin:true
+ * 一般ユーザー: 参加している月のみ + isAdmin:false
+ */
+async function handleGetMyMonths(request, env) {
+  const user = await authenticateRequest(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const ALL_MONTHS = ['2408', '2409', '02', '03'];
+
+  if (user.isAdmin) {
+    return new Response(JSON.stringify({ months: ALL_MONTHS, isAdmin: true }), {
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // 一般ユーザー: 各月のバッチデータにloginが存在するかチェック
+  const months = [];
+  for (const m of ALL_MONTHS) {
+    const batchVal = await env.PISCINE_DATA.get(`data:users:all:${m}`);
+    if (!batchVal) continue;
+    try {
+      const batch = JSON.parse(batchVal);
+      if (batch[user.login]) months.push(m);
+    } catch {}
+  }
+
+  return new Response(JSON.stringify({ months, isAdmin: false }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
 
 /**
  * 全体ダッシュボード用 data.json を返す（認証必須）
