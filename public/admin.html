@@ -261,6 +261,16 @@
     </div>
   </div>
 
+  <!-- ユーザー月所属チェック -->
+  <div id="checkUserSection" style="display:none;margin-bottom:20px">
+    <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px">ユーザー月所属チェック（バックエンド検証）</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="checkUserInput" type="text" placeholder="login名を入力（例: srikuto）" style="padding:6px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:12px;width:220px;outline:none" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+      <button onclick="checkUserMonths()" style="padding:6px 16px;border-radius:8px;background:var(--green);border:none;color:#000;font-size:12px;font-weight:600;cursor:pointer">確認</button>
+    </div>
+    <div id="checkUserResult" style="margin-top:8px;font-size:12px;color:var(--text-dim)"></div>
+  </div>
+
   <!-- Message area -->
   <div id="msgArea"></div>
 
@@ -349,7 +359,36 @@
     document.getElementById('statConsents').textContent = allConsents.length;
     document.getElementById('statsBar').style.display = 'flex';
     document.getElementById('viewAsSection').style.display = '';
+    document.getElementById('checkUserSection').style.display = '';
   }
+
+  // ─── ユーザー月所属チェック ─────────────────────────
+  async function checkUserMonths() {
+    const login = document.getElementById('checkUserInput').value.trim();
+    const resultEl = document.getElementById('checkUserResult');
+    if (!login) { resultEl.textContent = 'login名を入力してください'; return; }
+    resultEl.textContent = '確認中...';
+    try {
+      const token = sessionStorage.getItem('piscine_42_token');
+      const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/check-user-months?login=${encodeURIComponent(login)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) { resultEl.textContent = `エラー: ${data.error}`; return; }
+      const monthNames = {'2408':'8月(2024)','2409':'9月(2024)','02':'2月(2026)','03':'3月(2026)'};
+      const lines = Object.entries(data.months).map(([m, info]) => {
+        const name = monthNames[m] || m;
+        if (info.exists) return `<span style="color:var(--green)">${name}: 所属あり</span> (全${info.totalUsers}人中)`;
+        if (info.reason) return `<span style="color:var(--red)">${name}: ${info.reason}</span>`;
+        return `<span style="color:var(--text-dim)">${name}: 所属なし</span> (全${info.totalUsers}人中)`;
+      });
+      resultEl.innerHTML = `<strong>${login}</strong>: ` + lines.join(' / ');
+    } catch (e) {
+      resultEl.textContent = `通信エラー: ${e.message}`;
+    }
+  }
+  // Enterキーでも実行
+  document.getElementById('checkUserInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') checkUserMonths(); });
 
   // ─── コントロール表示 ─────────────────────────────
   function showControls() {

@@ -213,6 +213,12 @@ export default {
       return handleGetMyMonths(request, env);
     }
 
+    // ─── 管理者用: 任意ユーザーの参加月チェック ──────────────────────
+    // ?login=srikuto でそのユーザーがどの月のバッチデータに存在するか返す
+    if (url.pathname === '/api/check-user-months' && request.method === 'GET') {
+      return handleCheckUserMonths(request, env, url);
+    }
+
     // ─── データ取得 API（フロントエンドが使用）────────────────────────
     // 42 OAuthトークン or piscine:トークンで認証後にKVのデータを返す
     // ?month=03 を付けると3月Piscineデータ（管理者のみ）
@@ -630,6 +636,49 @@ async function handleGetMyMonths(request, env) {
   }
 
   return new Response(JSON.stringify({ months, isAdmin: false }), {
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
+
+/**
+ * 管理者用: 任意ユーザーの参加月を確認する
+ * ?login=srikuto → そのユーザーがどの月のバッチデータに存在するか返す
+ */
+async function handleCheckUserMonths(request, env, url) {
+  const user = await authenticateRequest(request, env);
+  if (!user || !user.isAdmin) {
+    return new Response(JSON.stringify({ error: 'Admin only' }), {
+      status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const login = url.searchParams.get('login');
+  if (!login) {
+    return new Response(JSON.stringify({ error: 'login parameter required' }), {
+      status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const ALL_MONTHS = ['2408', '2409', '02', '03'];
+  const result = {};
+
+  for (const m of ALL_MONTHS) {
+    const batchVal = await env.PISCINE_DATA.get(`data:users:all:${m}`);
+    if (!batchVal) {
+      result[m] = { exists: false, reason: 'batch data not found in KV' };
+      continue;
+    }
+    try {
+      const batch = JSON.parse(batchVal);
+      const found = !!batch[login];
+      result[m] = { exists: found, totalUsers: Object.keys(batch).length };
+    } catch (e) {
+      result[m] = { exists: false, reason: 'JSON parse error' };
+    }
+  }
+
+  return new Response(JSON.stringify({ login, months: result }), {
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 }
