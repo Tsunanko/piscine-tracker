@@ -250,6 +250,17 @@
     </div>
   </div>
 
+  <!-- viewAsテストリンク -->
+  <div id="viewAsSection" style="display:none;margin-bottom:20px">
+    <div style="font-size:13px;font-weight:600;color:var(--accent2);margin-bottom:8px">viewAs テスト（一般ユーザー視点の確認）</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="dashboard.html?viewAs=2408" style="padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:12px;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">8月(2024) 参加者</a>
+      <a href="dashboard.html?viewAs=2409" style="padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:12px;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">9月(2024) 参加者</a>
+      <a href="dashboard.html?viewAs=02" style="padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:12px;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">2月(2026) 参加者</a>
+      <a href="dashboard.html?viewAs=03" style="padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:12px;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">3月(2026) 参加者</a>
+    </div>
+  </div>
+
   <!-- Message area -->
   <div id="msgArea"></div>
 
@@ -337,6 +348,7 @@
     document.getElementById('statSimple').textContent  = simpleCount;
     document.getElementById('statConsents').textContent = allConsents.length;
     document.getElementById('statsBar').style.display = 'flex';
+    document.getElementById('viewAsSection').style.display = '';
   }
 
   // ─── コントロール表示 ─────────────────────────────
