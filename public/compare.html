@@ -477,7 +477,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   token = sessionStorage.getItem('piscine_42_token') || '';
 
-  if (me.login !== ADMIN) {
+  // サーバー側で管理者チェック（クライアント側チェックはバックアップ）
+  const adminCheck = await fetch(`${WORKER}/api/check-user-months?login=__admin_test__`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => null);
+  const isServerAdmin = adminCheck && adminCheck.ok;
+
+  if (me.login !== ADMIN || !isServerAdmin) {
     document.getElementById('loading').style.display = 'none';
     const err = document.getElementById('errorMsg');
     err.style.display = 'block';

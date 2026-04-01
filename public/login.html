@@ -346,8 +346,9 @@
       });
 
       if (res.ok) {
-        // トークンを sessionStorage に保存してダッシュボードへ
-        sessionStorage.setItem('piscine_42_token', 'piscine:' + login);
+        // サーバーが返したHMAC署名付きトークンを sessionStorage に保存
+        const resData = await res.json();
+        sessionStorage.setItem('piscine_42_token', resData.token);
         sessionStorage.setItem('piscine_42_user', JSON.stringify({
           login,
           campus: [{ id: 26, name: '42 Tokyo' }],

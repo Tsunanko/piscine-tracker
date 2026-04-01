@@ -56,6 +56,75 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Secret, Authorization',
 };
 
+// ─── 管理者のみに返す機密フィールド ──────────────────────────────────────
+// 非管理者のAPIレスポンスからはこれらのフィールドを除外する
+const ADMIN_ONLY_FIELDS = [
+  'piscine_result', 'exam_score', 'exam_projects', 'eval_avg',
+  'interested_avg', 'punctuality_avg', 'scale_teams_count',
+];
+
+function stripSensitiveData(data) {
+  if (!data || typeof data !== 'object') return data;
+  const stripStudent = (s) => {
+    const copy = { ...s };
+    for (const f of ADMIN_ONLY_FIELDS) delete copy[f];
+    return copy;
+  };
+  return {
+    ...data,
+    online: (data.online || []).map(stripStudent),
+    offline: (data.offline || []).map(stripStudent),
+    passed_count: undefined,
+    results_announced: undefined,
+  };
+}
+
+function stripSensitiveUserData(userData) {
+  if (!userData || typeof userData !== 'object') return userData;
+  const copy = { ...userData };
+  for (const f of ADMIN_ONLY_FIELDS) delete copy[f];
+  delete copy.piscine_result;
+  return copy;
+}
+
+
+// ─── HMAC署名付きPiscineトークン ─────────────────────────────────────────
+// piscine:login:timestamp:hmac 形式のトークンを生成・検証する
+// ADMIN_SECRET をHMACキーとして使用（専用シークレット不要）
+
+async function signPiscineToken(login, env) {
+  const ts = Date.now().toString();
+  const data = `${login}:${ts}`;
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.ADMIN_SECRET || 'fallback-key'),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const hmac = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `piscine:${login}:${ts}:${hmac}`;
+}
+
+async function verifyPiscineToken(token, env) {
+  const parts = token.split(':');
+  // 旧形式 piscine:login (2パーツ) は拒否、新形式 piscine:login:ts:hmac (4パーツ) のみ許可
+  if (parts.length !== 4 || parts[0] !== 'piscine') return null;
+  const [, login, ts, hmac] = parts;
+  if (!/^[a-zA-Z0-9_-]{1,30}$/.test(login)) return null;
+  const data = `${login}:${ts}`;
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.ADMIN_SECRET || 'fallback-key'),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const expected = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+  if (hmac !== expected) return null;
+  // トークン有効期限: 30日
+  const age = Date.now() - parseInt(ts, 10);
+  if (isNaN(age) || age > 30 * 24 * 3600 * 1000) return null;
+  return { login, type: 'piscine' };
+}
+
+
 /**
  * 管理者権限チェック（2つの認証方式をサポート）
  *
@@ -115,16 +184,14 @@ async function isAdmin(request, env) {
  * @param {Request} request
  * @returns {{ login: string, type: string } | null}
  */
-async function checkDataAuth(request) {
+async function checkDataAuth(request, env) {
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token) return null;
 
-  // piscine: トークン（合言葉ログイン）→ フォーマット確認のみ
+  // piscine: トークン（HMAC署名付き）→ サーバー側で署名検証
   if (token.startsWith('piscine:')) {
-    const login = token.slice(8);
-    if (/^[a-zA-Z0-9_-]{1,30}$/.test(login)) return { login, type: 'piscine' };
-    return null;
+    return await verifyPiscineToken(token, env);
   }
 
   // 42 OAuth トークン → API で検証
@@ -415,7 +482,7 @@ async function handleGetConsents(request, env) {
  * GET /api/neighbors           → data:neighbors_02 (default)
  */
 async function handleGetNeighbors(request, env, url) {
-  const user = await checkDataAuth(request);
+  const user = await checkDataAuth(request, env);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -512,7 +579,9 @@ async function handleSimpleLogin(request, env) {
       await env.LOGIN_LOGS.put(key, JSON.stringify({ login, method: 'passphrase', ts, ip, ua }));
     } catch {} // ログ失敗でもログイン自体は続行
 
-    return new Response(JSON.stringify({ ok: true }), {
+    // HMAC署名付きトークンを生成して返す
+    const signedToken = await signPiscineToken(login, env);
+    return new Response(JSON.stringify({ ok: true, token: signedToken }), {
       status: 200,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
@@ -609,7 +678,7 @@ async function handleKvUpload(request, env) {
  * 一般ユーザー: 参加している月のみ + isAdmin:false
  */
 async function handleGetMyMonths(request, env) {
-  const user = await checkDataAuth(request);
+  const user = await checkDataAuth(request, env);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -647,7 +716,7 @@ async function handleGetMyMonths(request, env) {
  */
 async function handleCheckUserMonths(request, env, url) {
   try {
-    const user = await checkDataAuth(request);
+    const user = await checkDataAuth(request, env);
     if (!user || !user.isAdmin) {
       return new Response(JSON.stringify({ error: 'Admin only' }), {
         status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -695,7 +764,7 @@ async function handleCheckUserMonths(request, env, url) {
  * ?month=03 を指定すると3月Piscineデータ（管理者のみ）
  */
 async function handleGetData(request, env, url) {
-  const user = await checkDataAuth(request);
+  const user = await checkDataAuth(request, env);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -726,6 +795,17 @@ async function handleGetData(request, env, url) {
     });
   }
 
+  // 非管理者には機密データ（exam_score, piscine_result等）を除外して返す
+  if (!user.isAdmin) {
+    try {
+      const parsed = JSON.parse(val);
+      const filtered = stripSensitiveData(parsed);
+      return new Response(JSON.stringify(filtered), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    } catch {}
+  }
+
   return new Response(val, {
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
@@ -740,7 +820,7 @@ async function handleGetData(request, env, url) {
  * どちらかに存在すれば返す。
  */
 async function handleGetUserData(request, env, login, url) {
-  const user = await checkDataAuth(request);
+  const user = await checkDataAuth(request, env);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -774,7 +854,8 @@ async function handleGetUserData(request, env, login, url) {
     try {
       const batch = JSON.parse(batchVal);
       if (batch[login]) {
-        return new Response(JSON.stringify(batch[login]), {
+        const userData = user.isAdmin ? batch[login] : stripSensitiveUserData(batch[login]);
+        return new Response(JSON.stringify(userData), {
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
       }
@@ -785,6 +866,14 @@ async function handleGetUserData(request, env, login, url) {
   if (month === '02') {
     const individual = await env.PISCINE_DATA.get(`data:user:${login}`);
     if (individual) {
+      if (!user.isAdmin) {
+        try {
+          const parsed = JSON.parse(individual);
+          return new Response(JSON.stringify(stripSensitiveUserData(parsed)), {
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          });
+        } catch {}
+      }
       return new Response(individual, {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });

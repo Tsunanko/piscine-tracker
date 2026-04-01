@@ -87,6 +87,13 @@ async function checkAuth() {
     // JSON.parse が失敗した場合（壊れたデータ）は素通りして API を呼び直す
   }
 
+  // piscineトークン（HMAC署名付き）の場合は42 APIを呼ばない
+  // サーバー側で署名検証されるため、クライアントではキャッシュのみ参照
+  if (token.startsWith('piscine:')) {
+    clearSession();
+    return null;
+  }
+
   // 42 API でトークン検証 + ユーザー情報取得
   const user = await fetchMe(token);
   if (!user) {
