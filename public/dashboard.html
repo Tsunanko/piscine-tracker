@@ -544,6 +544,7 @@ let showExam = localStorage.getItem('showExam') !== 'false';
 let showResult = localStorage.getItem('showResult') === 'true'; // 合否表示（デフォルトOFF）
 let loggedInUser = null; // ログイン中ユーザー情報
 let userMonths = [];     // ユーザーが参加しているピシン月リスト
+let viewAsMode = null;   // 管理者用: 一般ユーザー視点テストモード
 // URLパラメータ ?month=2408 等が指定されていれば初期月として使用
 let currentMonth = (() => {
   const m = new URLSearchParams(location.search).get('month');
@@ -652,7 +653,8 @@ function hoursClass(h, failed) {
 
 function renderDashboard() {
   const d = dashboardData;
-  const isAdmin = loggedInUser && loggedInUser.login === 'admin_user';
+  const isRealAdmin = loggedInUser && loggedInUser.login === 'admin_user';
+  const isAdmin = isRealAdmin && !viewAsMode;  // viewAsモード中は管理者機能を非表示
 
   // ローディング非表示・ダッシュボード表示
   document.getElementById('loading').style.display = 'none';
@@ -781,7 +783,7 @@ function renderDashboard() {
   ].map(s =>
     `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
   ).join('');
-  const adminLink = loggedInUser && loggedInUser.login === 'admin_user'
+  const adminLink = isAdmin
     ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
        <a href="compare.html" class="sort-btn" style="text-decoration:none;color:var(--green);border-color:rgba(0,206,201,0.3)">🔬 比較</a>
        <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
@@ -1012,17 +1014,34 @@ requireAuth().then(async user => {
   initSearchInput(); // 検索入力欄のイベントを一度だけ登録
   sendConsentSilently(user);
 
-  // ユーザーの参加月を取得（月タブ表示に使用）
-  try {
-    const token = getToken();
-    const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/my-months', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      userMonths = data.months || [];
-    }
-  } catch {}
+  // 管理者用: viewAsモード（?viewAs=2409 で一般ユーザー視点テスト）
+  const isRealAdmin = user.login === 'admin_user';
+  const viewAsParam = new URLSearchParams(location.search).get('viewAs');
+  if (isRealAdmin && viewAsParam && ['2408', '2409', '02', '03'].includes(viewAsParam)) {
+    viewAsMode = viewAsParam;
+    userMonths = [viewAsParam];
+    currentMonth = viewAsParam;
+    // viewAsモード表示バナー（管理者にだけ見える）
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:9999;background:#6c5ce7;color:#fff;padding:6px 14px;border-radius:8px;font-size:11px;opacity:0.85;cursor:pointer';
+    const monthNames = {'2408':'8月(2024)','2409':'9月(2024)','02':'2月(2026)','03':'3月(2026)'};
+    banner.textContent = `viewAs: ${monthNames[viewAsParam] || viewAsParam} 参加者として表示中`;
+    banner.title = 'クリックで通常表示に戻る';
+    banner.onclick = () => { location.href = 'dashboard.html'; };
+    document.body.appendChild(banner);
+  } else {
+    // 通常モード: ユーザーの参加月を取得
+    try {
+      const token = getToken();
+      const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/my-months', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        userMonths = data.months || [];
+      }
+    } catch {}
+  }
 
   // URLパラメータで月が指定されていた場合、タブのスタイルと統計リンクを初期化
   if (currentMonth !== '02') {
