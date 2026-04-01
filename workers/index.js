@@ -646,41 +646,47 @@ async function handleGetMyMonths(request, env) {
  * ?login=srikuto → そのユーザーがどの月のバッチデータに存在するか返す
  */
 async function handleCheckUserMonths(request, env, url) {
-  const user = await authenticateRequest(request, env);
-  if (!user || !user.isAdmin) {
-    return new Response(JSON.stringify({ error: 'Admin only' }), {
-      status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  try {
+    const user = await authenticateRequest(request, env);
+    if (!user || !user.isAdmin) {
+      return new Response(JSON.stringify({ error: 'Admin only' }), {
+        status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const login = url.searchParams.get('login');
+    if (!login) {
+      return new Response(JSON.stringify({ error: 'login parameter required' }), {
+        status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const ALL_MONTHS = ['2408', '2409', '02', '03'];
+    const result = {};
+
+    for (const m of ALL_MONTHS) {
+      const batchVal = await env.PISCINE_DATA.get(`data:users:all:${m}`);
+      if (!batchVal) {
+        result[m] = { exists: false, reason: 'batch data not found in KV' };
+        continue;
+      }
+      try {
+        const batch = JSON.parse(batchVal);
+        const found = !!batch[login];
+        result[m] = { exists: found, totalUsers: Object.keys(batch).length };
+      } catch (e) {
+        result[m] = { exists: false, reason: 'JSON parse error' };
+      }
+    }
+
+    return new Response(JSON.stringify({ login, months: result }), {
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Internal error', detail: e?.message || String(e) }), {
+      status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
-
-  const login = url.searchParams.get('login');
-  if (!login) {
-    return new Response(JSON.stringify({ error: 'login parameter required' }), {
-      status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
-  }
-
-  const ALL_MONTHS = ['2408', '2409', '02', '03'];
-  const result = {};
-
-  for (const m of ALL_MONTHS) {
-    const batchVal = await env.PISCINE_DATA.get(`data:users:all:${m}`);
-    if (!batchVal) {
-      result[m] = { exists: false, reason: 'batch data not found in KV' };
-      continue;
-    }
-    try {
-      const batch = JSON.parse(batchVal);
-      const found = !!batch[login];
-      result[m] = { exists: found, totalUsers: Object.keys(batch).length };
-    } catch (e) {
-      result[m] = { exists: false, reason: 'JSON parse error' };
-    }
-  }
-
-  return new Response(JSON.stringify({ login, months: result }), {
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  });
 }
 
 
