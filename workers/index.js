@@ -532,7 +532,7 @@ async function handleKvUpload(request, env) {
   try {
     const body = await request.json();
     const { type, data, login, month } = body;
-    const VALID_MONTHS = ['2408', '02', '03'];
+    const VALID_MONTHS = ['2408', '2409', '02', '03'];
     const m = VALID_MONTHS.includes(month) ? month : '02';  // デフォルト02、バリデーション付き
 
     if (type === 'summary') {

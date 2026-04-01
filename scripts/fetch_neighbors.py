@@ -58,6 +58,9 @@ _PISCINE_CONFIG = {
     "2408": {"start": datetime(2024, 8, 5,  0, 0, 0, tzinfo=JST),
              "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),
              "label": "2024-08 Piscine"},
+    "2409": {"start": datetime(2024, 9, 2,  0, 0, 0, tzinfo=JST),   # 仮日付（要API確認）
+             "end":   datetime(2024, 9, 28, 0, 0, 0, tzinfo=JST),   # 9/27の翌日（仮）
+             "label": "2024-09 Piscine"},
     "02":   {"start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
              "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),
              "label": "2026-02 Piscine"},
@@ -66,7 +69,7 @@ _PISCINE_CONFIG = {
              "label": "2026-03 Piscine"},
 }
 if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(f"Unknown PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '02', or '03'.")
+    raise ValueError(f"Unknown PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '2409', '02', or '03'.")
 PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
 PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
 PISCINE_LABEL = _PISCINE_CONFIG[PISCINE_MONTH]["label"]
@@ -88,7 +91,11 @@ PROX_WEIGHT = {"adjacent": 1.0, "near": 0.7, "facing": 0.5, "same_row": 0.2, "sa
 
 # ─── 共通関数（fetch_data.py と同じパターン）────────────────────────────────
 
+_current_token = None
+
+
 def get_token():
+    global _current_token
     client_id     = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
     resp = requests.post(TOKEN_URL, data={
@@ -97,11 +104,19 @@ def get_token():
         "client_secret": client_secret,
     })
     resp.raise_for_status()
-    return resp.json()["access_token"]
+    _current_token = resp.json()["access_token"]
+    return _current_token
+
+
+def refresh_token():
+    """トークンを再取得する（401エラー時に呼ばれる）。"""
+    print("  [AUTH] Token expired, refreshing...")
+    return get_token()
 
 
 def api_get(token, path, params=None, _retry=3):
-    """42 API GET。429時は指数バックオフでリトライ。"""
+    """42 API GET。429時は指数バックオフ、401時はトークンリフレッシュでリトライ。"""
+    global _current_token
     headers = {"Authorization": f"Bearer {token}"}
     for attempt in range(_retry):
         resp = requests.get(f"{INTRA_API_BASE}{path}", headers=headers, params=params)
@@ -109,6 +124,12 @@ def api_get(token, path, params=None, _retry=3):
             wait = 15 * (2 ** attempt)  # 15s, 30s, 60s
             print(f"  [429] rate limited on {path} → wait {wait}s (attempt {attempt+1}/{_retry})")
             time.sleep(wait)
+            continue
+        if resp.status_code == 401 and attempt < _retry - 1:
+            token = refresh_token()
+            _current_token = token
+            headers = {"Authorization": f"Bearer {token}"}
+            time.sleep(1)
             continue
         resp.raise_for_status()
         return resp.json()
@@ -123,7 +144,7 @@ def fetch_all_pages(token, path, params=None):
     base_params["page[size]"] = 100
     while True:
         base_params["page[number]"] = page
-        data = api_get(token, path, base_params)
+        data = api_get(_current_token, path, base_params)
         results.extend(data)
         print(f"  page {page}: {len(data)} items")
         if len(data) < 100:
@@ -203,14 +224,14 @@ def main():
 
     # ─── Step 1: トークン取得 ────────────────────────────────────────────────
     print("\n[1] Getting API token...")
-    token = get_token()
+    get_token()  # _current_token にトークンを保存
     print("  OK")
 
     # ─── Step 2: キャンパス全体のロケーション履歴を一括取得 ────────────────────
     # /v2/campus/{id}/locations を filter[active] なしで取得 → 全履歴が返る
     # range[begin_at] でPiscine期間に絞り込み
     print("\n[2] Fetching ALL campus location history (bulk)...")
-    all_locations = fetch_all_pages(token, f"/v2/campus/{CAMPUS_ID}/locations", {
+    all_locations = fetch_all_pages(_current_token, f"/v2/campus/{CAMPUS_ID}/locations", {
         "range[begin_at]": f"{PISCINE_START.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')},"
                            f"{PISCINE_END.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')}",
         "sort": "begin_at",

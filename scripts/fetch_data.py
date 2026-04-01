@@ -60,6 +60,11 @@ _PISCINE_CONFIG = {
         "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),  # 8/30の翌日
         "days":  26,
     },
+    "2409": {
+        "start": datetime(2024, 9, 2,  0, 0, 0, tzinfo=JST),  # 仮日付（要API確認）
+        "end":   datetime(2024, 9, 28, 0, 0, 0, tzinfo=JST),  # 9/27の翌日（仮）
+        "days":  26,
+    },
     "02": {
         "start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
         "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),  # 最終日の翌日
@@ -73,7 +78,7 @@ _PISCINE_CONFIG = {
 }
 
 if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '02', or '03'.")
+    raise ValueError(f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '2409', '02', or '03'.")
 
 PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
 PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
@@ -144,6 +149,9 @@ def upload_to_kv(payload, max_retries=3):
     raise last_err or Exception("KV upload failed after retries")
 
 
+_current_token = None  # モジュールレベルでトークンを保持（401時にリフレッシュ可能にする）
+
+
 def get_token():
     """42 API の Client Credentials フローでアクセストークンを取得する。
 
@@ -151,6 +159,7 @@ def get_token():
     GitHub Actions（サーバー側）がデータ取得する際はこちらを使う。
     ユーザーのデータ取得（ブラウザ側）は Authorization Code Flow を使う。
     """
+    global _current_token
     client_id     = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
     resp = requests.post(TOKEN_URL, data={
@@ -159,7 +168,14 @@ def get_token():
         "client_secret": client_secret,
     })
     resp.raise_for_status()  # エラー時は HTTPError を raise
-    return resp.json()["access_token"]
+    _current_token = resp.json()["access_token"]
+    return _current_token
+
+
+def refresh_token():
+    """トークンを再取得する（401エラー時に呼ばれる）。"""
+    print("  [AUTH] Token expired, refreshing...")
+    return get_token()
 
 
 def api_get(token, path, params=None, _retry=3):
@@ -168,7 +184,9 @@ def api_get(token, path, params=None, _retry=3):
     Authorization: Bearer {token} ヘッダーを付けてリクエストする。
     42 API はページネーション（page[size], page[number]）を使う。
     429 Too Many Requests の場合は指数バックオフでリトライする。
+    401 Unauthorized の場合はトークンをリフレッシュしてリトライする。
     """
+    global _current_token
     headers = {"Authorization": f"Bearer {token}"}
     for attempt in range(_retry):
         resp = requests.get(f"{INTRA_API_BASE}{path}", headers=headers, params=params)
@@ -176,6 +194,13 @@ def api_get(token, path, params=None, _retry=3):
             wait = 15 * (2 ** attempt)  # 15s, 30s, 60s
             print(f"  [429] rate limited on {path} → wait {wait}s (attempt {attempt+1}/{_retry})")
             time.sleep(wait)
+            continue
+        if resp.status_code == 401 and attempt < _retry - 1:
+            # トークン期限切れ → リフレッシュしてリトライ
+            token = refresh_token()
+            _current_token = token
+            headers = {"Authorization": f"Bearer {token}"}
+            time.sleep(1)
             continue
         resp.raise_for_status()
         return resp.json()
@@ -192,6 +217,8 @@ def fetch_all_pages(token, path, params=None):
     最後のページが100件未満なら終了。
 
     API制限対策として各ページ取得後に0.6秒待つ。
+    注: api_get 内でトークンがリフレッシュされた場合、
+        _current_token が更新されるので以降のページ取得にも反映される。
     """
     results = []
     page = 1
@@ -199,7 +226,7 @@ def fetch_all_pages(token, path, params=None):
     base_params["page[size]"] = 100  # 1ページあたりの最大件数
     while True:
         base_params["page[number]"] = page
-        data = api_get(token, path, base_params)
+        data = api_get(_current_token, path, base_params)
         results.extend(data)
         print(f"  page {page}: {len(data)} items")
         if len(data) < 100:
@@ -267,13 +294,13 @@ def main():
     now = datetime.now(JST)
     print(f"Time: {now.isoformat()}")
 
-    token = get_token()
+    get_token()  # _current_token にトークンを保存
     print("Token acquired")
 
 
     # 1. Piscine生一覧取得（levelも同時に取得）
     print("\n[1] Fetching piscine students (with level)...")
-    cursus_users = fetch_all_pages(token, f"/v2/cursus/{PISCINE_CURSUS_ID}/cursus_users", {
+    cursus_users = fetch_all_pages(_current_token, f"/v2/cursus/{PISCINE_CURSUS_ID}/cursus_users", {
         "filter[campus_id]": CAMPUS_ID,
         "range[begin_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
         "sort": "user_id",
@@ -314,7 +341,7 @@ def main():
     graduated_logins = set()
     cursus42_by_login = {}  # login → cursus42 entry（不足学生の復元に使用）
     try:
-        cursus42_users = fetch_all_pages(token, f"/v2/cursus/{CURSUS_42_ID}/cursus_users", {
+        cursus42_users = fetch_all_pages(_current_token, f"/v2/cursus/{CURSUS_42_ID}/cursus_users", {
             "filter[campus_id]": CAMPUS_ID,
             "sort": "user_id",
         })
@@ -355,7 +382,7 @@ def main():
 
     # 2. アクティブロケーション取得
     print("\n[2] Fetching active locations...")
-    locations_raw = fetch_all_pages(token, f"/v2/campus/{CAMPUS_ID}/locations", {
+    locations_raw = fetch_all_pages(_current_token, f"/v2/campus/{CAMPUS_ID}/locations", {
         "filter[active]": "true",
     })
     active_map = {}  # login -> location info
@@ -388,7 +415,7 @@ def main():
     for i, login in enumerate(login_list):
         try:
             # --- locations_stats (旧Step3+Step4統合) ---
-            stats = api_get(token, f"/v2/users/{login}/locations_stats", loc_params)
+            stats = api_get(_current_token, f"/v2/users/{login}/locations_stats", loc_params)
             daily_hours = {}
             total_hours_from_stats = 0.0
             for date_str, dur in stats.items():
@@ -479,7 +506,7 @@ def main():
             proj_range_end   = (PISCINE_END   + timedelta(days=14)).strftime("%Y-%m-%d")
             try:
                 try:
-                    projects_raw = fetch_all_pages(token, f"/v2/users/{login}/projects_users", {
+                    projects_raw = fetch_all_pages(_current_token, f"/v2/users/{login}/projects_users", {
                         "range[created_at]": f"{proj_range_start},{proj_range_end}",
                     })
                 except Exception as proj_e:
@@ -487,7 +514,7 @@ def main():
                     if "429" in str(proj_e):
                         print(f"  [WARN] {login} projects 429, retry in 10s...")
                         time.sleep(10)
-                        projects_raw = fetch_all_pages(token, f"/v2/users/{login}/projects_users", {
+                        projects_raw = fetch_all_pages(_current_token, f"/v2/users/{login}/projects_users", {
                             "range[created_at]": f"{proj_range_start},{proj_range_end}",
                         })
                     else:
@@ -565,7 +592,7 @@ def main():
             interested_scores  = []   # 興味・関心（0-4）
             punctuality_scores = []   # 時間厳守（0-4）
             try:
-                scale_teams_raw = api_get(token, f"/v2/users/{login}/scale_teams", {
+                scale_teams_raw = api_get(_current_token, f"/v2/users/{login}/scale_teams", {
                     "page[size]": 100,
                     "range[begin_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
                 })
@@ -620,7 +647,7 @@ def main():
             # --- イベント参加数取得 ---
             events_attended = 0
             try:
-                events_raw = api_get(token, f"/v2/users/{login}/events_users", {
+                events_raw = api_get(_current_token, f"/v2/users/{login}/events_users", {
                     "page[size]": 100,
                     "range[created_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
                 })
@@ -630,7 +657,7 @@ def main():
                     print(f"  [WARN] {login} events 429, retry in 10s...")
                     time.sleep(10)
                     try:
-                        events_raw = api_get(token, f"/v2/users/{login}/events_users", {
+                        events_raw = api_get(_current_token, f"/v2/users/{login}/events_users", {
                             "page[size]": 100,
                             "range[created_at]": f"{PISCINE_START.strftime('%Y-%m-%d')},{PISCINE_END.strftime('%Y-%m-%d')}",
                         })
@@ -782,7 +809,7 @@ def main():
             time.sleep(2)
             try:
                 print(f"  [RETRY] {login}...")
-                stats = api_get(token, f"/v2/users/{login}/locations_stats", loc_params)
+                stats = api_get(_current_token, f"/v2/users/{login}/locations_stats", loc_params)
                 total_hours_from_stats = sum(parse_duration(dur) for dur in stats.values())
                 students[login]["total_hours"] = round(total_hours_from_stats, 2)
                 students[login]["fetch_failed"] = False
