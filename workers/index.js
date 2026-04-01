@@ -609,7 +609,7 @@ async function handleKvUpload(request, env) {
  * 一般ユーザー: 参加している月のみ + isAdmin:false
  */
 async function handleGetMyMonths(request, env) {
-  const user = await authenticateRequest(request, env);
+  const user = await checkDataAuth(request);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -647,7 +647,7 @@ async function handleGetMyMonths(request, env) {
  */
 async function handleCheckUserMonths(request, env, url) {
   try {
-    const user = await authenticateRequest(request, env);
+    const user = await checkDataAuth(request);
     if (!user || !user.isAdmin) {
       return new Response(JSON.stringify({ error: 'Admin only' }), {
         status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
