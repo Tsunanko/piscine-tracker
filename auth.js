@@ -87,6 +87,13 @@ async function checkAuth() {
     // JSON.parse が失敗した場合（壊れたデータ）は素通りして API を呼び直す
   }
 
+  // piscineトークン（HMAC署名付き）の場合は42 APIを呼ばない
+  // サーバー側で署名検証されるため、クライアントではキャッシュのみ参照
+  if (token.startsWith('piscine:')) {
+    clearSession();
+    return null;
+  }
+
   // 42 API でトークン検証 + ユーザー情報取得
   const user = await fetchMe(token);
   if (!user) {
@@ -114,6 +121,29 @@ async function requireAuth() {
   }
   injectUserBar(user);  // 右上にアバターとユーザー名を表示
   return user;
+}
+
+// ─── 管理者判定（Worker側のisAdminフラグを参照）─────────────────────────
+// Worker の checkDataAuth / isAdmin が返す isAdmin フラグを使う。
+// フロントエンドにログイン名をハードコードしない。
+async function isAdminUser(user) {
+  if (!user) return false;
+  // Worker の /api/data 等のレスポンスに isAdmin が含まれる場合はそれを使う
+  if (user._isAdmin !== undefined) return user._isAdmin;
+  // 42 OAuth ユーザーの場合: Worker に問い合わせ
+  const token = getToken();
+  if (!token) return false;
+  try {
+    const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/check-admin', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      user._isAdmin = !!data.isAdmin;
+      return user._isAdmin;
+    }
+  } catch {}
+  return false;
 }
 
 // ─── ログイン開始 ─────────────────────────────────────────────────────────

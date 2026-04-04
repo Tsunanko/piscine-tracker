@@ -424,12 +424,36 @@
 const CIRCUMFERENCE = 2 * Math.PI * 85;
 const params = new URLSearchParams(window.location.search);
 const LOGIN = params.get('login') || 'yuichika';
+const PAGE_MONTH = params.get('month') || '02'; // 3月Piscineの場合 '03'
 
 // 初期表示の統計リンクにもloginを付ける
 const initStatsLink = document.getElementById('statsLinkInit');
-if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}`;
+const monthSuffix = PAGE_MONTH !== '02' ? `&month=${PAGE_MONTH}` : '';
+if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}${monthSuffix}`;
+
+let currentStudentData = null;
+
+function calcWeekly(daily) {
+  if (!daily || daily.length === 0) return [];
+  const weeks = [];
+  for (let i = 0; i < daily.length; i += 7) {
+    const slice = daily.slice(i, i + 7);
+    const hours = +slice.reduce((s, d) => s + d.hours, 0).toFixed(1);
+    const startDate = slice[0]?.date || '';
+    const endDate   = slice[slice.length - 1]?.date || '';
+    const fmt = ds => {
+      if (!ds) return '';
+      const [, m, dd] = ds.split('-');
+      return `${+m}/${+dd}`;
+    };
+    weeks.push({ hours, label: `${fmt(startDate)}-${fmt(endDate)}`, startDate, endDate });
+  }
+  return weeks;
+}
 
 function render(d) {
+  currentStudentData = d;
+  const isAdmin = loggedInUser?._isAdmin || false;
   const app = document.getElementById('app');
 
   // Determine status
@@ -477,10 +501,91 @@ function render(d) {
   // Progress ring offset
   const offset = CIRCUMFERENCE - (d.progress_pct / 100) * CIRCUMFERENCE;
 
+  // ── 伸び率（週別）事前計算（isAdminのみ） ──
+  const weeklyData = isAdmin ? calcWeekly(d.daily) : [];
+  let growthHTML = '';
+  if (weeklyData.length >= 2) {
+    const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD (JST近似)
+
+    // 各週の「実際に経過した日数」を計算（未来の日は除外）
+    const weeklyWithDays = weeklyData.map(w => {
+      // w.label = "3/11-3/17" のような形式
+      const slice = d.daily.filter(day => day.date >= w.startDate && day.date <= w.endDate);
+      const elapsedDays = slice.filter(day => day.date <= todayStr).length;
+      const avgPerDay = elapsedDays > 0 ? +(w.hours / elapsedDays).toFixed(1) : 0;
+      return { ...w, elapsedDays, totalDays: slice.length, avgPerDay };
+    });
+
+    // 前半/後半：1日あたり平均で比較（進行中でも公平）
+    const half = Math.floor(d.daily.length / 2);
+    const firstDays = d.daily.slice(0, half);
+    const secondDays = d.daily.slice(half);
+    const firstElapsed  = firstDays.filter(day => day.date <= todayStr).length;
+    const secondElapsed = secondDays.filter(day => day.date <= todayStr).length;
+    const firstH  = +firstDays.reduce((s, x) => s + x.hours, 0).toFixed(1);
+    const secondH = +secondDays.reduce((s, x) => s + x.hours, 0).toFixed(1);
+    // 1日あたり平均で比較
+    const firstAvg  = firstElapsed  > 0 ? firstH  / firstElapsed  : 0;
+    const secondAvg = secondElapsed > 0 ? secondH / secondElapsed : 0;
+    // 後半が3日未満しか経過していない場合は比較しない（不完全すぎる）
+    const canCompare = secondElapsed >= 3;
+    const trendPct = (canCompare && firstAvg > 0) ? (secondAvg - firstAvg) / firstAvg * 100 : null;
+    const trendStr = trendPct !== null ? (trendPct >= 0 ? '+' : '') + trendPct.toFixed(1) + '%' : null;
+    const trendColor = trendPct === null ? 'var(--text-dim)'
+                     : trendPct >= 5 ? 'var(--green)'
+                     : trendPct >= -5 ? 'var(--orange)' : 'var(--red)';
+    const trendLabel = trendPct === null ? '' : trendPct >= 5 ? '後半に向けて活発化' : trendPct >= -5 ? '安定したペース' : '後半にペースダウン';
+
+    // 週バー：1日あたり平均で比較（未来週はスキップ）
+    const validWeeks = weeklyWithDays.filter(w => w.elapsedDays > 0);
+    const maxAvg = Math.max(0.1, ...validWeeks.map(w => w.avgPerDay));
+    const wNumbers = ['1週目', '2週目', '3週目', '4週目'];
+    const weekBars = weeklyWithDays.map((w, i) => {
+      if (w.elapsedDays === 0) return ''; // 未来週は表示しない
+      const pct = (w.avgPerDay / maxAvg * 100).toFixed(1);
+      const isPartial = w.elapsedDays < w.totalDays;
+      const partialNote = isPartial ? `<span style="color:var(--orange);font-size:9px"> (${w.elapsedDays}日)</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--text-dim);width:36px">${wNumbers[i]}</div>
+        <div style="flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${isPartial ? 'var(--orange)' : 'var(--accent)'};opacity:0.85;border-radius:4px;transition:width 0.5s"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text);width:52px;text-align:right">${w.avgPerDay}h/日${partialNote}</div>
+        <div style="font-size:9px;color:var(--text-dim);width:54px">${w.label}</div>
+      </div>`;
+    }).join('');
+
+    const trendRow = trendStr ? `
+      <div style="margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px">前半(1〜13日) → 後半(14〜26日)　※1日平均で比較</div>
+          <div style="font-size:12px;color:var(--text-dim)">${firstAvg.toFixed(1)}h/日 → ${secondAvg.toFixed(1)}h/日 &nbsp;<span style="color:${trendColor};font-size:11px">${trendLabel}</span></div>
+        </div>
+        <div style="font-size:24px;font-weight:800;color:${trendColor};margin-left:12px">${trendStr}</div>
+      </div>` : (!canCompare && secondElapsed > 0 ? `
+      <div style="margin-top:10px;padding:8px 14px;background:var(--surface2);border-radius:10px;font-size:11px;color:var(--text-dim);text-align:center">
+        後半(${secondElapsed}日経過) - 比較にはあと${3 - secondElapsed}日以上のデータが必要
+      </div>` : '');
+
+    growthHTML = `
+    <div class="card fade-in">
+      <div class="card-title">活動の推移（週別 · 1日平均）</div>
+      ${weekBars}
+      ${trendRow}
+    </div>`;
+  }
+
+  // ── Exam スコア stat-item（isAdminのみ） ──
+  const examStatHTML = (isAdmin && d.exam_score != null) ? `
+        <div class="stat-item">
+          <div class="stat-label">Final Exam</div>
+          <div class="stat-value accent">${d.exam_score}<span class="stat-suffix">pt</span></div>
+        </div>` : '';
+
   app.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
-      <a href="stats.html?login=${encodeURIComponent(d.login)}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
+      <a href="stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
     </div>
 
     <!-- ヘッダー -->
@@ -490,6 +595,54 @@ function render(d) {
       <h1>${d.login}</h1>
       <div class="header-period">${d.piscine_start} ~ ${d.piscine_end} (${d.piscine_days} days)</div>
     </div>
+
+    <!-- 合否バナー（結果発表済み かつ 自分のプロフィール or 管理者のみ） -->
+    ${(d.piscine_result && d.results_announced && (loggedInUser?.login === d.login || isAdmin)) ? (() => {
+      if (d.piscine_result === 'passed') {
+        return `<div class="fade-in" style="
+          background: linear-gradient(135deg, rgba(253,203,110,0.15), rgba(253,203,110,0.05));
+          border: 1px solid rgba(253,203,110,0.4);
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 16px;
+          text-align: center;
+        ">
+          <div style="font-size: 32px; margin-bottom: 8px">🎉</div>
+          <div style="font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 6px">
+            42 Tokyo 入学おめでとうございます！
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
+            Piscine を突破しました。<br>
+            ここからが本当の始まりです。これからもよろしく！
+          </div>
+          ${d.enrollment_42 != null ? `<div style="margin-top:10px;font-size:11px;color:${d.enrollment_42 === 'active' ? 'var(--green)' : d.enrollment_42 === 'blackholed' ? 'var(--orange)' : 'var(--text-dim)'}">
+            ${d.enrollment_42 === 'active'
+              ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}`
+              : d.enrollment_42 === 'blackholed'
+              ? `🕳 ブラックホール${d.current_42_level != null ? `（最終 Lv ${d.current_42_level}）` : ''}`
+              : `⬜ 退学済み`}
+          </div>` : (d.piscine_result === 'passed' ? `<div style="margin-top:10px;font-size:11px;color:var(--text-dim)">⬜ 退学済み</div>` : '')}
+        </div>`;
+      } else {
+        return `<div class="fade-in" style="
+          background: rgba(136,136,160,0.06);
+          border: 1px solid rgba(136,136,160,0.2);
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 16px;
+          text-align: center;
+        ">
+          <div style="font-size: 32px; margin-bottom: 8px">🏊</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px">
+            Piscine、お疲れ様でした！
+          </div>
+          <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
+            挑戦したこと自体が大きな経験です。<br>
+            ここで得たスキルは必ず次に活きます。また会いましょう！
+          </div>
+        </div>`;
+      }
+    })() : ''}
 
     <!-- 偏差値 2×2グリッド -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;max-width:340px;margin-left:auto;margin-right:auto" class="fade-in">
@@ -531,11 +684,11 @@ function render(d) {
         &nbsp;&nbsp;
         <span style="display:inline-block;border-top:2px dashed rgba(0,206,201,0.7);width:16px;vertical-align:middle;margin-right:4px"></span>Level平均
       </div>
-      <div style="position:relative;height:200px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}'">
+      <div style="position:relative;height:200px;cursor:pointer" onclick="window.location.href='stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}'">
         <canvas id="miniScatterCanvas"></canvas>
       </div>
       <div style="text-align:center;margin-top:8px">
-        <a href="stats.html?login=${encodeURIComponent(d.login)}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
+        <a href="stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}" style="font-size:12px;color:var(--accent-light);text-decoration:none">詳細統計を見る →</a>
       </div>
     </div>
 
@@ -585,6 +738,7 @@ function render(d) {
           <div class="stat-label">目標まで残り</div>
           <div class="stat-value ${d.remaining_hours_needed > 0 ? (d.remaining_hours_needed > 40 ? 'red' : 'orange') : 'green'}">${Math.max(0, d.remaining_hours_needed)}<span class="stat-suffix">h</span></div>
         </div>
+        ${examStatHTML}
       </div>
       ${d.review_given != null ? `
       <div style="margin-top:10px;background:var(--surface2);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
@@ -631,6 +785,15 @@ function render(d) {
       </div>
     </div>
 
+    <!-- 伸び率 -->
+    ${growthHTML}
+
+    <!-- 近くにいた人（管理者専用・neighbor データ取得後に挿入） -->
+    <div id="neighbors-section"></div>
+
+    <!-- 合格ライン参考（isAdminのみ・グローバルデータ取得後に挿入） -->
+    <div id="thresholds-section"></div>
+
     <!-- 課題の進捗（最下部）-->
     ${d.projects && d.projects.length > 0 ? `
     <div class="card fade-in">
@@ -664,7 +827,8 @@ async function loadData() {
 
   try {
     const token = getToken();
-    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}`, {
+    const monthParam = PAGE_MONTH !== '02' ? `?month=${PAGE_MONTH}` : '';
+    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) throw new Error(`User "${LOGIN}" not found (HTTP ${resp.status})`);
@@ -684,7 +848,8 @@ let miniChartInstance = null;
 async function renderMiniChart(login) {
   try {
     const token = getToken();
-    const res = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    const monthParam = PAGE_MONTH !== '02' ? `?month=${PAGE_MONTH}` : '';
+    const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const d = await res.json();
@@ -775,9 +940,182 @@ async function renderMiniChart(login) {
         },
       },
     });
+
+    // 合格ライン参考（ログイン済みかつ結果発表済みのみ）
+    if (currentStudentData && loggedInUser && d.results_announced) {
+      const passed = all.filter(s => s.piscine_result === 'passed');
+      renderThresholds(currentStudentData, passed, all.length);
+    }
+
+    // 近くにいた人（ログイン済みユーザー全員に表示）
+    if (loggedInUser) {
+      renderNeighbors(LOGIN, PAGE_MONTH);
+    }
   } catch(e) {
     console.warn('mini chart error:', e);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 近くにいた人（座席隣接分析）ログイン済みユーザー全員
+// ─────────────────────────────────────────────────────────────────────────────
+const _neighborCache = {};
+
+async function renderNeighbors(login, month) {
+  const section = document.getElementById('neighbors-section');
+  if (!section) return;
+
+  const token = sessionStorage.getItem('piscine_42_token') || '';
+  if (!token) return;
+
+  // キャッシュ確認（同月のデータは1度だけ取得）
+  const cacheKey = `neighbors_${month}`;
+  if (!_neighborCache[cacheKey]) {
+    try {
+      const monthParam = month !== '02' ? `?month=${month}` : '';
+      const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/neighbors${monthParam}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return; // データがない場合は非表示
+      const data = await res.json();
+      _neighborCache[cacheKey] = data;
+    } catch (_) { return; }
+  }
+
+  const neighborData = _neighborCache[cacheKey];
+  const studentNeighbors = neighborData?.per_student?.[login];
+  if (!studentNeighbors || !studentNeighbors.top_neighbors?.length) return;
+
+  // 近接度ごとの色・ラベル（重み: adjacent=1.0 / facing=0.8 / same_row=0.5 / same_cluster=0.3）
+  const PROX = {
+    adjacent:     { color: '#a29bfe', border: 'rgba(162,155,254,0.6)', label: '直隣り',       emoji: '🟣' },
+    near:         { color: '#e17055', border: 'rgba(225,112, 85,0.5)', label: '2席隣り',      emoji: '🟠' },
+    facing:       { color: '#fd79a8', border: 'rgba(253,121,168,0.5)', label: '向かい側',     emoji: '🩷' },
+    same_row:     { color: '#6c5ce7', border: 'rgba(108, 92,231,0.4)', label: '同じ行',       emoji: '🔵' },
+    same_cluster: { color: '#636e72', border: 'rgba(99,110,114, 0.3)', label: '同クラスター', emoji: '⚪' },
+  };
+
+  const top = studentNeighbors.top_neighbors.slice(0, 12);
+  const mSuffix = month !== '02' ? `&month=${month}` : '';
+
+  const avatarCards = top.map(n => {
+    const p = PROX[n.proximity] || PROX.same_cluster;
+    const displayHours = n.weighted_hours ?? n.hours;
+    const hoursStr = displayHours >= 10 ? `${Math.round(displayHours)}h` : `${displayHours.toFixed(1)}h`;
+    const initials = n.login[0].toUpperCase();
+    const imgTag = n.avatar
+      ? `<img src="${n.avatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block" onerror="this.outerHTML='<div style=\\'width:48px;height:48px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--text-dim)\\'>${initials}</div>'">`
+      : `<div style="width:48px;height:48px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--text-dim)">${initials}</div>`;
+    return `
+      <a href="index.html?login=${encodeURIComponent(n.login)}${mSuffix}"
+         style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"
+         title="${n.login}（${p.label}・${hoursStr}）">
+        <div style="position:relative">
+          <div style="border-radius:50%;border:2px solid ${p.border};padding:2px">
+            ${imgTag}
+          </div>
+          <div style="position:absolute;bottom:-2px;right:-2px;font-size:9px;line-height:1">${p.emoji}</div>
+        </div>
+        <div style="font-size:9px;color:var(--text-dim);max-width:54px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.login}</div>
+        <div style="font-size:9px;color:${p.color}">${hoursStr}</div>
+      </a>`;
+  }).join('');
+
+  // 凡例
+  const legend = Object.entries(PROX).map(([k, v]) =>
+    `<span style="font-size:9px;color:var(--text-dim)">${v.emoji} ${v.label}</span>`
+  ).join('<span style="color:var(--border);margin:0 6px">|</span>');
+
+  section.innerHTML = `
+    <div class="card fade-in">
+      <div class="card-title">近くにいた人（共存時間 Top${top.length}）</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-start;padding:4px 0 8px">
+        ${avatarCards}
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
+        ${legend}
+        <span style="margin-left:auto;font-size:9px;color:var(--text-dim)">
+          接触学生数: ${studentNeighbors.unique_neighbors}人 / 計 ${(studentNeighbors.total_weighted_hours ?? studentNeighbors.total_neighbor_hours).toFixed(1)}h（重み付き）
+        </span>
+      </div>
+    </div>`;
+}
+
+function renderThresholds(student, passed, totalCount) {
+  const section = document.getElementById('thresholds-section');
+  if (!section || passed.length === 0) return;
+
+  function getStats(students, fn) {
+    const vals = students.map(fn).filter(v => v != null && v > 0).sort((a, b) => a - b);
+    if (vals.length === 0) return null;
+    return {
+      min: vals[0],
+      median: vals[Math.floor(vals.length / 2)],
+      max: vals[vals.length - 1],
+    };
+  }
+
+  const metrics = [
+    { label: 'Final Exam', unit: 'pt', decimals: 0,
+      fn: s => s.exam_score, val: student.exam_score },
+    { label: 'ログイン時間', unit: 'h', decimals: 1,
+      fn: s => s.total_hours ?? s.total_logged_hours, val: student.total_logged_hours },
+    { label: 'Level', unit: '', decimals: 2,
+      fn: s => s.level, val: student.level },
+    { label: 'レビュー回数', unit: '回', decimals: 0,
+      fn: s => s.review_given, val: student.review_given },
+  ];
+
+  const fmt = (v, m) => v != null ? v.toFixed(m.decimals) + m.unit : '-';
+
+  const rows = metrics.map(m => {
+    const st = getStats(passed, m.fn);
+    if (!st) return '';
+    const sv = m.val;
+    const aboveMin = sv != null && sv >= st.min;
+    const aboveMed = sv != null && sv >= st.median;
+    const color = sv == null ? 'var(--text-dim)' : aboveMed ? 'var(--green)' : aboveMin ? 'var(--orange)' : 'var(--red)';
+    const icon = sv == null ? '?' : aboveMed ? '◎' : aboveMin ? '○' : '△';
+    const maxBar = Math.max(st.max * 1.1, sv ?? 0, 0.1);
+    const minPct = Math.min(98, st.min / maxBar * 100).toFixed(1);
+    const medPct = Math.min(98, st.median / maxBar * 100).toFixed(1);
+    const valPct = sv != null ? Math.min(98, sv / maxBar * 100).toFixed(1) : null;
+
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <div style="font-size:12px;color:var(--text)">${m.label}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:13px;font-weight:700;color:${color}">${fmt(sv, m)}</div>
+          <div style="font-size:15px;color:${color}">${icon}</div>
+        </div>
+      </div>
+      <div style="position:relative;height:8px;background:var(--surface2);border-radius:4px">
+        <div style="position:absolute;left:${minPct}%;width:${Math.max(0, medPct - minPct)}%;height:100%;background:rgba(0,206,201,0.18);border-radius:2px"></div>
+        <div style="position:absolute;left:${minPct}%;top:-3px;width:2px;height:14px;background:var(--orange);opacity:0.9;border-radius:1px"></div>
+        <div style="position:absolute;left:${medPct}%;top:-3px;width:2px;height:14px;background:var(--green);opacity:0.7;border-radius:1px"></div>
+        ${valPct !== null ? `<div style="position:absolute;left:${valPct}%;top:-4px;width:3px;height:16px;background:#ff7675;border-radius:2px;transform:translateX(-50%)"></div>` : ''}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px">
+        <div style="font-size:9px;color:var(--text-dim)"><span style="color:var(--orange)">|</span> 最低 ${fmt(st.min, m)}</div>
+        <div style="font-size:9px;color:var(--text-dim)"><span style="color:var(--green)">|</span> 中央値 ${fmt(st.median, m)}</div>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!rows) return;
+
+  const passRate = ((passed.length / totalCount) * 100).toFixed(0);
+  section.innerHTML = `
+    <div class="card fade-in" style="margin-bottom:12px">
+      <div class="card-title">合格ライン参考（合格者 ${passed.length}人 / 全体 ${totalCount}人・合格率 ${passRate}%）</div>
+      ${rows}
+      <div style="margin-top:12px;font-size:10px;color:var(--text-dim);line-height:1.6">
+        <span style="color:#ff7675">|</span> あなた &nbsp;
+        <span style="color:var(--orange)">|</span> 合格最低値 &nbsp;
+        <span style="color:var(--green)">|</span> 合格中央値<br>
+        ◎ 中央値以上 &nbsp; ○ 最低値以上 &nbsp; △ 最低値未満（参考値のため合否を保証しません）
+      </div>
+    </div>`;
 }
 
 function showError(msg) {
@@ -794,8 +1132,12 @@ function showError(msg) {
   `;
 }
 
-requireAuth().then(user => {
+let loggedInUser = null;
+
+requireAuth().then(async user => {
   if (!user) return;
+  loggedInUser = user;
+  await isAdminUser(user);
   loadData();
   setInterval(loadData, 5 * 60 * 1000);
 });

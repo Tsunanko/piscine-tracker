@@ -412,6 +412,40 @@
   .search-wrap {
     margin-bottom: 16px;
   }
+
+  /* 合否カード色分け（合否トグルON時） */
+  .student-grid.show-result .student-card.result-passed {
+    border-color: rgba(253, 203, 110, 0.5);
+  }
+  .student-grid.show-result .student-card.result-passed:hover {
+    border-color: var(--orange);
+  }
+  .student-grid.show-result .student-card.result-failed {
+    border-color: rgba(255, 118, 117, 0.2);
+  }
+
+  /* 合否バッジ */
+  .result-section { margin-top: 3px; }
+  .result-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+  }
+  .result-badge.passed {
+    color: var(--orange);
+    background: rgba(253, 203, 110, 0.12);
+    border: 1px solid rgba(253, 203, 110, 0.35);
+  }
+  .result-badge.failed {
+    color: var(--text-dim);
+    background: rgba(136, 136, 160, 0.07);
+    border: 1px solid rgba(136, 136, 160, 0.2);
+  }
+  /* 合否トグルOFF時は非表示 */
+  .student-grid:not(.show-result) .result-section { display: none; }
+
   .search-input {
     width: 100%;
     padding: 10px 14px;
@@ -448,6 +482,13 @@
         <div class="header-label">42 Tokyo</div>
         <h1>Piscine Dashboard</h1>
         <div class="header-sub" id="headerSub"></div>
+        <!-- 月切り替えタブ（管理者のみ表示） -->
+        <div id="monthTabs" style="display:none;margin-top:10px;gap:6px;justify-content:center;flex-wrap:wrap">
+          <button id="tab2408" onclick="switchMonth('2408')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">2024年8月</button>
+          <button id="tab2409" onclick="switchMonth('2409')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">2024年9月</button>
+          <button id="tab02" onclick="switchMonth('02')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(110,168,254,0.4);background:rgba(110,168,254,0.15);color:var(--accent-light);font-size:12px;cursor:pointer">2026年2月</button>
+          <button id="tab03" onclick="switchMonth('03')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">2026年3月</button>
+        </div>
       </div>
       <div class="summary fade-in">
         <div class="summary-item">
@@ -457,6 +498,10 @@
         <div class="summary-item">
           <div class="summary-label">Total</div>
           <div class="summary-value accent" id="totalCount">0</div>
+        </div>
+        <div class="summary-item" id="passedSummary" style="display:none">
+          <div class="summary-label" style="color:var(--orange)">合格</div>
+          <div class="summary-value" style="color:var(--orange)" id="passedCount">0</div>
         </div>
       </div>
       <div class="search-wrap">
@@ -489,13 +534,22 @@
 
 <script>
 let dashboardData = null;
+let loadSeq = 0; // 競合状態防止：最新のフェッチだけ反映する
 let currentFilter = 'all';
 let searchQuery = '';
 let currentSort = 'hours'; // 'hours', 'level', 'composite', 'exam', 'name'
 let isComposing = false;
 let showDev = localStorage.getItem('showDev') !== 'false';
 let showExam = localStorage.getItem('showExam') !== 'false';
+let showResult = localStorage.getItem('showResult') === 'true'; // 合否表示（デフォルトOFF）
 let loggedInUser = null; // ログイン中ユーザー情報
+let userMonths = [];     // ユーザーが参加しているピシン月リスト
+let viewAsMode = null;   // 管理者用: 一般ユーザー視点テストモード
+// URLパラメータ ?month=2408 等が指定されていれば初期月として使用
+let currentMonth = (() => {
+  const m = new URLSearchParams(location.search).get('month');
+  return ['2408', '2409', '02', '03'].includes(m) ? m : '02';
+})();
 
 function esc(str) {
   return String(str)
@@ -510,7 +564,12 @@ function sortStudents(arr) {
   const sorted = [...arr];
   switch (currentSort) {
     case 'hours':
-      sorted.sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0));
+      sorted.sort((a, b) => {
+        // fetch_failed は末尾に（0h学生より後ろ）
+        if (a.fetch_failed && !b.fetch_failed) return 1;
+        if (!a.fetch_failed && b.fetch_failed) return -1;
+        return (b.total_hours || 0) - (a.total_hours || 0);
+      });
       break;
     case 'level':
       sorted.sort((a, b) => (b.level || 0) - (a.level || 0));
@@ -548,11 +607,20 @@ function toggleExam() {
   if (btn) btn.classList.toggle('active', showExam);
 }
 
+function toggleResult() {
+  showResult = !showResult;
+  localStorage.setItem('showResult', String(showResult));
+  applyDisplayState();
+  const btn = document.getElementById('toggleResultBtn');
+  if (btn) btn.classList.toggle('active', showResult);
+}
+
 function applyDisplayState() {
   const grid = document.getElementById('studentGrid');
   if (grid) {
     grid.classList.toggle('hide-dev', !showDev);
     grid.classList.toggle('hide-exam', !showExam);
+    grid.classList.toggle('show-result', showResult);
   }
 }
 
@@ -569,13 +637,15 @@ function initSearchInput() {
   });
 }
 
-function formatHours(h, loading) {
+function formatHours(h, loading, failed) {
   if (loading) return '...';
-  if (!h) return '0h';
+  if (failed) return '--';      // データ取得失敗（0hと区別）
+  if (h == null || h === 0) return '0h';
   return h >= 100 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`;
 }
 
-function hoursClass(h) {
+function hoursClass(h, failed) {
+  if (failed) return '';        // 取得失敗はニュートラル表示
   if (h >= 128) return 'high';  // 8h/day * 16 days = on track
   if (h < 64) return 'low';     // very behind
   return '';
@@ -583,6 +653,8 @@ function hoursClass(h) {
 
 function renderDashboard() {
   const d = dashboardData;
+  const isRealAdmin = loggedInUser && loggedInUser._isAdmin;
+  const isAdmin = isRealAdmin && !viewAsMode;  // viewAsモード中は管理者機能を非表示
 
   // ローディング非表示・ダッシュボード表示
   document.getElementById('loading').style.display = 'none';
@@ -601,8 +673,19 @@ function renderDashboard() {
     _isOnline: onlineSet.has(s.login),
   }));
 
-  // Apply cluster filter
-  if (currentFilter !== 'all') {
+  // 合格発表済みなら全ユーザーが合否フィルター・バッジを使用可
+  const canSeeResult = isAdmin || (d.results_announced === true);
+
+  // Apply cluster / 合否 filter
+  if (canSeeResult && currentFilter === 'passed') {
+    allStudents = allStudents.filter(s => s.piscine_result === 'passed');
+  } else if (canSeeResult && currentFilter === 'failed') {
+    allStudents = allStudents.filter(s => s.piscine_result === 'failed');
+  } else if (canSeeResult && currentFilter === 'enrolled') {
+    allStudents = allStudents.filter(s => s.enrollment_42 === 'active');
+  } else if (canSeeResult && currentFilter === 'cc_done') {
+    allStudents = allStudents.filter(s => s.common_core_done === true);
+  } else if (currentFilter !== 'all' && currentFilter !== 'passed' && currentFilter !== 'failed' && currentFilter !== 'enrolled' && currentFilter !== 'cc_done') {
     allStudents = allStudents.filter(s => s._isOnline && s.cluster === currentFilter);
   }
 
@@ -624,9 +707,38 @@ function renderDashboard() {
   const clusters = [...new Set(d.online.map(s => s.cluster).filter(Boolean))].sort();
 
   // Update header
-  document.getElementById('headerSub').textContent = 'Feb 2 - Feb 27, 2026';
+  const periodLabel = currentMonth === '2408' ? 'Aug 5 - Aug 30, 2024'
+                    : currentMonth === '2409' ? 'Sep 2 - Sep 27, 2024'
+                    : currentMonth === '03'   ? 'Mar 16 - Apr 10, 2026'
+                    :                          'Feb 2 - Feb 27, 2026';
+  document.getElementById('headerSub').textContent = periodLabel;
+  // 月タブ表示: 管理者は全タブ、一般ユーザーは参加月のタブのみ
+  const monthTabs = document.getElementById('monthTabs');
+  if (monthTabs && (isAdmin || (userMonths && userMonths.length > 0))) {
+    if (isAdmin) {
+      monthTabs.style.display = 'flex';
+    } else {
+      // 一般ユーザー: 参加月のタブだけ表示（02は常に表示）
+      ['2408', '2409', '02', '03'].forEach(m => {
+        const tab = document.getElementById(`tab${m}`);
+        if (tab) tab.style.display = (m === '02' || userMonths.includes(m)) ? '' : 'none';
+      });
+      monthTabs.style.display = 'flex';
+    }
+  }
   document.getElementById('onlineCount').textContent = d.total_online;
   document.getElementById('totalCount').textContent = d.total_students;
+
+  // 合否サマリーを更新（管理者かつ発表済みの場合のみ合格者数を表示）
+  const passedSummary = document.getElementById('passedSummary');
+  if (isAdmin && d.results_announced && d.passed_count != null) {
+    if (passedSummary) {
+      passedSummary.style.display = '';
+      document.getElementById('passedCount').textContent = d.passed_count;
+    }
+  } else {
+    if (passedSummary) passedSummary.style.display = 'none';
+  }
 
   // Update filter bar
   const filterBtns = [
@@ -638,6 +750,27 @@ function renderDashboard() {
       `<button class="filter-btn ${currentFilter === c ? 'active' : ''}" onclick="setFilter('${esc(c)}')">${esc(c)} (${count})</button>`
     );
   });
+  // 合否フィルターボタン（合格発表済みなら全ユーザーに表示）
+  if (d.results_announced && canSeeResult) {
+    filterBtns.push(
+      `<button class="filter-btn ${currentFilter === 'passed' ? 'active' : ''}" onclick="setFilter('passed')" style="${currentFilter !== 'passed' ? 'color:var(--orange);border-color:rgba(253,203,110,0.35)' : ''}">🎉 合格 (${d.passed_count ?? 0})</button>`
+    );
+    filterBtns.push(
+      `<button class="filter-btn ${currentFilter === 'failed' ? 'active' : ''}" onclick="setFilter('failed')">🏊 次回 (${d.failed_count ?? 0})</button>`
+    );
+    const enrolledCount = [...d.online, ...d.offline].filter(s => s.enrollment_42 === 'active').length;
+    if (enrolledCount > 0) {
+      filterBtns.push(
+        `<button class="filter-btn ${currentFilter === 'enrolled' ? 'active' : ''}" onclick="setFilter('enrolled')" style="${currentFilter !== 'enrolled' ? 'color:#00cec9;border-color:rgba(0,206,201,0.35)' : ''}">🏫 在籍中 (${enrolledCount})</button>`
+      );
+    }
+    const ccCount = [...d.online, ...d.offline].filter(s => s.common_core_done === true).length;
+    if (ccCount > 0) {
+      filterBtns.push(
+        `<button class="filter-btn ${currentFilter === 'cc_done' ? 'active' : ''}" onclick="setFilter('cc_done')" style="${currentFilter !== 'cc_done' ? 'color:#a29bfe;border-color:rgba(162,155,254,0.35)' : ''}">🎓 CC完了 (${ccCount})</button>`
+      );
+    }
+  }
   document.getElementById('filterBar').innerHTML = filterBtns.join('');
 
   // Update sort bar
@@ -650,8 +783,9 @@ function renderDashboard() {
   ].map(s =>
     `<button class="sort-btn ${currentSort === s.key ? 'active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
   ).join('');
-  const adminLink = loggedInUser && loggedInUser.login === 'admin_user'
+  const adminLink = isAdmin
     ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
+       <a href="compare.html" class="sort-btn" style="text-decoration:none;color:var(--green);border-color:rgba(0,206,201,0.3)">🔬 比較</a>
        <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
     : '';
   document.getElementById('sortBar').innerHTML = `
@@ -660,8 +794,9 @@ function renderDashboard() {
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
     <button class="sort-btn ${showDev ? 'active' : ''}" id="toggleDevBtn" onclick="toggleDev()">偏差値</button>
     <button class="sort-btn ${showExam ? 'active' : ''}" id="toggleExamBtn" onclick="toggleExam()">Exam</button>
+    ${(d.results_announced && canSeeResult) ? `<button class="sort-btn ${showResult ? 'active' : ''}" id="toggleResultBtn" onclick="toggleResult()">合否</button>` : ''}
     <span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
-    <a href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
+    <a id="statsNavBtn" href="stats.html" class="sort-btn" style="text-decoration:none">📊 統計</a>
     ${adminLink}
   `;
 
@@ -679,6 +814,7 @@ function renderDashboard() {
     const seat = isOnline && student.host
       ? `<div class="student-seat">${esc(student.host.split('.')[0])}</div>`
       : '';
+    const failed = student.fetch_failed === true;
     const hours = student.total_hours || 0;
     const rankNum = rankMap[student.login] || '-';
     const rankPrefix = currentSort === 'hours' ? '時'
@@ -705,13 +841,33 @@ function renderDashboard() {
     const examHTML = examScore != null
       ? `<span style="color:${examColor}">${examScore}</span>`
       : `<span style="color:var(--text-dim)">-</span>`;
+    // 合否バッジ（合格発表済みなら全ユーザーに表示）
+    const result = canSeeResult ? student.piscine_result : null;
+    const resultCls = result === 'passed' ? 'result-passed' : result === 'failed' ? 'result-failed' : '';
+    const enrollment42 = student.enrollment_42;
+    const bhDays = student.blackhole_days_left;
+    const survivalBadge = (result === 'passed' && enrollment42 != null)
+      ? (enrollment42 === 'active'
+          ? `<span style="font-size:8px;margin-left:4px;color:#00cec9">在籍中</span>`
+          : enrollment42 === 'blackholed'
+          ? `<span style="font-size:8px;margin-left:4px;color:#e17055">🕳BH</span>`
+          : `<span style="font-size:8px;margin-left:4px;color:#636e72">退学</span>`)
+      : '';
+    const ccBadge = (result === 'passed' && student.common_core_done)
+      ? `<span style="font-size:8px;margin-left:4px;color:#a29bfe">🎓</span>`
+      : '';
+    const resultBadgeHTML = result === 'passed'
+      ? `<div class="result-section" style="white-space:nowrap"><span class="result-badge passed">🎉 合格</span>${survivalBadge}${ccBadge}</div>`
+      : result === 'failed'
+      ? `<div class="result-section"><span class="result-badge failed">次回へ</span></div>`
+      : '';
     return `
-      <div class="student-card ${cls}" onclick="goToStudent('${esc(student.login)}')">
+      <div class="student-card ${cls} ${resultCls}" onclick="goToStudent('${esc(student.login)}')">
         <div class="student-rank">${rank}</div>
         ${avatar}
         <div class="student-login" title="${esc(student.display_name || student.login)}">${esc(student.login)}</div>
         <div class="metric-row">
-          <span class="metric-hours ${hoursClass(hours)}">${formatHours(hours, false)}</span>
+          <span class="metric-hours ${hoursClass(hours, failed)}">${formatHours(hours, false, failed)}</span>
           <span class="metric-level">Lv ${level}</span>
         </div>
         <div class="dev-section">
@@ -728,6 +884,7 @@ function renderDashboard() {
         <div class="exam-section" style="font-size:9px;color:var(--text-dim);text-align:center;margin-top:3px">
           Exam: ${examHTML}
         </div>
+        ${resultBadgeHTML}
         ${seat}
       </div>`;
   }
@@ -770,29 +927,62 @@ function onSearch(value) {
 }
 
 function goToStudent(login) {
-  window.location.href = `index.html?login=${encodeURIComponent(login)}`;
+  const monthParam = currentMonth !== '02' ? `&month=${currentMonth}` : '';
+  window.location.href = `index.html?login=${encodeURIComponent(login)}${monthParam}`;
 }
 
 async function loadDashboard() {
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('spinning');
 
+  // 競合状態防止：このフェッチのシーケンス番号を記録し、
+  // 完了時に最新のリクエストかどうか確認する
+  const mySeq = ++loadSeq;
+  const myMonth = currentMonth; // 呼び出し時の月を記録
+
   try {
-    // データ取得
     const token = sessionStorage.getItem('piscine_42_token') || '';
-    const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/data', {
+    const monthParam = myMonth !== '02' ? `?month=${myMonth}` : '';
+    const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
+    // より新しいフェッチが開始されていたら、このレスポンスを捨てる
+    if (mySeq !== loadSeq) return;
+
     dashboardData = data;
     renderDashboard();
   } catch (e) {
-    showError(e.message);
+    if (mySeq === loadSeq) showError(e.message);
   } finally {
-    btn.classList.remove('spinning');
+    if (mySeq === loadSeq) btn.classList.remove('spinning');
   }
+}
+
+function switchMonth(month) {
+  if (currentMonth === month) return;
+  currentMonth = month;
+  currentFilter = 'all';
+  // タブのスタイル切り替え
+  ['2408', '2409', '02', '03'].forEach(m => {
+    const tab = document.getElementById(`tab${m}`);
+    if (!tab) return;
+    if (m === month) {
+      tab.style.background = 'rgba(110,168,254,0.15)';
+      tab.style.color = 'var(--accent-light)';
+      tab.style.borderColor = 'rgba(110,168,254,0.4)';
+    } else {
+      tab.style.background = 'transparent';
+      tab.style.color = 'var(--text-dim)';
+      tab.style.borderColor = 'rgba(136,136,160,0.3)';
+    }
+  });
+  // 統計リンクのhrefを月に合わせて更新
+  const statsBtn = document.getElementById('statsNavBtn');
+  if (statsBtn) statsBtn.href = month !== '02' ? `stats.html?month=${month}` : 'stats.html';
+  loadDashboard();
 }
 
 function showError(msg) {
@@ -818,11 +1008,60 @@ function sendConsentSilently(user) {
 }
 
 // 認証確認後にダッシュボード読み込み
-requireAuth().then(user => {
+requireAuth().then(async user => {
   if (!user) return;
   loggedInUser = user; // 管理者リンク表示判定に使用
   initSearchInput(); // 検索入力欄のイベントを一度だけ登録
   sendConsentSilently(user);
+
+  // 管理者用: viewAsモード（?viewAs=2409 で一般ユーザー視点テスト）
+  await isAdminUser(user);
+  const isRealAdmin = user._isAdmin || false;
+  const viewAsParam = new URLSearchParams(location.search).get('viewAs');
+  if (isRealAdmin && viewAsParam && ['2408', '2409', '02', '03'].includes(viewAsParam)) {
+    viewAsMode = viewAsParam;
+    userMonths = [viewAsParam];
+    currentMonth = viewAsParam;
+    // viewAsモード表示バナー（管理者にだけ見える）
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:9999;background:#6c5ce7;color:#fff;padding:6px 14px;border-radius:8px;font-size:11px;opacity:0.85;cursor:pointer';
+    const monthNames = {'2408':'8月(2024)','2409':'9月(2024)','02':'2月(2026)','03':'3月(2026)'};
+    banner.textContent = `viewAs: ${monthNames[viewAsParam] || viewAsParam} 参加者として表示中`;
+    banner.title = 'クリックで通常表示に戻る';
+    banner.onclick = () => { location.href = 'dashboard.html'; };
+    document.body.appendChild(banner);
+  } else {
+    // 通常モード: ユーザーの参加月を取得
+    try {
+      const token = getToken();
+      const resp = await fetch('https://piscine-tracker.tsunanko.workers.dev/api/my-months', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        userMonths = data.months || [];
+      }
+    } catch {}
+  }
+
+  // URLパラメータで月が指定されていた場合、タブのスタイルと統計リンクを初期化
+  if (currentMonth !== '02') {
+    ['2408', '2409', '02', '03'].forEach(m => {
+      const tab = document.getElementById(`tab${m}`);
+      if (!tab) return;
+      if (m === currentMonth) {
+        tab.style.background = 'rgba(110,168,254,0.15)';
+        tab.style.color = 'var(--accent-light)';
+        tab.style.borderColor = 'rgba(110,168,254,0.4)';
+      } else {
+        tab.style.background = 'transparent';
+        tab.style.color = 'var(--text-dim)';
+        tab.style.borderColor = 'rgba(136,136,160,0.3)';
+      }
+    });
+    const statsBtn = document.getElementById('statsNavBtn');
+    if (statsBtn) statsBtn.href = `stats.html?month=${currentMonth}`;
+  }
   loadDashboard();
   setInterval(loadDashboard, 5 * 60 * 1000);
 });
