@@ -36,6 +36,7 @@
  * ADMIN_SECRET            → 管理者認証用の任意文字列
  * PASS_HASH_1             → 合言葉1のSHA-256ハッシュ（Piscine生向け合言葉認証）
  * PASS_HASH_2             → 合言葉2のSHA-256ハッシュ（予備）
+ * ADMIN_LOGIN             → 管理者の42ログイン名（コードにハードコードしない）
  */
 
 // ─── 定数 ─────────────────────────────────────────────────────────────────
@@ -166,7 +167,8 @@ async function isAdmin(request, env) {
     });
     if (res.ok) {
       const user = await res.json();
-      const result = user.login === 'admin_user';
+      const adminLogin = env.ADMIN_LOGIN || '';
+      const result = adminLogin && user.login === adminLogin;
       // 結果を5分間キャッシュ（TTL=300秒）
       await env.PISCINE_DATA.put(cacheKey, result ? 'admin' : 'user', { expirationTtl: 300 }).catch(() => {});
       return result;
@@ -201,7 +203,8 @@ async function checkDataAuth(request, env) {
     });
     if (res.ok) {
       const user = await res.json();
-      return { login: user.login, type: 'oauth', isAdmin: user.login === 'admin_user' };
+      const adminLogin = env.ADMIN_LOGIN || '';
+      return { login: user.login, type: 'oauth', isAdmin: adminLogin && user.login === adminLogin };
     }
   } catch {}
   return null;
@@ -326,6 +329,14 @@ export default {
       return handleGetConsents(request, env);
     }
 
+    // ─── 管理者判定 API（フロントエンドがハードコードなしで判定するため）──
+    if (url.pathname === '/api/check-admin' && request.method === 'GET') {
+      const admin = await isAdmin(request, env);
+      return new Response(JSON.stringify({ isAdmin: admin }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ─── 座席隣接分析 API（管理者のみ）─────────────────────────────────
     if (url.pathname.startsWith('/api/neighbors') && request.method === 'GET') {
       return handleGetNeighbors(request, env, url);
@@ -344,7 +355,7 @@ export default {
  *
  * KV Key の設計: "log:YYYYMMDDHHMMSS_login"
  * → 時系列でソート可能（アルファベット順 = 時系列順になる）
- * → 例: "log:20260224103045_admin_user"
+ * → 例: "log:20260224103045_username"
  *
  * CF-Connecting-IP: Cloudflare が付加するヘッダー
  * → 実際のクライアントIPアドレス（プロキシ越しでも正しいIPが取れる）

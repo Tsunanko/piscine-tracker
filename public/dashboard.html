@@ -653,7 +653,7 @@ function hoursClass(h, failed) {
 
 function renderDashboard() {
   const d = dashboardData;
-  const isRealAdmin = loggedInUser && loggedInUser.login === 'admin_user';
+  const isRealAdmin = loggedInUser && loggedInUser._isAdmin;
   const isAdmin = isRealAdmin && !viewAsMode;  // viewAsモード中は管理者機能を非表示
 
   // ローディング非表示・ダッシュボード表示
@@ -1015,7 +1015,8 @@ requireAuth().then(async user => {
   sendConsentSilently(user);
 
   // 管理者用: viewAsモード（?viewAs=2409 で一般ユーザー視点テスト）
-  const isRealAdmin = user.login === 'admin_user';
+  await isAdminUser(user);
+  const isRealAdmin = user._isAdmin || false;
   const viewAsParam = new URLSearchParams(location.search).get('viewAs');
   if (isRealAdmin && viewAsParam && ['2408', '2409', '02', '03'].includes(viewAsParam)) {
     viewAsMode = viewAsParam;

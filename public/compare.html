@@ -460,7 +460,7 @@
 
 <script>
 const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
-const ADMIN  = 'admin_user';
+let userIsAdmin = false;
 
 let currentTab = 0;
 let febData = null;
@@ -483,7 +483,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   }).catch(() => null);
   const isServerAdmin = adminCheck && adminCheck.ok;
 
-  if (me.login !== ADMIN || !isServerAdmin) {
+  await isAdminUser(me);
+  userIsAdmin = me._isAdmin || false;
+  if (!userIsAdmin || !isServerAdmin) {
     document.getElementById('loading').style.display = 'none';
     const err = document.getElementById('errorMsg');
     err.style.display = 'block';

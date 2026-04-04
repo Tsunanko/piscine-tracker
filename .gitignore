@@ -4,3 +4,8 @@ __pycache__/
 public/data/*.json
 public/data.json
 public/dev-data.json
+.wrangler/
+workers/.wrangler/
+.DS_Store
+*.json.bak
+neighbor_analysis_*.json

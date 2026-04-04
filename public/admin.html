@@ -300,20 +300,18 @@
   let currentTab  = 'logs';
 
   // ─── 認証ガード ───────────────────────────────────
-  // admin_user のみアクセス可能
+  // Worker側の管理者判定を使用（ログイン名をハードコードしない）
   const token    = sessionStorage.getItem('piscine_42_token');
-  const userJson = sessionStorage.getItem('piscine_42_user');
   if (!token) {
     window.location.replace('login.html');
   } else {
-    try {
-      const u = JSON.parse(userJson);
-      if (u.login !== 'admin_user') {
-        window.location.replace('dashboard.html');
-      }
-    } catch {
+    fetch('https://piscine-tracker.tsunanko.workers.dev/api/check-admin', {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(res => res.json()).then(data => {
+      if (!data.isAdmin) window.location.replace('dashboard.html');
+    }).catch(() => {
       window.location.replace('login.html');
-    }
+    });
   }
 
   // ─── データ読み込み（ログイン済みトークンで自動認証）────

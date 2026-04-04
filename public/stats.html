@@ -513,7 +513,7 @@ let searchLogin = '';   // 検索中のログイン名
 let isComposing   = false; // IME composition中フラグ（スマホ2重入力防止）
 let suppressInput = false; // compositionend直後のinput誤発火を防ぐフラグ
 let currentUser   = null;  // ログイン中ユーザー（管理者チェック用）
-const ADMIN_LOGIN = 'admin_user';  // 試験スコアタブを閲覧できる管理者ログイン名
+let userIsAdmin = false;  // Worker側の判定結果を格納
 let statsMonth = new URLSearchParams(window.location.search).get('month') || '02'; // グローバルで参照
 
 // 現在のフィルタ設定に基づく母集団を返す
@@ -649,7 +649,7 @@ function clearSearch() {
 // データ読み込み
 // ─────────────────────────────────────────────
 async function loadData(currentUser = null) {
-  const isAdmin = currentUser && currentUser.login === 'admin_user';
+  const isAdmin = userIsAdmin;
   const token = sessionStorage.getItem('piscine_42_token') || '';
 
   // ?dev=1 でローカルファイルを使用（開発用・Cloudflare KV不要）
@@ -1209,7 +1209,7 @@ function renderChart(cached) {
 // ─────────────────────────────────────────────
 function renderExamTab() {
   // 管理者以外はアクセス不可
-  if (!currentUser || currentUser.login !== ADMIN_LOGIN) {
+  if (!currentUser || !userIsAdmin) {
     document.getElementById('mainCard').innerHTML =
       `<div class="loading" style="color:var(--red)">⛔ このページは管理者専用です</div>`;
     return;
@@ -1508,7 +1508,7 @@ function renderExamTab() {
 let failSortKey = 'exam'; // 'exam' | 'hours' | 'level' | 'review'
 
 function renderFailAnalysisTab() {
-  if (!currentUser || currentUser.login !== ADMIN_LOGIN) {
+  if (!currentUser || !userIsAdmin) {
     document.getElementById('mainCard').innerHTML =
       `<div class="loading" style="color:var(--red)">⛔ このページは管理者専用です</div>`;
     return;
@@ -3085,7 +3085,8 @@ function buildAllCorrTable() {
 // ─────────────────────────────────────────────
 // ?dev=1: ローカルデータを使って認証なしで管理者として起動（開発用）
 if (new URLSearchParams(window.location.search).get('dev') === '1') {
-  currentUser = { login: ADMIN_LOGIN };
+  currentUser = { _isAdmin: true };
+  userIsAdmin = true;
   document.getElementById('tabBtn3').style.display = '';
   document.getElementById('tabBtn4').style.display = '';
   loadData(currentUser).catch(e => {
@@ -3093,11 +3094,13 @@ if (new URLSearchParams(window.location.search).get('dev') === '1') {
       `<div class="loading" style="color:var(--red)">データ読み込みエラー: ${e.message}</div>`;
   });
 } else {
-  requireAuth().then(user => {
+  requireAuth().then(async user => {
     if (!user) return;
     currentUser = user;
+    await isAdminUser(user);
+    userIsAdmin = user._isAdmin || false;
     // 管理者のみタブボタンを表示
-    if (user.login === ADMIN_LOGIN) {
+    if (userIsAdmin) {
       document.getElementById('tabBtn3').style.display = '';
       document.getElementById('tabBtn4').style.display = '';
     }

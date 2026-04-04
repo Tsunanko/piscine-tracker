@@ -453,7 +453,7 @@ function calcWeekly(daily) {
 
 function render(d) {
   currentStudentData = d;
-  const isAdmin = loggedInUser?.login === 'admin_user';
+  const isAdmin = loggedInUser?._isAdmin || false;
   const app = document.getElementById('app');
 
   // Determine status
@@ -1134,9 +1134,10 @@ function showError(msg) {
 
 let loggedInUser = null;
 
-requireAuth().then(user => {
+requireAuth().then(async user => {
   if (!user) return;
   loggedInUser = user;
+  await isAdminUser(user);
   loadData();
   setInterval(loadData, 5 * 60 * 1000);
 });

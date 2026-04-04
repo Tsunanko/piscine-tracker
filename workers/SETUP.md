@@ -15,7 +15,7 @@ npm install -g wrangler
 ## ステップ 2: Cloudflare にログイン
 
 ```bash
-cd /Users/ichippe/42tokyo/9.work/intra_time_mesure_claude/workers
+cd workers
 wrangler login
 ```
 
