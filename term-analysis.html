@@ -173,18 +173,22 @@ function renderSummaryTable(data) {
     const m = PISCINE_MONTHS[code];
     const d = data[code];
     const n = d.all.length;
-    const v = d.valid;
+    const ac = d.active;  // アクティブ学生
     const activeRate = n > 0 ? (d.activeCount / n * 100).toFixed(0) : '-';
-    const hours = v.map(s => s.total_hours);
-    const avgH = hours.length ? (hours.reduce((a, b) => a + b, 0) / hours.length).toFixed(1) : '-';
-    const medH = hours.length ? median(hours).toFixed(1) : '-';
-    const levels = v.filter(s => s.level != null).map(s => s.level);
-    const avgL = levels.length ? (levels.reduce((a, b) => a + b, 0) / levels.length).toFixed(2) : '-';
-    const passRate = d.announced && (d.passed + d.failed > 0)
-      ? (d.passed / (d.passed + d.failed) * 100).toFixed(1)
-      : null;
-
+    // 平均時間・Level はアクティブ学生ベース
+    const aHours = ac.filter(s => s.total_hours > 0).map(s => s.total_hours);
+    const avgH = aHours.length ? (aHours.reduce((a, b) => a + b, 0) / aHours.length).toFixed(1) : '-';
+    const medH = aHours.length ? median(aHours).toFixed(1) : '-';
+    const aLevels = ac.filter(s => s.level != null).map(s => s.level);
+    const avgL = aLevels.length ? (aLevels.reduce((a, b) => a + b, 0) / aLevels.length).toFixed(2) : '-';
     const total = d.passed + d.failed;
+    const passRate = d.announced && total > 0
+      ? (d.passed / total * 100).toFixed(1) : null;
+
+    // Final Exam情報（統合表示）
+    const withExam = d.valid.filter(s => s.exam_score != null);
+    const passedScores = withExam.filter(s => s.piscine_result === 'passed').map(s => s.exam_score);
+    const minPass = passedScores.length ? Math.min(...passedScores) : null;
 
     return `<tr>
       <td style="font-weight:600">${m ? `${m.year} ${m.label}` : code}</td>
@@ -200,13 +204,14 @@ function renderSummaryTable(data) {
       <td>${passRate !== null
         ? `<span class="pct-bar" style="width:${passRate * 0.6}px;background:var(--green)"></span>${passRate}%`
         : '<span class="val-dim">未発表</span>'}</td>
+      <td>${minPass !== null ? `<span style="color:var(--orange);font-weight:700">${minPass}</span>` : '<span class="val-dim">-</span>'}</td>
     </tr>`;
   }).join('');
 
   document.getElementById('summaryTable').innerHTML = `
     <table>
       <thead><tr>
-        <th>期</th><th>参加者</th><th>アクティブ</th><th>アクティブ率</th><th>平均時間</th><th>中央値時間</th><th>平均Level</th><th>合格人数</th><th>合格率</th>
+        <th>期</th><th>参加者</th><th>アクティブ</th><th>アクティブ率</th><th>平均時間<br><span style="font-weight:400;font-size:10px">(アクティブ)</span></th><th>中央値時間<br><span style="font-weight:400;font-size:10px">(アクティブ)</span></th><th>平均Level<br><span style="font-weight:400;font-size:10px">(アクティブ)</span></th><th>合格人数</th><th>合格率</th><th>最低<br>合格点</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -231,23 +236,6 @@ function renderExamAnalysis(data) {
     return;
   }
 
-  // サマリー: 各期の合格者平均・不合格者平均・最低合格点
-  const summaryRows = announced.map(([code, d]) => {
-    const m = PISCINE_MONTHS[code];
-    const label = m ? `${m.year} ${m.label}` : code;
-    const withExam = d.valid.filter(s => s.exam_score != null);
-    const passedScores = withExam.filter(s => s.piscine_result === 'passed').map(s => s.exam_score);
-    const failedScores = withExam.filter(s => s.piscine_result === 'failed').map(s => s.exam_score);
-    const minPass = passedScores.length ? Math.min(...passedScores) : '-';
-    return `<tr>
-      <td style="font-weight:600">${label}</td>
-      <td>${withExam.length}人</td>
-      <td class="val-good">${passedScores.length ? avg(passedScores).toFixed(1) : '-'}</td>
-      <td class="val-bad">${failedScores.length ? avg(failedScores).toFixed(1) : '-'}</td>
-      <td style="font-weight:700;color:var(--orange)">${minPass}</td>
-    </tr>`;
-  }).join('');
-
   // スコア帯別合格率の全期横並びテーブル
   const headerCells = announced.map(([code]) => {
     const m = PISCINE_MONTHS[code];
@@ -269,15 +257,6 @@ function renderExamAnalysis(data) {
   }).join('');
 
   container.innerHTML = `
-    <div class="exam-card" style="margin-bottom:16px">
-      <div class="exam-card-title">期別サマリー</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>期</th><th>受験者</th><th>合格者平均</th><th>不合格者平均</th><th>最低合格点</th></tr></thead>
-          <tbody>${summaryRows}</tbody>
-        </table>
-      </div>
-    </div>
     <div class="exam-card">
       <div class="exam-card-title">スコア帯別合格率（全期比較）</div>
       <div class="table-wrap">
