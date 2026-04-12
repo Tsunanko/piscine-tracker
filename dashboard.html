@@ -1048,8 +1048,15 @@ requireAuth().then(async user => {
       if (resp.ok) {
         const data = await resp.json();
         userMonths = data.months || [];
+        isAdmin = data.isAdmin || false;
+        // URLで月が指定されていない場合、ユーザーの参加月に自動切替
+        // （02に参加していないユーザーが02を見てもデータがないため）
+        const urlMonth = new URLSearchParams(location.search).get('month');
+        if (!urlMonth && !isAdmin && userMonths.length > 0 && !userMonths.includes(currentMonth)) {
+          currentMonth = userMonths[userMonths.length - 1]; // 最新の参加月
+        }
       }
-    } catch {}
+    } catch (e) { console.error(e); }
   }
 
   // URLパラメータで月が指定されていた場合、タブのスタイルと統計リンクを初期化
