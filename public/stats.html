@@ -490,6 +490,7 @@
 
 </div>
 
+<script src="piscine-config.js"></script>
 <script>
 // ─────────────────────────────────────────────
 // データ & 設定
@@ -708,10 +709,9 @@ async function loadData(currentUser = null) {
   buildAllCorrTable();
 
   // 月インジケーター初期化
-  const monthLabel = statsMonth === '2408' ? '8月ピシン (Aug 5 - Aug 30, 2024)'
-                   : statsMonth === '2409' ? '9月ピシン (Sep 2 - Sep 27, 2024)'
-                   : statsMonth === '03'   ? '3月ピシン (Mar 16 - Apr 10, 2026)'
-                   :                        '2月ピシン (Feb 2 - Feb 27, 2026)';
+  const monthLabel = (typeof formatPiscineLabel === 'function')
+    ? formatPiscineLabel(statsMonth)
+    : statsMonth;
   if (isAdmin) {
     const tabs = document.getElementById('statsMonthTabs');
     if (tabs) {

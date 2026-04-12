@@ -49,7 +49,7 @@ const TOKEN_URL    = 'https://api.intra.42.fr/oauth/token';       // token交換
 const USERINFO_URL = 'https://api.intra.42.fr/v2/me';            // ユーザー情報
 
 // ─── 対応する全Piscine月コード（一元定義）────────────────────────────────
-const VALID_MONTHS = ['2408', '2409', '02', '03'];
+const VALID_MONTHS = ['2408', '2409', '2502', '2503', '02', '03'];
 
 // CORS（Cross-Origin Resource Sharing）設定
 // GitHub Pages (tsunanko.github.io) からのリクエストのみ許可

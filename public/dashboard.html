@@ -532,6 +532,7 @@
     </svg>
   </button>
 
+<script src="piscine-config.js"></script>
 <script>
 let dashboardData = null;
 let loadSeq = 0; // 競合状態防止：最新のフェッチだけ反映する
@@ -707,10 +708,9 @@ function renderDashboard() {
   const clusters = [...new Set(d.online.map(s => s.cluster).filter(Boolean))].sort();
 
   // Update header
-  const periodLabel = currentMonth === '2408' ? 'Aug 5 - Aug 30, 2024'
-                    : currentMonth === '2409' ? 'Sep 2 - Sep 27, 2024'
-                    : currentMonth === '03'   ? 'Mar 16 - Apr 10, 2026'
-                    :                          'Feb 2 - Feb 27, 2026';
+  const periodLabel = (typeof formatPiscinePeriod === 'function')
+    ? formatPiscinePeriod(currentMonth)
+    : currentMonth;
   document.getElementById('headerSub').textContent = periodLabel;
   // 月タブ表示: 管理者は全タブ、一般ユーザーは参加月のタブのみ
   const monthTabs = document.getElementById('monthTabs');

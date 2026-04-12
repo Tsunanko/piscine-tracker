@@ -66,6 +66,16 @@ _PISCINE_CONFIG = {
         "end":   datetime(2024, 9, 28, 0, 0, 0, tzinfo=JST),  # 9/27の翌日（仮）
         "days":  26,
     },
+    "2502": {
+        "start": datetime(2025, 2, 3,  0, 0, 0, tzinfo=JST),
+        "end":   datetime(2025, 3, 1,  0, 0, 0, tzinfo=JST),  # 2/28の翌日
+        "days":  26,
+    },
+    "2503": {
+        "start": datetime(2025, 3, 11, 0, 0, 0, tzinfo=JST),
+        "end":   datetime(2025, 4, 6,  0, 0, 0, tzinfo=JST),  # 4/5の翌日
+        "days":  26,
+    },
     "02": {
         "start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
         "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),  # 最終日の翌日

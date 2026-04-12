@@ -394,12 +394,12 @@
       <div class="summary-grid">
         <div class="cohort-card feb">
           <div class="cohort-title" style="color:var(--feb-color)">2月ピシン</div>
-          <div class="cohort-period">Feb 2 – Feb 27, 2026</div>
+          <div class="cohort-period" id="febPeriod">Feb 2 – Feb 27, 2026</div>
           <div id="febStats"></div>
         </div>
         <div class="cohort-card mar">
           <div class="cohort-title" style="color:var(--mar-color)">3月ピシン</div>
-          <div class="cohort-period">Mar 16 – Apr 10, 2026</div>
+          <div class="cohort-period" id="marPeriod">Mar 16 – Apr 10, 2026</div>
           <div id="marStats"></div>
         </div>
       </div>
@@ -465,6 +465,7 @@
   </div><!-- /mainContent -->
 </div><!-- /container -->
 
+<script src="piscine-config.js"></script>
 <script>
 const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
 let userIsAdmin = false;
@@ -543,6 +544,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('headerSub').textContent = updAt
     ? `更新: ${new Date(updAt).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`
     : '管理者専用';
+
+  // piscine-config.jsから日付を動的設定
+  if (typeof PISCINE_MONTHS !== 'undefined') {
+    const fp = document.getElementById('febPeriod');
+    const mp = document.getElementById('marPeriod');
+    if (fp) fp.textContent = formatPiscinePeriod('02') || fp.textContent;
+    if (mp) mp.textContent = formatPiscinePeriod('03') || mp.textContent;
+  }
 
   // タブ0（サマリー）だけ即時描画。他タブは表示時に遅延レンダリング
   renderSummary(febAll, marAll);
