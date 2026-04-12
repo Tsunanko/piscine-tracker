@@ -138,6 +138,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     monthData[code] = {
       all,
       valid: all.filter(s => !s.fetch_failed && s.total_hours != null && s.total_hours > 0),
+      active: all.filter(s => s.is_active),  // 直近7日で1h以上来た人
+      activeCount: d.active_count || all.filter(s => s.is_active).length,
       announced: d.results_announced || false,
       passed: all.filter(s => s.piscine_result === 'passed').length,
       failed: all.filter(s => s.piscine_result === 'failed').length,
@@ -159,7 +161,7 @@ function renderSummaryTable(data) {
     const d = data[code];
     const n = d.all.length;
     const v = d.valid;
-    const activeRate = n > 0 ? (v.length / n * 100).toFixed(0) : '-';
+    const activeRate = n > 0 ? (d.activeCount / n * 100).toFixed(0) : '-';
     const hours = v.map(s => s.total_hours);
     const avgH = hours.length ? (hours.reduce((a, b) => a + b, 0) / hours.length).toFixed(1) : '-';
     const medH = hours.length ? median(hours).toFixed(1) : '-';

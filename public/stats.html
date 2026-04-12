@@ -433,10 +433,7 @@
     <div class="header-sub" id="headerSub">読み込み中...</div>
     <!-- 月インジケーター（管理者向け切り替えタブ） -->
     <div id="statsMonthTabs" style="display:none;margin-top:8px;gap:6px;justify-content:center;flex-wrap:wrap">
-      <button id="statTab2408" onclick="switchStatsMonth('2408')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">8月(2024)</button>
-      <button id="statTab2409" onclick="switchStatsMonth('2409')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">9月(2024)</button>
-      <button id="statTab02" onclick="switchStatsMonth('02')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(110,168,254,0.4);background:rgba(110,168,254,0.15);color:var(--accent-light);font-size:12px;cursor:pointer">2月(2026)</button>
-      <button id="statTab03" onclick="switchStatsMonth('03')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">3月(2026)</button>
+      <!-- piscine-config.js から動的生成 -->
     </div>
     <!-- 月ラベル（非管理者向け読み取り専用表示） -->
     <div id="statsMonthLabel" style="display:none;margin-top:6px;font-size:11px;color:var(--text-dim)"></div>
@@ -714,7 +711,13 @@ async function loadData(currentUser = null) {
     : statsMonth;
   if (isAdmin) {
     const tabs = document.getElementById('statsMonthTabs');
-    if (tabs) {
+    if (tabs && typeof PISCINE_MONTHS !== 'undefined') {
+      // piscine-config.js から月タブを動的生成
+      tabs.innerHTML = Object.keys(PISCINE_MONTHS).map(m => {
+        const pm = PISCINE_MONTHS[m];
+        const label = pm ? `${pm.label.replace('ピシン','')}(${pm.year})` : m;
+        return `<button id="statTab${m}" onclick="switchStatsMonth('${m}')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">${label}</button>`;
+      }).join('');
       tabs.style.display = 'flex';
       updateStatsMonthTabStyle(statsMonth);
     }
@@ -742,7 +745,8 @@ async function loadData(currentUser = null) {
 // 月切り替え（管理者専用）
 // ─────────────────────────────────────────────
 function updateStatsMonthTabStyle(month) {
-  ['2408','2409','02','03'].forEach(m => {
+  const months = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
+  months.forEach(m => {
     const btn = document.getElementById(`statTab${m}`);
     if (!btn) return;
     if (m === month) {
