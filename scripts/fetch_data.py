@@ -196,7 +196,7 @@ def api_get(token, path, params=None, _retry=3):
             print(f"  [429] rate limited on {path} → wait {wait}s (attempt {attempt+1}/{_retry})")
             time.sleep(wait)
             continue
-        if resp.status_code == 401 and attempt < _retry - 1:
+        if resp.status_code == 401 and attempt < _retry:
             # トークン期限切れ → リフレッシュしてリトライ
             token = refresh_token()
             _current_token = token
@@ -516,7 +516,7 @@ def main():
                     })
                 except Exception as proj_e:
                     # 429 Too Many Requests → 10秒待ってリトライ
-                    if "429" in str(proj_e):
+                    if getattr(getattr(proj_e, 'response', None), 'status_code', 0) == 429 or "429" in str(proj_e):
                         print(f"  [WARN] {login} projects 429, retry in 10s...")
                         time.sleep(10)
                         projects_raw = fetch_all_pages(_current_token, f"/v2/users/{login}/projects_users", {
@@ -658,7 +658,7 @@ def main():
                 })
                 events_attended = len(events_raw)
             except Exception as e:
-                if "429" in str(e):
+                if getattr(getattr(e, 'response', None), 'status_code', 0) == 429 or "429" in str(e):
                     print(f"  [WARN] {login} events 429, retry in 10s...")
                     time.sleep(10)
                     try:
