@@ -952,6 +952,11 @@ async function loadDashboard() {
     // より新しいフェッチが開始されていたら、このレスポンスを捨てる
     if (mySeq !== loadSeq) return;
 
+    // nullガード: APIが不完全なデータを返した場合に備える
+    if (data) {
+      data.online = data.online || [];
+      data.offline = data.offline || [];
+    }
     dashboardData = data;
     renderDashboard();
   } catch (e) {
@@ -965,6 +970,9 @@ function switchMonth(month) {
   if (currentMonth === month) return;
   currentMonth = month;
   currentFilter = 'all';
+  searchQuery = '';
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) searchInput.value = '';
   // タブのスタイル切り替え
   ['2408', '2409', '02', '03'].forEach(m => {
     const tab = document.getElementById(`tab${m}`);

@@ -338,9 +338,16 @@
     font-style: italic;
   }
 
+  @media (max-width: 768px) {
+    .chart-wrap canvas { max-height: 220px; }
+    .scatter-wrap canvas { max-height: 250px; }
+    .tab-btn { font-size: 12px; padding: 6px 10px; }
+  }
   @media (max-width: 600px) {
     .summary-grid, .top-grid, .pass-grid { grid-template-columns: 1fr; }
     .header { gap: 8px; }
+    .chart-wrap canvas { max-height: 180px; }
+    .scatter-wrap canvas { max-height: 200px; }
   }
 </style>
 </head>
@@ -466,6 +473,17 @@ let currentTab = 0;
 let febData = null;
 let marData = null;
 let token   = '';
+let febAll  = [];
+let marAll  = [];
+
+// Chart.js インスタンス管理（メモリリーク防止）
+const charts = {};
+function destroyChart(name) {
+  if (charts[name]) { charts[name].destroy(); delete charts[name]; }
+}
+
+// タブごとの初回描画済みフラグ（遅延レンダリング用）
+const tabRendered = [false, false, false, false, false];
 
 // ─────────────────────────────────────────
 // 初期化
@@ -514,8 +532,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('mainContent').style.display = 'block';
 
-  const febAll = febData ? [...(febData.online||[]), ...(febData.offline||[])] : [];
-  const marAll = marData ? [...(marData.online||[]), ...(marData.offline||[])] : [];
+  febAll = febData ? [...(febData.online||[]), ...(febData.offline||[])] : [];
+  marAll = marData ? [...(marData.online||[]), ...(marData.offline||[])] : [];
 
   const hasPass = febAll.some(s => s.piscine_result === 'passed' || s.piscine_result === 'failed')
                || marAll.some(s => s.piscine_result === 'passed' || s.piscine_result === 'failed');
@@ -526,13 +544,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     ? `更新: ${new Date(updAt).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`
     : '管理者専用';
 
+  // タブ0（サマリー）だけ即時描画。他タブは表示時に遅延レンダリング
   renderSummary(febAll, marAll);
-  renderHoursHist(febAll, marAll);
-  renderWeekly(febAll, marAll);
-  renderLevelHist(febAll, marAll);
-  renderTopLevel(febAll, marAll);
-  renderScatter(febAll, marAll);
-  if (hasPass) renderPassTab(febAll, marAll);
+  tabRendered[0] = true;
 });
 
 // ─────────────────────────────────────────
@@ -547,11 +561,23 @@ function switchTab(i) {
     const el = document.getElementById(`tab${k}`);
     if (el) el.style.display = k === i ? '' : 'none';
   }
+  // 遅延レンダリング: 初回表示時にチャートを生成（display:none中の寸法計算バグ回避）
+  if (!tabRendered[i] && febAll.length + marAll.length > 0) {
+    if (i === 1) { renderHoursHist(febAll, marAll); renderWeekly(febAll, marAll); }
+    if (i === 2) { renderLevelHist(febAll, marAll); renderTopLevel(febAll, marAll); }
+    if (i === 3) { renderScatter(febAll, marAll); }
+    if (i === 4) { renderPassTab(febAll, marAll); }
+    tabRendered[i] = true;
+  }
 }
 
 // ─────────────────────────────────────────
 // ユーティリティ
 // ─────────────────────────────────────────
+// 共通フィルタ: fetch失敗でなく、有効な時間データを持つ学生
+function validStudents(arr) {
+  return arr.filter(s => !s.fetch_failed && s.total_hours != null && s.total_hours > 0);
+}
 function activeStudents(arr) {
   return arr.filter(s => s.is_active && !s.fetch_failed && s.total_hours > 0);
 }
@@ -576,23 +602,22 @@ function esc(s) {
 // タブ0: サマリー
 // ─────────────────────────────────────────
 function renderSummary(feb, mar) {
-  renderCohortStats('febStats', feb, 'feb');
-  renderCohortStats('marStats', mar, 'mar');
+  renderCohortStats('febStats', feb, 'feb', febData?.results_announced);
+  renderCohortStats('marStats', mar, 'mar', marData?.results_announced);
   renderMetricCompare(feb, mar);
 }
 
-function renderCohortStats(id, arr, which) {
+function renderCohortStats(id, arr, which, announced) {
   const el = document.getElementById(id);
   if (!el) return;
   const color = which === 'feb' ? 'var(--feb-color)' : 'var(--mar-color)';
 
+  const valid = validStudents(arr);
   const active = activeStudents(arr);
-  const hasHours = arr.filter(s => !s.fetch_failed && s.total_hours != null && s.total_hours > 0);
-  const hours = hasHours.map(s => s.total_hours);
-  const levels = arr.filter(s => s.level != null).map(s => s.level);
+  const hours = valid.map(s => s.total_hours);
+  const levels = valid.filter(s => s.level != null).map(s => s.level);
   const passed = arr.filter(s => s.piscine_result === 'passed').length;
   const failed = arr.filter(s => s.piscine_result === 'failed').length;
-  const announced = arr.some(s => s.results_announced);
   const failedFetch = arr.filter(s => s.fetch_failed).length;
 
   const rows = [
@@ -692,15 +717,16 @@ function makeHistBins(values, binWidth, maxVal) {
 }
 
 function renderHoursHist(feb, mar) {
-  const febH = feb.filter(s => !s.fetch_failed && s.total_hours > 0).map(s => s.total_hours);
-  const marH = mar.filter(s => !s.fetch_failed && s.total_hours > 0).map(s => s.total_hours);
+  const febH = validStudents(feb).map(s => s.total_hours);
+  const marH = validStudents(mar).map(s => s.total_hours);
   const maxH = Math.ceil(Math.max(...febH, ...marH, 200) / 20) * 20;
   const BIN  = 20;
   const bins = Array.from({length: maxH/BIN}, (_, i) => `${i*BIN}–${i*BIN+BIN}h`);
   const febBins = makeHistBins(febH, BIN, maxH);
   const marBins = makeHistBins(marH, BIN, maxH);
 
-  new Chart(document.getElementById('hoursHistChart'), {
+  destroyChart('hoursHist');
+  charts.hoursHist = new Chart(document.getElementById('hoursHistChart'), {
     type: 'bar',
     data: {
       labels: bins,
@@ -752,7 +778,8 @@ function renderWeekly(feb, mar) {
   const febMap = Object.fromEntries(febW.map(w=>[w.week, w.avg]));
   const marMap = Object.fromEntries(marW.map(w=>[w.week, w.avg]));
 
-  new Chart(document.getElementById('weeklyChart'), {
+  destroyChart('weekly');
+  charts.weekly = new Chart(document.getElementById('weeklyChart'), {
     type: 'line',
     data: {
       labels: allWeeks.map(w => `Week ${w}`),
@@ -780,8 +807,8 @@ function renderWeekly(feb, mar) {
 // タブ2: Level ヒストグラム + TOP10
 // ─────────────────────────────────────────
 function renderLevelHist(feb, mar) {
-  const febL = feb.filter(s => s.level != null).map(s => s.level);
-  const marL = mar.filter(s => s.level != null).map(s => s.level);
+  const febL = validStudents(feb).filter(s => s.level != null).map(s => s.level);
+  const marL = validStudents(mar).filter(s => s.level != null).map(s => s.level);
   const maxL = Math.ceil(Math.max(...febL, ...marL, 7) / 1) * 1;
   const BIN  = 0.5;
   const count = Math.ceil(maxL / BIN);
@@ -789,7 +816,8 @@ function renderLevelHist(feb, mar) {
   const febBins = makeHistBins(febL, BIN, maxL);
   const marBins = makeHistBins(marL, BIN, maxL);
 
-  new Chart(document.getElementById('levelHistChart'), {
+  destroyChart('levelHist');
+  charts.levelHist = new Chart(document.getElementById('levelHistChart'), {
     type: 'bar',
     data: {
       labels: bins,
@@ -834,14 +862,15 @@ function renderTopLevel(feb, mar) {
 // タブ3: 散布図
 // ─────────────────────────────────────────
 function renderScatter(feb, mar) {
-  const toPoints = arr => arr
-    .filter(s => !s.fetch_failed && s.total_hours > 0 && s.level != null)
+  const toPoints = arr => validStudents(arr)
+    .filter(s => s.level != null)
     .map(s => ({ x: s.total_hours, y: s.level, login: s.login }));
 
   const febPts = toPoints(feb);
   const marPts = toPoints(mar);
 
-  new Chart(document.getElementById('scatterChart'), {
+  destroyChart('scatter');
+  charts.scatter = new Chart(document.getElementById('scatterChart'), {
     type: 'scatter',
     data: {
       datasets: [
@@ -890,12 +919,11 @@ function renderScatter(feb, mar) {
 function renderPassTab(feb, mar) {
   const passGrid = document.getElementById('passGrid');
 
-  function passCard(arr, label, color) {
+  function passCard(arr, label, color, announced) {
     const passed  = arr.filter(s => s.piscine_result === 'passed').length;
     const failed  = arr.filter(s => s.piscine_result === 'failed').length;
     const total   = passed + failed;
     const pct     = total > 0 ? (passed / total * 100).toFixed(1) : null;
-    const announced = arr.some(s => s.results_announced);
 
     if (!announced || total === 0) {
       return `<div class="pass-card">
@@ -910,21 +938,22 @@ function renderPassTab(feb, mar) {
     </div>`;
   }
 
-  passGrid.innerHTML = passCard(feb, '2月ピシン 合格率', 'var(--feb-color)')
-                     + passCard(mar, '3月ピシン 合格率', 'var(--mar-color)');
+  passGrid.innerHTML = passCard(feb, '2月ピシン 合格率', 'var(--feb-color)', febData?.results_announced)
+                     + passCard(mar, '3月ピシン 合格率', 'var(--mar-color)', marData?.results_announced);
 
   // 合否別 時間分布
-  const febPassed = feb.filter(s => s.piscine_result === 'passed' && s.total_hours > 0).map(s => s.total_hours);
-  const febFailed = feb.filter(s => s.piscine_result === 'failed' && s.total_hours > 0).map(s => s.total_hours);
-  const marPassed = mar.filter(s => s.piscine_result === 'passed' && s.total_hours > 0).map(s => s.total_hours);
-  const marFailed = mar.filter(s => s.piscine_result === 'failed' && s.total_hours > 0).map(s => s.total_hours);
+  const febPassed = validStudents(feb).filter(s => s.piscine_result === 'passed').map(s => s.total_hours);
+  const febFailed = validStudents(feb).filter(s => s.piscine_result === 'failed').map(s => s.total_hours);
+  const marPassed = validStudents(mar).filter(s => s.piscine_result === 'passed').map(s => s.total_hours);
+  const marFailed = validStudents(mar).filter(s => s.piscine_result === 'failed').map(s => s.total_hours);
 
   const allH  = [...febPassed, ...febFailed, ...marPassed, ...marFailed];
   const maxH  = allH.length ? Math.ceil(Math.max(...allH) / 20) * 20 : 200;
   const BIN   = 20;
   const bins  = Array.from({length: maxH/BIN}, (_, i) => `${i*BIN}–${i*BIN+BIN}h`);
 
-  new Chart(document.getElementById('passHoursChart'), {
+  destroyChart('passHours');
+  charts.passHours = new Chart(document.getElementById('passHoursChart'), {
     type: 'bar',
     data: {
       labels: bins,
@@ -947,17 +976,18 @@ function renderPassTab(feb, mar) {
   });
 
   // 合否別 Level分布
-  const febPassedL = feb.filter(s => s.piscine_result === 'passed' && s.level != null).map(s => s.level);
-  const febFailedL = feb.filter(s => s.piscine_result === 'failed' && s.level != null).map(s => s.level);
-  const marPassedL = mar.filter(s => s.piscine_result === 'passed' && s.level != null).map(s => s.level);
-  const marFailedL = mar.filter(s => s.piscine_result === 'failed' && s.level != null).map(s => s.level);
+  const febPassedL = validStudents(feb).filter(s => s.piscine_result === 'passed' && s.level != null).map(s => s.level);
+  const febFailedL = validStudents(feb).filter(s => s.piscine_result === 'failed' && s.level != null).map(s => s.level);
+  const marPassedL = validStudents(mar).filter(s => s.piscine_result === 'passed' && s.level != null).map(s => s.level);
+  const marFailedL = validStudents(mar).filter(s => s.piscine_result === 'failed' && s.level != null).map(s => s.level);
 
   const allL  = [...febPassedL, ...febFailedL, ...marPassedL, ...marFailedL];
   const maxL  = allL.length ? Math.ceil(Math.max(...allL)) + 1 : 8;
   const LBIN  = 0.5;
   const lBins = Array.from({length: Math.ceil(maxL/LBIN)}, (_, i) => `${(i*LBIN).toFixed(1)}`);
 
-  new Chart(document.getElementById('passLevelChart'), {
+  destroyChart('passLevel');
+  charts.passLevel = new Chart(document.getElementById('passLevelChart'), {
     type: 'bar',
     data: {
       labels: lBins,
