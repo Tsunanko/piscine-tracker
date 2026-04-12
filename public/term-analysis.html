@@ -80,7 +80,7 @@
     <div class="section-title">全期サマリー</div>
     <div class="table-wrap" id="summaryTable"></div>
 
-    <div class="section-title">Exam02 × 合否（スコア帯別合格率）</div>
+    <div class="section-title">Final Exam × 合否（スコア帯別合格率）</div>
     <div class="exam-grid" id="examAnalysis"></div>
 
     <div class="section-title">不合格者の傾向分析</div>
@@ -187,7 +187,7 @@ function renderSummaryTable(data) {
     const total = d.passed + d.failed;
 
     return `<tr>
-      <td style="font-weight:600">${m ? `${m.label} (${m.year})` : code}</td>
+      <td style="font-weight:600">${m ? `${m.year} ${m.label}` : code}</td>
       <td>${n}人</td>
       <td>${d.activeCount}人</td>
       <td>${activeRate}%</td>
@@ -242,7 +242,7 @@ function renderExamAnalysis(data) {
       }).join('');
 
       return `<div class="exam-card">
-        <div class="exam-card-title">${m ? `${m.label} (${m.year})` : code} — Final Exam</div>
+        <div class="exam-card-title">${m ? `${m.year} ${m.label}` : code} — Final Exam</div>
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">
           合格者平均: <span class="val-good">${passedAvg.toFixed(1)}点</span>
           / 不合格者平均: <span class="val-bad">${failedAvg.toFixed(1)}点</span>
