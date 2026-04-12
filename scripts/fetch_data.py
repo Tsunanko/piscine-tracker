@@ -25,6 +25,7 @@ import json
 import os
 import re
 import statistics
+import sys
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -51,7 +52,7 @@ JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 
 # PISCINE_MONTH: どの月のPiscineを処理するか（環境変数で切り替え）
 # "02" → 2月Piscine（2026-02-02〜2026-02-27）
-# "03" → 3月Piscine（2026-03-11〜2026-04-05）
+# "03" → 3月Piscine（2026-03-16〜2026-04-10）
 PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
 
 _PISCINE_CONFIG = {
@@ -340,6 +341,7 @@ def main():
     CURSUS_42_ID = 21  # 42 本カリキュラムのID
     graduated_logins = set()
     cursus42_by_login = {}  # login → cursus42 entry（不足学生の復元に使用）
+    graduated_fetch_failed = False
     try:
         cursus42_users = fetch_all_pages(_current_token, f"/v2/cursus/{CURSUS_42_ID}/cursus_users", {
             "filter[campus_id]": CAMPUS_ID,
@@ -353,7 +355,9 @@ def main():
                 cursus42_by_login[login] = item
         print(f"  42cursus students at campus {CAMPUS_ID}: {len(graduated_logins)}")
     except Exception as e:
-        print(f"  [WARN] Failed to fetch 42cursus students: {e}")
+        graduated_fetch_failed = True
+        print(f"  [ERROR] Failed to fetch 42cursus students: {e}")
+        print(f"  [WARN] piscine_result will be set to None for all students (cannot determine pass/fail)")
 
     # ── 合格したがpiscine cursusから消えた学生のカウント ──────────────────
     # 42 APIでは、ピシン合格後に本科(cursus_42)へ移行するとpiscine cursusエントリが
@@ -376,7 +380,8 @@ def main():
     piscine_graduates = graduated_logins & set(students.keys())
     # results_announced: Piscine終了後かつ合格者が存在する場合のみ true
     # 進行中に誰かが移行しても「結果発表」扱いにしない
-    results_announced = (now >= PISCINE_END) and (len(piscine_graduates) > 0)
+    # graduated_fetch_failed時は合否判定不能のためFalse
+    results_announced = (not graduated_fetch_failed) and (now >= PISCINE_END) and (len(piscine_graduates) > 0)
     print(f"  Piscine graduates (in 42cursus): {len(piscine_graduates)}")
     print(f"  Results announced: {results_announced}")
 
@@ -921,6 +926,9 @@ def main():
             except Exception as e2:
                 print(f"  [ERROR] KV upload failed for {login}: {e2}")
         print(f"  Uploaded {ok_count}/{len(user_jsons)} user JSONs (individual fallback)")
+        if ok_count == 0:
+            print("  [FATAL] All KV uploads failed. Aborting to prevent data loss.")
+            sys.exit(1)
 
     # 6. ダッシュボード用 data.json 生成
     print("\n[6] Writing dashboard data.json...")
@@ -987,9 +995,9 @@ def main():
     online.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
     offline.sort(key=lambda x: x.get("total_hours") or 0, reverse=True)
 
-    # 合否集計（147人の piscine cursus 在籍者のみ対象）
-    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed")
-    failed_count = sum(1 for s in all_students if s.get("piscine_result") == "failed")
+    # 合否集計（piscine cursus 在籍者のうち、fetch_failedでないもののみ対象）
+    passed_count = sum(1 for s in all_students if s.get("piscine_result") == "passed" and not s.get("fetch_failed"))
+    failed_count = sum(1 for s in all_students if s.get("piscine_result") == "failed" and not s.get("fetch_failed"))
 
     dashboard = {
         "online": online,

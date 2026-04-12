@@ -474,11 +474,12 @@ function render(d) {
                       d.required_avg_remaining <= 10 ? 'orange' : 'red';
 
   // Daily chart
-  const maxH = Math.max(12, ...d.daily.map(x => x.hours));
+  const dailyData = d.daily || [];
+  const maxH = Math.max(12, ...dailyData.map(x => x.hours));
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
 
-  const bars = d.daily.map(day => {
+  const bars = dailyData.map(day => {
     const pct = (day.hours / maxH) * 100;
     const isFuture = day.date > todayStr;
     const cls = isFuture ? 'future' : day.hours === 0 ? 'zero' : day.met_target ? 'met' : 'partial';

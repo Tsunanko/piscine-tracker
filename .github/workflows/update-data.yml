@@ -32,6 +32,11 @@ on:
 permissions:
   contents: read
 
+# 同時実行を防止: 前回のデータ取得が終わる前に次回が始まるとKVデータが競合する
+concurrency:
+  group: fetch-piscine-data
+  cancel-in-progress: true
+
 jobs:
   fetch-and-upload:
     runs-on: ubuntu-latest
@@ -60,8 +65,10 @@ jobs:
           PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
         run: python scripts/fetch_data.py
 
-      # ─── Step 5: 座席隣接分析 → KV にアップロード（エラーでも続行）──
+      # ─── Step 5: 座席隣接分析 → KV にアップロード ──────────────────
+      # Step 4 (fetch_data.py) が成功した場合のみ実行。エラーでも続行。
       - name: Fetch seat neighbor analysis and upload to KV
+        if: success()
         continue-on-error: true
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}

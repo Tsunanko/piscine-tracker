@@ -85,6 +85,7 @@ function stripSensitiveUserData(userData) {
   const copy = { ...userData };
   for (const f of ADMIN_ONLY_FIELDS) delete copy[f];
   delete copy.piscine_result;
+  delete copy.results_announced;
   return copy;
 }
 
@@ -94,10 +95,11 @@ function stripSensitiveUserData(userData) {
 // ADMIN_SECRET をHMACキーとして使用（専用シークレット不要）
 
 async function signPiscineToken(login, env) {
+  if (!env.ADMIN_SECRET) throw new Error('ADMIN_SECRET is not configured');
   const ts = Date.now().toString();
   const data = `${login}:${ts}`;
   const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(env.ADMIN_SECRET || 'fallback-key'),
+    'raw', new TextEncoder().encode(env.ADMIN_SECRET),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
@@ -106,6 +108,7 @@ async function signPiscineToken(login, env) {
 }
 
 async function verifyPiscineToken(token, env) {
+  if (!env.ADMIN_SECRET) return null;  // ADMIN_SECRET未設定時はトークン検証不可
   const parts = token.split(':');
   // 旧形式 piscine:login (2パーツ) は拒否、新形式 piscine:login:ts:hmac (4パーツ) のみ許可
   if (parts.length !== 4 || parts[0] !== 'piscine') return null;
@@ -113,7 +116,7 @@ async function verifyPiscineToken(token, env) {
   if (!/^[a-zA-Z0-9_-]{1,30}$/.test(login)) return null;
   const data = `${login}:${ts}`;
   const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(env.ADMIN_SECRET || 'fallback-key'),
+    'raw', new TextEncoder().encode(env.ADMIN_SECRET),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
@@ -501,7 +504,8 @@ async function handleGetNeighbors(request, env, url) {
     });
   }
 
-  const month = url.searchParams.get('month') || '02';
+  let month = url.searchParams.get('month') || '02';
+  if (!/^[0-9]{2,4}$/.test(month)) month = '02';  // 不正な月パラメータを拒否
 
   // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   // 02はすべての認証済みユーザーがアクセス可（piscineユーザー含む）
@@ -664,6 +668,12 @@ async function handleKvUpload(request, env) {
     // { "type": "neighbors", "key": "neighbors_02", "data": {...} }
     if (type === 'neighbors' && data) {
       const kvKey = body.key || 'neighbors';
+      // KV key injection防止: neighbors_で始まる or "neighbors" のみ許可
+      if (kvKey !== 'neighbors' && !/^neighbors_[0-9]{2,4}$/.test(kvKey)) {
+        return new Response(JSON.stringify({ error: 'Invalid key' }), {
+          status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
       await env.PISCINE_DATA.put(`data:${kvKey}`, JSON.stringify(data));
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -783,7 +793,8 @@ async function handleGetData(request, env, url) {
     });
   }
 
-  const month = url?.searchParams?.get('month') || '02';
+  let month = url?.searchParams?.get('month') || '02';
+  if (!/^[0-9]{2,4}$/.test(month)) month = '02';  // 不正な月パラメータを拒否
   // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   if (month !== '02' && !user.isAdmin) {
     const allowed = await isPiscineUserInMonth(user, month, env);
@@ -846,7 +857,8 @@ async function handleGetUserData(request, env, login, url) {
     });
   }
 
-  const month = url?.searchParams?.get('month') || '02';
+  let month = url?.searchParams?.get('month') || '02';
+  if (!/^[0-9]{2,4}$/.test(month)) month = '02';  // 不正な月パラメータを拒否
   // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   if (month !== '02' && !user.isAdmin) {
     const allowed = await isPiscineUserInMonth(user, month, env);
