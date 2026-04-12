@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>期別分析 | Piscine Tracker</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --border: rgba(136,136,160,0.2);
+    --text: #e0e0e8;
+    --text-dim: #8888a0;
+    --accent: #6ea8fe;
+    --accent-light: #89b4fa;
+    --green: #00cec9;
+    --red: #ff7675;
+    --orange: #fdcb6e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .back-btn { color: var(--text-dim); text-decoration: none; font-size: 13px; border: 1px solid var(--border); padding: 4px 10px; border-radius: 6px; }
+  .back-btn:hover { color: var(--accent-light); border-color: var(--accent); }
+  .header-title { font-size: 20px; font-weight: 700; color: var(--accent-light); }
+  .header-sub { font-size: 12px; color: var(--text-dim); margin-left: auto; }
+
+  .section-title { font-size: 15px; font-weight: 600; color: var(--accent-light); margin: 24px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+  .loading { text-align: center; padding: 60px 0; color: var(--text-dim); }
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-msg { display: none; text-align: center; padding: 40px; color: var(--red); }
+
+  /* テーブル */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: rgba(110,168,254,0.08); color: var(--accent-light); font-weight: 600; padding: 8px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 10px; border-bottom: 1px solid rgba(136,136,160,0.1); white-space: nowrap; }
+  tr:hover td { background: rgba(110,168,254,0.04); }
+
+  .pct-bar { display: inline-block; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 6px; min-width: 2px; }
+  .val-good { color: var(--green); }
+  .val-warn { color: var(--orange); }
+  .val-bad { color: var(--red); }
+  .val-dim { color: var(--text-dim); }
+
+  /* Exam分析テーブル */
+  .exam-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .exam-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .exam-card-title { font-size: 13px; font-weight: 600; color: var(--accent-light); margin-bottom: 10px; }
+
+  /* 不合格者分析 */
+  .insight-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .insight-label { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .insight-value { font-size: 18px; font-weight: 700; }
+
+  @media (max-width: 600px) {
+    .exam-grid { grid-template-columns: 1fr; }
+    table { font-size: 12px; }
+    th, td { padding: 5px 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <a href="dashboard.html" class="back-btn">← Dashboard</a>
+    <div class="header-title">📊 期別分析</div>
+    <div class="header-sub" id="headerSub">管理者専用</div>
+  </div>
+
+  <div class="loading" id="loading"><div class="spinner"></div><div>読み込み中...</div></div>
+  <div class="error-msg" id="errorMsg"></div>
+
+  <div id="mainContent" style="display:none">
+    <div class="section-title">全期サマリー</div>
+    <div class="table-wrap" id="summaryTable"></div>
+
+    <div class="section-title">Exam02 × 合否（スコア帯別合格率）</div>
+    <div class="exam-grid" id="examAnalysis"></div>
+
+    <div class="section-title">不合格者の傾向分析</div>
+    <div id="failAnalysis"></div>
+  </div>
+</div>
+
+<script src="auth.js"></script>
+<script src="piscine-config.js"></script>
+<script>
+const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const me = await requireAuth();
+  if (!me) return;
+  const token = sessionStorage.getItem('piscine_42_token') || '';
+
+  // 管理者チェック
+  await isAdminUser(me);
+  if (!me._isAdmin) {
+    document.getElementById('loading').style.display = 'none';
+    const err = document.getElementById('errorMsg');
+    err.style.display = 'block';
+    err.innerHTML = '🔒 このページは管理者専用です。<br><a href="dashboard.html" style="color:var(--accent-light)">← Dashboard に戻る</a>';
+    return;
+  }
+
+  // 全月のデータを並行取得
+  const monthCodes = Object.keys(PISCINE_MONTHS);
+  const results = {};
+  const fetches = monthCodes.map(async (m) => {
+    try {
+      const param = m === '02' ? '' : `?month=${m}`;
+      const r = await fetch(`${WORKER}/api/data${param}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) results[m] = await r.json();
+    } catch (e) { console.error(`Month ${m} fetch failed:`, e); }
+  });
+  await Promise.all(fetches);
+
+  document.getElementById('loading').style.display = 'none';
+
+  if (Object.keys(results).length === 0) {
+    const err = document.getElementById('errorMsg');
+    err.style.display = 'block';
+    err.textContent = 'データを取得できませんでした';
+    return;
+  }
+
+  document.getElementById('mainContent').style.display = 'block';
+
+  // 各月の学生リストを構築
+  const monthData = {};
+  for (const [code, d] of Object.entries(results)) {
+    const all = [...(d.online || []), ...(d.offline || [])];
+    monthData[code] = {
+      all,
+      valid: all.filter(s => !s.fetch_failed && s.total_hours != null && s.total_hours > 0),
+      announced: d.results_announced || false,
+      passed: all.filter(s => s.piscine_result === 'passed').length,
+      failed: all.filter(s => s.piscine_result === 'failed').length,
+    };
+  }
+
+  renderSummaryTable(monthData);
+  renderExamAnalysis(monthData);
+  renderFailAnalysis(monthData);
+});
+
+// ─── 全期サマリーテーブル ───
+function renderSummaryTable(data) {
+  const codes = Object.keys(data);
+  if (!codes.length) return;
+
+  const rows = codes.map(code => {
+    const m = PISCINE_MONTHS[code];
+    const d = data[code];
+    const n = d.all.length;
+    const v = d.valid;
+    const activeRate = n > 0 ? (v.length / n * 100).toFixed(0) : '-';
+    const hours = v.map(s => s.total_hours);
+    const avgH = hours.length ? (hours.reduce((a, b) => a + b, 0) / hours.length).toFixed(1) : '-';
+    const medH = hours.length ? median(hours).toFixed(1) : '-';
+    const levels = v.filter(s => s.level != null).map(s => s.level);
+    const avgL = levels.length ? (levels.reduce((a, b) => a + b, 0) / levels.length).toFixed(2) : '-';
+    const passRate = d.announced && (d.passed + d.failed > 0)
+      ? (d.passed / (d.passed + d.failed) * 100).toFixed(1)
+      : null;
+
+    return `<tr>
+      <td style="font-weight:600">${m ? `${m.label} (${m.year})` : code}</td>
+      <td>${n}人</td>
+      <td>${activeRate}%</td>
+      <td>${avgH}h</td>
+      <td>${medH}h</td>
+      <td>${avgL}</td>
+      <td>${passRate !== null
+        ? `<span class="pct-bar" style="width:${passRate * 0.6}px;background:var(--green)"></span>${passRate}%`
+        : '<span class="val-dim">未発表</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('summaryTable').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>期</th><th>参加者</th><th>アクティブ率</th><th>平均時間</th><th>中央値時間</th><th>平均Level</th><th>合格率</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ─── Exam02 × 合否分析 ───
+function renderExamAnalysis(data) {
+  const container = document.getElementById('examAnalysis');
+  const brackets = [[0, 0], [1, 25], [26, 50], [51, 75], [76, 100]];
+
+  const cards = Object.entries(data)
+    .filter(([, d]) => d.announced && (d.passed + d.failed > 0))
+    .map(([code, d]) => {
+      const m = PISCINE_MONTHS[code];
+      const withExam = d.valid.filter(s => s.exam_score != null);
+      if (!withExam.length) return '';
+
+      const passedAvg = avg(withExam.filter(s => s.piscine_result === 'passed').map(s => s.exam_score));
+      const failedAvg = avg(withExam.filter(s => s.piscine_result === 'failed').map(s => s.exam_score));
+
+      const bracketRows = brackets.map(([lo, hi]) => {
+        const grp = withExam.filter(s => s.exam_score >= lo && s.exam_score <= hi);
+        if (!grp.length) return '';
+        const p = grp.filter(s => s.piscine_result === 'passed').length;
+        const rate = (p / grp.length * 100).toFixed(0);
+        const label = lo === hi ? `${lo}点` : `${lo}-${hi}`;
+        const cls = rate >= 80 ? 'val-good' : rate >= 50 ? 'val-warn' : 'val-bad';
+        return `<tr>
+          <td>${label}</td>
+          <td>${grp.length}人</td>
+          <td class="${cls}"><span class="pct-bar" style="width:${rate * 0.5}px;background:${rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--orange)' : 'var(--red)'}"></span>${rate}%</td>
+        </tr>`;
+      }).join('');
+
+      return `<div class="exam-card">
+        <div class="exam-card-title">${m ? `${m.label} (${m.year})` : code} — Final Exam</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">
+          合格者平均: <span class="val-good">${passedAvg.toFixed(1)}点</span>
+          / 不合格者平均: <span class="val-bad">${failedAvg.toFixed(1)}点</span>
+          / 受験者: ${withExam.length}人
+        </div>
+        <table>
+          <thead><tr><th>スコア帯</th><th>人数</th><th>合格率</th></tr></thead>
+          <tbody>${bracketRows}</tbody>
+        </table>
+      </div>`;
+    }).join('');
+
+  container.innerHTML = cards || '<div class="val-dim" style="padding:20px">合否発表済みのデータがありません</div>';
+}
+
+// ─── 不合格者の傾向分析 ───
+function renderFailAnalysis(data) {
+  const container = document.getElementById('failAnalysis');
+  const insights = [];
+
+  for (const [code, d] of Object.entries(data)) {
+    if (!d.announced || (d.passed + d.failed === 0)) continue;
+    const m = PISCINE_MONTHS[code];
+    const label = m ? `${m.label} (${m.year})` : code;
+
+    const failed = d.valid.filter(s => s.piscine_result === 'failed');
+    const passed = d.valid.filter(s => s.piscine_result === 'passed');
+    if (!failed.length || !passed.length) continue;
+
+    // 平均時間が高いのに不合格
+    const passedAvgHours = avg(passed.map(s => s.total_hours));
+    const highHoursFailed = failed.filter(s => s.total_hours >= passedAvgHours * 0.8);
+
+    // Exam高得点なのに不合格
+    const withExam = failed.filter(s => s.exam_score != null);
+    const highExamFailed = withExam.filter(s => s.exam_score >= 50);
+
+    insights.push(`<div class="insight-card">
+      <div class="exam-card-title">${label}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        <div>
+          <div class="insight-label">不合格者数</div>
+          <div class="insight-value val-bad">${failed.length}人 <span style="font-size:12px;font-weight:400">/ ${d.passed + d.failed}人中</span></div>
+        </div>
+        <div>
+          <div class="insight-label">不合格者 平均ログイン時間</div>
+          <div class="insight-value">${avg(failed.map(s => s.total_hours)).toFixed(1)}h <span style="font-size:12px;font-weight:400">(合格者: ${passedAvgHours.toFixed(1)}h)</span></div>
+        </div>
+        <div>
+          <div class="insight-label">時間十分なのに不合格（合格者平均の80%以上）</div>
+          <div class="insight-value val-warn">${highHoursFailed.length}人</div>
+        </div>
+        <div>
+          <div class="insight-label">Final Exam 50点以上で不合格</div>
+          <div class="insight-value val-warn">${highExamFailed.length}人 <span style="font-size:12px;font-weight:400">/ ${withExam.length}人中</span></div>
+        </div>
+      </div>
+    </div>`);
+  }
+
+  container.innerHTML = insights.length
+    ? insights.join('')
+    : '<div class="val-dim" style="padding:20px">合否発表済みのデータがありません</div>';
+}
+
+// ─── ユーティリティ ───
+function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+</script>
+</body>
+</html>

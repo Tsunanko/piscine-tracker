@@ -415,6 +415,9 @@
     }
   }
 
+  const LOG_PAGE_SIZE = 100;
+  let logPage = 0;
+
   function renderLogs(q) {
     const filtered = q
       ? allLogs.filter(l => l.login.toLowerCase().includes(q) || (l.ip || '').includes(q))
@@ -425,7 +428,12 @@
       return;
     }
 
-    const rows = filtered.map(e => `
+    const totalPages = Math.ceil(filtered.length / LOG_PAGE_SIZE);
+    logPage = Math.min(logPage, totalPages - 1);
+    const start = logPage * LOG_PAGE_SIZE;
+    const pageData = filtered.slice(start, start + LOG_PAGE_SIZE);
+
+    const rows = pageData.map(e => `
       <tr>
         <td class="ts-text">${e.ts || '-'}</td>
         <td class="login-name">${esc(e.login)}</td>
@@ -438,6 +446,17 @@
         <td><div class="ua-text" title="${esc(e.ua || '')}">${esc(e.ua || '-')}</div></td>
       </tr>
     `).join('');
+
+    const pagerHTML = totalPages > 1 ? `
+      <div style="margin-top:10px;display:flex;justify-content:center;gap:8px;align-items:center">
+        <button onclick="logPage=Math.max(0,logPage-1);renderLogs(document.getElementById('searchInput')?.value?.toLowerCase()||'')"
+          style="padding:4px 10px;background:rgba(110,168,254,0.15);color:var(--accent-light);border:1px solid rgba(110,168,254,0.3);border-radius:4px;cursor:pointer"
+          ${logPage === 0 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>← 前</button>
+        <span style="font-size:12px;color:var(--text-dim)">${logPage+1} / ${totalPages}</span>
+        <button onclick="logPage=Math.min(${totalPages-1},logPage+1);renderLogs(document.getElementById('searchInput')?.value?.toLowerCase()||'')"
+          style="padding:4px 10px;background:rgba(110,168,254,0.15);color:var(--accent-light);border:1px solid rgba(110,168,254,0.3);border-radius:4px;cursor:pointer"
+          ${logPage >= totalPages-1 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>次 →</button>
+      </div>` : '';
 
     document.getElementById('tableArea').innerHTML = `
       <div class="table-wrap">
@@ -455,8 +474,9 @@
         </table>
       </div>
       <div style="margin-top:10px;font-size:11px;color:var(--text-dim);text-align:right">
-        ${filtered.length} / ${allLogs.length} 件表示
+        ${start+1}–${start+pageData.length} / ${filtered.length} 件表示
       </div>
+      ${pagerHTML}
     `;
   }
 

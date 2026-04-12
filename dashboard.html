@@ -532,6 +532,7 @@
     </svg>
   </button>
 
+<script src="piscine-config.js"></script>
 <script>
 let dashboardData = null;
 let loadSeq = 0; // 競合状態防止：最新のフェッチだけ反映する
@@ -707,10 +708,9 @@ function renderDashboard() {
   const clusters = [...new Set(d.online.map(s => s.cluster).filter(Boolean))].sort();
 
   // Update header
-  const periodLabel = currentMonth === '2408' ? 'Aug 5 - Aug 30, 2024'
-                    : currentMonth === '2409' ? 'Sep 2 - Sep 27, 2024'
-                    : currentMonth === '03'   ? 'Mar 16 - Apr 10, 2026'
-                    :                          'Feb 2 - Feb 27, 2026';
+  const periodLabel = (typeof formatPiscinePeriod === 'function')
+    ? formatPiscinePeriod(currentMonth)
+    : currentMonth;
   document.getElementById('headerSub').textContent = periodLabel;
   // 月タブ表示: 管理者は全タブ、一般ユーザーは参加月のタブのみ
   const monthTabs = document.getElementById('monthTabs');
@@ -786,6 +786,7 @@ function renderDashboard() {
   const adminLink = isAdmin
     ? `<span style="width:1px;height:14px;background:var(--border);margin:0 4px;display:inline-block;vertical-align:middle"></span>
        <a href="compare.html" class="sort-btn" style="text-decoration:none;color:var(--green);border-color:rgba(0,206,201,0.3)">🔬 比較</a>
+       <a href="term-analysis.html" class="sort-btn" style="text-decoration:none;color:#a29bfe;border-color:#a29bfe44">📊 期別分析</a>
        <a href="admin.html" class="sort-btn" style="text-decoration:none;color:#fdcb6e;border-color:#fdcb6e44">🔐 Admin</a>`
     : '';
   document.getElementById('sortBar').innerHTML = `
@@ -952,6 +953,11 @@ async function loadDashboard() {
     // より新しいフェッチが開始されていたら、このレスポンスを捨てる
     if (mySeq !== loadSeq) return;
 
+    // nullガード: APIが不完全なデータを返した場合に備える
+    if (data) {
+      data.online = data.online || [];
+      data.offline = data.offline || [];
+    }
     dashboardData = data;
     renderDashboard();
   } catch (e) {
@@ -965,6 +971,9 @@ function switchMonth(month) {
   if (currentMonth === month) return;
   currentMonth = month;
   currentFilter = 'all';
+  searchQuery = '';
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) searchInput.value = '';
   // タブのスタイル切り替え
   ['2408', '2409', '02', '03'].forEach(m => {
     const tab = document.getElementById(`tab${m}`);
