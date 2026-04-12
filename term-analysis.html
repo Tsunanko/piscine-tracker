@@ -212,50 +212,81 @@ function renderSummaryTable(data) {
     </table>`;
 }
 
-// ─── Exam02 × 合否分析 ───
+// ─── Final Exam × 合否分析 ───
 function renderExamAnalysis(data) {
   const container = document.getElementById('examAnalysis');
-  const brackets = [[0, 0], [1, 25], [26, 50], [51, 75], [76, 100]];
+  const brackets = [[0,0],[1,10],[11,20],[21,30],[31,40],[41,50],[51,60],[61,70],[71,80],[81,90],[91,100]];
 
-  const cards = Object.entries(data)
+  // 合否発表済みの月のみ（新しい順）
+  const announced = Object.entries(data)
     .filter(([, d]) => d.announced && (d.passed + d.failed > 0))
-    .map(([code, d]) => {
-      const m = PISCINE_MONTHS[code];
+    .sort((a, b) => {
+      const ya = PISCINE_MONTHS[a[0]]?.year || 0, yb = PISCINE_MONTHS[b[0]]?.year || 0;
+      if (ya !== yb) return yb - ya;
+      return (PISCINE_MONTHS[b[0]]?.start || '').localeCompare(PISCINE_MONTHS[a[0]]?.start || '');
+    });
+
+  if (!announced.length) {
+    container.innerHTML = '<div class="val-dim" style="padding:20px">合否発表済みのデータがありません</div>';
+    return;
+  }
+
+  // サマリー: 各期の合格者平均・不合格者平均・最低合格点
+  const summaryRows = announced.map(([code, d]) => {
+    const m = PISCINE_MONTHS[code];
+    const label = m ? `${m.year} ${m.label}` : code;
+    const withExam = d.valid.filter(s => s.exam_score != null);
+    const passedScores = withExam.filter(s => s.piscine_result === 'passed').map(s => s.exam_score);
+    const failedScores = withExam.filter(s => s.piscine_result === 'failed').map(s => s.exam_score);
+    const minPass = passedScores.length ? Math.min(...passedScores) : '-';
+    return `<tr>
+      <td style="font-weight:600">${label}</td>
+      <td>${withExam.length}人</td>
+      <td class="val-good">${passedScores.length ? avg(passedScores).toFixed(1) : '-'}</td>
+      <td class="val-bad">${failedScores.length ? avg(failedScores).toFixed(1) : '-'}</td>
+      <td style="font-weight:700;color:var(--orange)">${minPass}</td>
+    </tr>`;
+  }).join('');
+
+  // スコア帯別合格率の全期横並びテーブル
+  const headerCells = announced.map(([code]) => {
+    const m = PISCINE_MONTHS[code];
+    return `<th>${m ? `${m.year}<br>${m.label}` : code}</th>`;
+  }).join('');
+
+  const bracketRows = brackets.map(([lo, hi]) => {
+    const label = lo === hi ? `${lo}点` : `${lo}-${hi}`;
+    const cells = announced.map(([, d]) => {
       const withExam = d.valid.filter(s => s.exam_score != null);
-      if (!withExam.length) return '';
+      const grp = withExam.filter(s => s.exam_score >= lo && s.exam_score <= hi);
+      if (!grp.length) return '<td class="val-dim">-</td>';
+      const p = grp.filter(s => s.piscine_result === 'passed').length;
+      const rate = (p / grp.length * 100).toFixed(0);
+      const barColor = rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--orange)' : 'var(--red)';
+      return `<td><span class="pct-bar" style="width:${rate * 0.4}px;background:${barColor}"></span>${rate}% <span class="val-dim">(${grp.length}人)</span></td>`;
+    }).join('');
+    return `<tr><td>${label}</td>${cells}</tr>`;
+  }).join('');
 
-      const passedAvg = avg(withExam.filter(s => s.piscine_result === 'passed').map(s => s.exam_score));
-      const failedAvg = avg(withExam.filter(s => s.piscine_result === 'failed').map(s => s.exam_score));
-
-      const bracketRows = brackets.map(([lo, hi]) => {
-        const grp = withExam.filter(s => s.exam_score >= lo && s.exam_score <= hi);
-        if (!grp.length) return '';
-        const p = grp.filter(s => s.piscine_result === 'passed').length;
-        const rate = (p / grp.length * 100).toFixed(0);
-        const label = lo === hi ? `${lo}点` : `${lo}-${hi}`;
-        const cls = rate >= 80 ? 'val-good' : rate >= 50 ? 'val-warn' : 'val-bad';
-        return `<tr>
-          <td>${label}</td>
-          <td>${grp.length}人</td>
-          <td class="${cls}"><span class="pct-bar" style="width:${rate * 0.5}px;background:${rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--orange)' : 'var(--red)'}"></span>${rate}%</td>
-        </tr>`;
-      }).join('');
-
-      return `<div class="exam-card">
-        <div class="exam-card-title">${m ? `${m.year} ${m.label}` : code} — Final Exam</div>
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">
-          合格者平均: <span class="val-good">${passedAvg.toFixed(1)}点</span>
-          / 不合格者平均: <span class="val-bad">${failedAvg.toFixed(1)}点</span>
-          / 受験者: ${withExam.length}人
-        </div>
+  container.innerHTML = `
+    <div class="exam-card" style="margin-bottom:16px">
+      <div class="exam-card-title">期別サマリー</div>
+      <div class="table-wrap">
         <table>
-          <thead><tr><th>スコア帯</th><th>人数</th><th>合格率</th></tr></thead>
+          <thead><tr><th>期</th><th>受験者</th><th>合格者平均</th><th>不合格者平均</th><th>最低合格点</th></tr></thead>
+          <tbody>${summaryRows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="exam-card">
+      <div class="exam-card-title">スコア帯別合格率（全期比較）</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>スコア帯</th>${headerCells}</tr></thead>
           <tbody>${bracketRows}</tbody>
         </table>
-      </div>`;
-    }).join('');
-
-  container.innerHTML = cards || '<div class="val-dim" style="padding:20px">合否発表済みのデータがありません</div>';
+      </div>
+    </div>`;
 }
 
 // ─── 不合格者の傾向分析 ───
