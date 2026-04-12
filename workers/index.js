@@ -48,6 +48,9 @@ const AUTH_URL     = 'https://api.intra.42.fr/oauth/authorize';  // 認可ペー
 const TOKEN_URL    = 'https://api.intra.42.fr/oauth/token';       // token交換
 const USERINFO_URL = 'https://api.intra.42.fr/v2/me';            // ユーザー情報
 
+// ─── 対応する全Piscine月コード（一元定義）────────────────────────────────
+const VALID_MONTHS = ['2408', '2409', '2502', '2503', '02', '03'];
+
 // CORS（Cross-Origin Resource Sharing）設定
 // GitHub Pages (tsunanko.github.io) からのリクエストのみ許可
 // OPTIONS リクエスト（ブラウザのプリフライト）に対してこのヘッダーを返す
@@ -85,6 +88,7 @@ function stripSensitiveUserData(userData) {
   const copy = { ...userData };
   for (const f of ADMIN_ONLY_FIELDS) delete copy[f];
   delete copy.piscine_result;
+  delete copy.results_announced;
   return copy;
 }
 
@@ -94,10 +98,11 @@ function stripSensitiveUserData(userData) {
 // ADMIN_SECRET をHMACキーとして使用（専用シークレット不要）
 
 async function signPiscineToken(login, env) {
+  if (!env.ADMIN_SECRET) throw new Error('ADMIN_SECRET is not configured');
   const ts = Date.now().toString();
   const data = `${login}:${ts}`;
   const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(env.ADMIN_SECRET || 'fallback-key'),
+    'raw', new TextEncoder().encode(env.ADMIN_SECRET),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
@@ -106,6 +111,7 @@ async function signPiscineToken(login, env) {
 }
 
 async function verifyPiscineToken(token, env) {
+  if (!env.ADMIN_SECRET) return null;  // ADMIN_SECRET未設定時はトークン検証不可
   const parts = token.split(':');
   // 旧形式 piscine:login (2パーツ) は拒否、新形式 piscine:login:ts:hmac (4パーツ) のみ許可
   if (parts.length !== 4 || parts[0] !== 'piscine') return null;
@@ -113,7 +119,7 @@ async function verifyPiscineToken(token, env) {
   if (!/^[a-zA-Z0-9_-]{1,30}$/.test(login)) return null;
   const data = `${login}:${ts}`;
   const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(env.ADMIN_SECRET || 'fallback-key'),
+    'raw', new TextEncoder().encode(env.ADMIN_SECRET),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
@@ -158,7 +164,7 @@ async function isAdmin(request, env) {
   try {
     const cached = await env.PISCINE_DATA.get(cacheKey);
     if (cached !== null) return cached === 'admin';
-  } catch {}
+  } catch (e) { console.error(e); }
 
   // 42 OAuth トークンの場合: 42 API /v2/me で実際にユーザーを確認
   try {
@@ -173,7 +179,7 @@ async function isAdmin(request, env) {
       await env.PISCINE_DATA.put(cacheKey, result ? 'admin' : 'user', { expirationTtl: 300 }).catch(() => {});
       return result;
     }
-  } catch {}
+  } catch (e) { console.error(e); }
   return false;
 }
 
@@ -206,7 +212,7 @@ async function checkDataAuth(request, env) {
       const adminLogin = env.ADMIN_LOGIN || '';
       return { login: user.login, type: 'oauth', isAdmin: adminLogin && user.login === adminLogin };
     }
-  } catch {}
+  } catch (e) { console.error(e); }
   return null;
 }
 
@@ -501,7 +507,8 @@ async function handleGetNeighbors(request, env, url) {
     });
   }
 
-  const month = url.searchParams.get('month') || '02';
+  let month = url.searchParams.get('month') || '02';
+  if (!/^[0-9]{2,4}$/.test(month)) month = '02';  // 不正な月パラメータを拒否
 
   // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   // 02はすべての認証済みユーザーがアクセス可（piscineユーザー含む）
@@ -588,7 +595,7 @@ async function handleSimpleLogin(request, env) {
       const ua  = request.headers.get('User-Agent') || '';
       const key = `log:${jst.toISOString().replace(/[^0-9]/g, '').slice(0, 14)}_${login}`;
       await env.LOGIN_LOGS.put(key, JSON.stringify({ login, method: 'passphrase', ts, ip, ua }));
-    } catch {} // ログ失敗でもログイン自体は続行
+    } catch (e) { console.error(e); } // ログ失敗でもログイン自体は続行
 
     // HMAC署名付きトークンを生成して返す
     const signedToken = await signPiscineToken(login, env);
@@ -625,7 +632,6 @@ async function handleKvUpload(request, env) {
   try {
     const body = await request.json();
     const { type, data, login, month } = body;
-    const VALID_MONTHS = ['2408', '2409', '02', '03'];
     const m = VALID_MONTHS.includes(month) ? month : '02';  // デフォルト02、バリデーション付き
 
     if (type === 'summary') {
@@ -664,6 +670,12 @@ async function handleKvUpload(request, env) {
     // { "type": "neighbors", "key": "neighbors_02", "data": {...} }
     if (type === 'neighbors' && data) {
       const kvKey = body.key || 'neighbors';
+      // KV key injection防止: neighbors_で始まる or "neighbors" のみ許可
+      if (kvKey !== 'neighbors' && !/^neighbors_[0-9]{2,4}$/.test(kvKey)) {
+        return new Response(JSON.stringify({ error: 'Invalid key' }), {
+          status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
       await env.PISCINE_DATA.put(`data:${kvKey}`, JSON.stringify(data));
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -676,7 +688,7 @@ async function handleKvUpload(request, env) {
     });
   } catch (e) {
     console.error('KV upload error:', e);
-    return new Response(JSON.stringify({ error: 'Internal Server Error', detail: e?.message || String(e) }), {
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
       status: 500,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
@@ -696,7 +708,7 @@ async function handleGetMyMonths(request, env) {
     });
   }
 
-  const ALL_MONTHS = ['2408', '2409', '02', '03'];
+  const ALL_MONTHS = VALID_MONTHS;
 
   if (user.isAdmin) {
     return new Response(JSON.stringify({ months: ALL_MONTHS, isAdmin: true }), {
@@ -712,7 +724,7 @@ async function handleGetMyMonths(request, env) {
     try {
       const batch = JSON.parse(batchVal);
       if (batch[user.login]) months.push(m);
-    } catch {}
+    } catch (e) { console.error(e); }
   }
 
   return new Response(JSON.stringify({ months, isAdmin: false }), {
@@ -741,7 +753,7 @@ async function handleCheckUserMonths(request, env, url) {
       });
     }
 
-    const ALL_MONTHS = ['2408', '2409', '02', '03'];
+    const ALL_MONTHS = VALID_MONTHS;
     const result = {};
 
     for (const m of ALL_MONTHS) {
@@ -763,7 +775,8 @@ async function handleCheckUserMonths(request, env, url) {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: 'Internal error', detail: e?.message || String(e) }), {
+    console.error('check-user-months error:', e);
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
       status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
@@ -783,7 +796,8 @@ async function handleGetData(request, env, url) {
     });
   }
 
-  const month = url?.searchParams?.get('month') || '02';
+  let month = url?.searchParams?.get('month') || '02';
+  if (!/^[0-9]{2,4}$/.test(month)) month = '02';  // 不正な月パラメータを拒否
   // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   if (month !== '02' && !user.isAdmin) {
     const allowed = await isPiscineUserInMonth(user, month, env);
@@ -814,7 +828,7 @@ async function handleGetData(request, env, url) {
       return new Response(JSON.stringify(filtered), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
-    } catch {}
+    } catch (e) { console.error(e); }
   }
 
   return new Response(val, {
@@ -846,7 +860,8 @@ async function handleGetUserData(request, env, login, url) {
     });
   }
 
-  const month = url?.searchParams?.get('month') || '02';
+  let month = url?.searchParams?.get('month') || '02';
+  if (!/^[0-9]{2,4}$/.test(month)) month = '02';  // 不正な月パラメータを拒否
   // 02以外は管理者 or 該当月に参加したpiscineユーザーのみ
   if (month !== '02' && !user.isAdmin) {
     const allowed = await isPiscineUserInMonth(user, month, env);
@@ -870,7 +885,7 @@ async function handleGetUserData(request, env, login, url) {
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
       }
-    } catch {}
+    } catch (e) { console.error(e); }
   }
 
   // 2. 02月のみ: 個別キーにフォールバック（後方互換）
@@ -883,7 +898,7 @@ async function handleGetUserData(request, env, login, url) {
           return new Response(JSON.stringify(stripSensitiveUserData(parsed)), {
             headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
           });
-        } catch {}
+        } catch (e) { console.error(e); }
       }
       return new Response(individual, {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -1083,7 +1098,7 @@ async function handleCallback(request, env, url) {
     const ua  = request.headers.get('User-Agent') || '';
     const key = `log:${jst.toISOString().replace(/[^0-9]/g, '').slice(0, 14)}_${user.login}`;
     await env.LOGIN_LOGS.put(key, JSON.stringify({ login: user.login, method: 'oauth', ts, ip, ua }));
-  } catch {}
+  } catch (e) { console.error(e); }
 
   // ─── 成功: GitHub Pages の auth-callback.html へリダイレクト ────────
   // URLのハッシュ（#以降）に access_token と user情報を埋め込む

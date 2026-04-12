@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       month:
-        description: 'Piscine月 ("2408"=2024年8月 / "2409"=2024年9月 / "02"=2026年2月 / "03"=2026年3月)'
+        description: 'Piscine月 ("2408"=2024年8月 / "2409"=2024年9月 / "2502"=2025年2月 / "2503"=2025年3月 / "02"=2026年2月 / "03"=2026年3月)'
         required: false
         default: '03'
   schedule:
@@ -31,6 +31,11 @@ on:
 
 permissions:
   contents: read
+
+# 同時実行を防止: 前回のデータ取得が終わる前に次回が始まるとKVデータが競合する
+concurrency:
+  group: fetch-piscine-data
+  cancel-in-progress: true
 
 jobs:
   fetch-and-upload:
@@ -60,8 +65,10 @@ jobs:
           PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
         run: python scripts/fetch_data.py
 
-      # ─── Step 5: 座席隣接分析 → KV にアップロード（エラーでも続行）──
+      # ─── Step 5: 座席隣接分析 → KV にアップロード ──────────────────
+      # Step 4 (fetch_data.py) が成功した場合のみ実行。エラーでも続行。
       - name: Fetch seat neighbor analysis and upload to KV
+        if: success()
         continue-on-error: true
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}

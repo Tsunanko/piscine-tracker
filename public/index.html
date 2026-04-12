@@ -395,7 +395,7 @@
 </script>
   <div class="container" id="app">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
+      <a id="dashLinkInit" href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
       <a id="statsLinkInit" href="stats.html" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
     </div>
     <div class="loading" id="loading">
@@ -426,10 +426,12 @@ const params = new URLSearchParams(window.location.search);
 const LOGIN = params.get('login') || 'yuichika';
 const PAGE_MONTH = params.get('month') || '02'; // 3月Piscineの場合 '03'
 
-// 初期表示の統計リンクにもloginを付ける
+// 初期表示のリンクにloginと月パラメータを付ける
 const initStatsLink = document.getElementById('statsLinkInit');
+const initDashLink = document.getElementById('dashLinkInit');
 const monthSuffix = PAGE_MONTH !== '02' ? `&month=${PAGE_MONTH}` : '';
 if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}${monthSuffix}`;
+if (initDashLink && PAGE_MONTH !== '02') initDashLink.href = `dashboard.html?month=${PAGE_MONTH}`;
 
 let currentStudentData = null;
 
@@ -474,11 +476,12 @@ function render(d) {
                       d.required_avg_remaining <= 10 ? 'orange' : 'red';
 
   // Daily chart
-  const maxH = Math.max(12, ...d.daily.map(x => x.hours));
+  const dailyData = d.daily || [];
+  const maxH = Math.max(12, ...dailyData.map(x => x.hours));
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
 
-  const bars = d.daily.map(day => {
+  const bars = dailyData.map(day => {
     const pct = (day.hours / maxH) * 100;
     const isFuture = day.date > todayStr;
     const cls = isFuture ? 'future' : day.hours === 0 ? 'zero' : day.met_target ? 'met' : 'partial';
@@ -584,7 +587,7 @@ function render(d) {
 
   app.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <a href="dashboard.html" class="back-link" style="margin-bottom:0">← Dashboard</a>
+      <a href="dashboard.html${PAGE_MONTH !== '02' ? '?month=' + PAGE_MONTH : ''}" class="back-link" style="margin-bottom:0">← Dashboard</a>
       <a href="stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
     </div>
 
