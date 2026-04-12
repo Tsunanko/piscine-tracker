@@ -104,7 +104,7 @@ WORKER_SECRET = os.environ.get("WORKER_SECRET", "")
 
 # 偏差値計算: アクティブ学生の判定条件
 # Piscine終了後は PISCINE_END を基準に使う（終了後7日以上経過で母集団が空になるバグ防止）
-ACTIVE_DAYS_THRESHOLD  = 7    # 直近何日間を見るか
+ACTIVE_DAYS_THRESHOLD  = 3    # 直近何日間を見るか
 ACTIVE_HOURS_THRESHOLD = 1.0  # 何時間以上来たら「アクティブ」とみなすか
 
 
