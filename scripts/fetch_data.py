@@ -56,6 +56,11 @@ JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
 
 _PISCINE_CONFIG = {
+    "2303": {
+        "start": datetime(2023, 3, 6,  0, 0, 0, tzinfo=JST),
+        "end":   datetime(2023, 4, 1,  0, 0, 0, tzinfo=JST),  # 3/31の翌日
+        "days":  26,
+    },
     "2408": {
         "start": datetime(2024, 8, 5,  0, 0, 0, tzinfo=JST),
         "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),  # 8/30の翌日
