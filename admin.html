@@ -292,6 +292,7 @@
   <div id="tableArea"></div>
 </div>
 
+<script src="piscine-config.js"></script>
 <script>
   const WORKER = 'https://piscine-tracker.tsunanko.workers.dev';
 
@@ -373,9 +374,9 @@
       });
       const data = await resp.json();
       if (!resp.ok) { resultEl.textContent = `エラー: ${data.error}`; return; }
-      const monthNames = {'2408':'8月(2024)','2409':'9月(2024)','02':'2月(2026)','03':'3月(2026)'};
       const lines = Object.entries(data.months).map(([m, info]) => {
-        const name = monthNames[m] || m;
+        const pm = (typeof PISCINE_MONTHS !== 'undefined') ? PISCINE_MONTHS[m] : null;
+        const name = pm ? `${pm.year} ${pm.label}` : m;
         if (info.exists) return `<span style="color:var(--green)">${name}: 所属あり</span> (全${info.totalUsers}人中)`;
         if (info.reason) return `<span style="color:var(--red)">${name}: ${info.reason}</span>`;
         return `<span style="color:var(--text-dim)">${name}: 所属なし</span> (全${info.totalUsers}人中)`;
