@@ -171,6 +171,8 @@ function renderSummaryTable(data) {
       ? (d.passed / (d.passed + d.failed) * 100).toFixed(1)
       : null;
 
+    const total = d.passed + d.failed;
+
     return `<tr>
       <td style="font-weight:600">${m ? `${m.label} (${m.year})` : code}</td>
       <td>${n}人</td>
@@ -178,6 +180,9 @@ function renderSummaryTable(data) {
       <td>${avgH}h</td>
       <td>${medH}h</td>
       <td>${avgL}</td>
+      <td>${d.announced && total > 0
+        ? `<span class="val-good">${d.passed}人</span> <span class="val-dim">/ ${total}人</span>`
+        : '<span class="val-dim">未発表</span>'}</td>
       <td>${passRate !== null
         ? `<span class="pct-bar" style="width:${passRate * 0.6}px;background:var(--green)"></span>${passRate}%`
         : '<span class="val-dim">未発表</span>'}</td>
@@ -187,7 +192,7 @@ function renderSummaryTable(data) {
   document.getElementById('summaryTable').innerHTML = `
     <table>
       <thead><tr>
-        <th>期</th><th>参加者</th><th>アクティブ率</th><th>平均時間</th><th>中央値時間</th><th>平均Level</th><th>合格率</th>
+        <th>期</th><th>参加者</th><th>アクティブ率</th><th>平均時間</th><th>中央値時間</th><th>平均Level</th><th>合格人数</th><th>合格率</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
