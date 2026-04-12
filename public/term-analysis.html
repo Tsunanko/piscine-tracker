@@ -131,7 +131,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('mainContent').style.display = 'block';
 
-  // 各月の学生リストを構築
+  // 取得状況をコンソールに出力（デバッグ用）
+  console.log('Fetched months:', Object.keys(results));
+  for (const [code, d] of Object.entries(results)) {
+    const all = [...(d.online || []), ...(d.offline || [])];
+    console.log(`  ${code}: ${all.length} students, results_announced=${d.results_announced}`);
+  }
+
+  // 各月の学生リストを構築（データ取得できた月のみ）
   const monthData = {};
   for (const [code, d] of Object.entries(results)) {
     const all = [...(d.online || []), ...(d.offline || [])];
@@ -153,7 +160,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 // ─── 全期サマリーテーブル ───
 function renderSummaryTable(data) {
-  const codes = Object.keys(data);
+  // 新しい順（年→月の降順）にソート
+  const codes = Object.keys(data).sort((a, b) => {
+    const ya = PISCINE_MONTHS[a]?.year || 0, yb = PISCINE_MONTHS[b]?.year || 0;
+    if (ya !== yb) return yb - ya;
+    const sa = PISCINE_MONTHS[a]?.start || '', sb = PISCINE_MONTHS[b]?.start || '';
+    return sb.localeCompare(sa);
+  });
   if (!codes.length) return;
 
   const rows = codes.map(code => {
@@ -176,6 +189,7 @@ function renderSummaryTable(data) {
     return `<tr>
       <td style="font-weight:600">${m ? `${m.label} (${m.year})` : code}</td>
       <td>${n}人</td>
+      <td>${d.activeCount}人</td>
       <td>${activeRate}%</td>
       <td>${avgH}h</td>
       <td>${medH}h</td>
@@ -192,7 +206,7 @@ function renderSummaryTable(data) {
   document.getElementById('summaryTable').innerHTML = `
     <table>
       <thead><tr>
-        <th>期</th><th>参加者</th><th>アクティブ率</th><th>平均時間</th><th>中央値時間</th><th>平均Level</th><th>合格人数</th><th>合格率</th>
+        <th>期</th><th>参加者</th><th>アクティブ</th><th>アクティブ率</th><th>平均時間</th><th>中央値時間</th><th>平均Level</th><th>合格人数</th><th>合格率</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
