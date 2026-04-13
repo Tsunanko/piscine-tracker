@@ -1041,6 +1041,12 @@ async function handleCallback(request, env, url) {
 
   if (!tokenResp.ok) {
     const errText = await tokenResp.text().catch(() => '');
+    const isClientError = errText.includes('invalid_client') || errText.includes('unknown client');
+    if (isClientError) {
+      return errorPage('メンテナンス中',
+        '42 OAuth認証キーの更新が必要です。管理者が対応するまでお待ちください。\n' +
+        '合言葉ログインは引き続き利用可能です。');
+    }
     return errorPage('認証失敗', `トークン取得に失敗しました。\n${errText}`);
   }
 
