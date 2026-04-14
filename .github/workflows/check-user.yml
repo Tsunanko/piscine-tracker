@@ -1,4 +1,4 @@
-name: Check User Piscine Dates
+name: Check User Data
 on:
   workflow_dispatch:
     inputs:
@@ -6,6 +6,10 @@ on:
         description: '42 login name'
         required: true
         default: 'hirosuzu'
+      script:
+        description: 'Script to run (piscine / eval_points)'
+        required: false
+        default: 'piscine'
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -15,8 +19,13 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install requests
-      - name: Check user piscine dates
+      - name: Run check script
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-        run: python scripts/check_user_piscine.py ${{ github.event.inputs.login }}
+        run: |
+          if [ "${{ github.event.inputs.script }}" = "eval_points" ]; then
+            python scripts/check_eval_points.py ${{ github.event.inputs.login }}
+          else
+            python scripts/check_user_piscine.py ${{ github.event.inputs.login }}
+          fi
