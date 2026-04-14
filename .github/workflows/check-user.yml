@@ -30,6 +30,8 @@ jobs:
             python scripts/analyze_eval_sales.py
           elif [ "${{ github.event.inputs.script }}" = "eval_rewards" ]; then
             python scripts/check_eval_rewards.py
+          elif [ "${{ github.event.inputs.script }}" = "predict_sale" ]; then
+            python scripts/predict_eval_sale.py
           else
             python scripts/check_user_piscine.py ${{ github.event.inputs.login }}
           fi
