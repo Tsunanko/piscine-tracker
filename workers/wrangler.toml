@@ -5,6 +5,7 @@ compatibility_date = "2024-01-01"
 # Secrets (set via: wrangler secret put <NAME>)
 # - FORTY_TWO_CLIENT_ID     : 42 OAuthアプリのUID
 # - FORTY_TWO_CLIENT_SECRET : 42 OAuthアプリのSecret
+# - FORTY_TWO_CLIENT_SECRET_NEXT : 次のSecret（任意）。42画面の"Next secret"を入れるとローテーション無停止
 # - REDIRECT_URI            : https://piscine-tracker.tsunanko.workers.dev/auth/callback
 # - ADMIN_SECRET            : ログ閲覧用の管理者トークン（任意の文字列）
 
