@@ -176,16 +176,31 @@ def get_token():
     ユーザーのデータ取得（ブラウザ側）は Authorization Code Flow を使う。
     """
     global _current_token
-    client_id     = os.environ["CLIENT_ID"]
-    client_secret = os.environ["CLIENT_SECRET"]
-    resp = requests.post(TOKEN_URL, data={
-        "grant_type":    "client_credentials",  # サーバー間認証
-        "client_id":     client_id,
-        "client_secret": client_secret,
-    })
-    resp.raise_for_status()  # エラー時は HTTPError を raise
-    _current_token = resp.json()["access_token"]
-    return _current_token
+    client_id = os.environ["CLIENT_ID"]
+    # 42のSecretは定期ローテーションするため、現行(CLIENT_SECRET)を試し、
+    # invalid_clientなら予備(CLIENT_SECRET_NEXT)で再試行する。切替時も無停止で動く。
+    secrets = [s for s in (os.environ.get("CLIENT_SECRET", ""),
+                           os.environ.get("CLIENT_SECRET_NEXT", "")) if s]
+    if not client_id or not secrets:
+        raise Exception("CLIENT_ID and CLIENT_SECRET must be set in .env file")
+
+    last_resp = None
+    for idx, client_secret in enumerate(secrets):
+        resp = requests.post(TOKEN_URL, data={
+            "grant_type":    "client_credentials",  # サーバー間認証
+            "client_id":     client_id,
+            "client_secret": client_secret,
+        })
+        if resp.ok:
+            if idx > 0:
+                print("  [AUTH] 現行Secretが無効 → 予備(CLIENT_SECRET_NEXT)で認証成功（ローテーション切替を検知）")
+            _current_token = resp.json()["access_token"]
+            return _current_token
+        last_resp = resp
+
+    # 現行・予備の両方で失敗 → Secret更新が必要
+    print("  [AUTH] CLIENT_SECRET / CLIENT_SECRET_NEXT の両方で認証失敗。Secret更新が必要です。")
+    last_resp.raise_for_status()  # エラー時は HTTPError を raise
 
 
 def refresh_token():

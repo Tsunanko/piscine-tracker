@@ -32,6 +32,7 @@
  * 【Secrets（環境変数）一覧 - wrangler secret put で登録】
  * FORTY_TWO_CLIENT_ID     → 42 Intra OAuth App の UID
  * FORTY_TWO_CLIENT_SECRET → 42 Intra OAuth App の Secret（絶対に公開しない）
+ * FORTY_TWO_CLIENT_SECRET_NEXT → 次のSecret（任意・ローテーション無停止用）。42画面の"Next secret"を入れておく
  * REDIRECT_URI            → コールバックURL（このWorkerの /auth/callback）
  * ADMIN_SECRET            → 管理者認証用の任意文字列
  * PASS_HASH_1             → 合言葉1のSHA-256ハッシュ（Piscine生向け合言葉認証）
@@ -1013,6 +1014,38 @@ function startOAuth(env) {
  * このエンドポイントが OAuth の「核心部分」。
  * CLIENT_SECRET を使うため、ブラウザではなくサーバー（Workers）が処理する必要がある。
  */
+/**
+ * 42 の token エンドポイントへ client_secret を使って交換リクエストを送る。
+ * 42 の Secret は定期的に自動ローテーションされるため、現行 (FORTY_TWO_CLIENT_SECRET) を
+ * 試し、invalid_client（＝Secret不一致）の場合のみ予備 (FORTY_TWO_CLIENT_SECRET_NEXT) で
+ * 再試行する。これにより 42 側で Secret が切り替わっても無停止でログインできる。
+ *
+ * 注: invalid_client は client 認証段階で弾かれ、code（使い捨て）を消費しないため、
+ *     同じ code で予備 Secret を使った再試行は安全。
+ *
+ * @returns {Promise<{ok:true, resp:Response} | {ok:false, clientError:boolean, errText:string}>}
+ */
+async function exchangeOAuthToken(env, params) {
+  // 現行 → 予備 の順。未設定（undefined/空文字）は除外する。
+  const secrets = [env.FORTY_TWO_CLIENT_SECRET, env.FORTY_TWO_CLIENT_SECRET_NEXT].filter(Boolean);
+  let errText = 'client_secret が設定されていません';
+  for (const secret of secrets) {
+    const resp = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ ...params, client_secret: secret }),
+    });
+    if (resp.ok) return { ok: true, resp };
+    errText = await resp.text().catch(() => '');
+    const isClientError = errText.includes('invalid_client') || errText.includes('unknown client');
+    // invalid_client 以外（code期限切れ等）は予備で再試行しても無駄なので即返す
+    if (!isClientError) return { ok: false, clientError: false, errText };
+    // invalid_client なら次の Secret を試す（ループ継続）
+  }
+  // 全 Secret が invalid_client → 本当に Secret 更新が必要な状態
+  return { ok: false, clientError: true, errText };
+}
+
 async function handleCallback(request, env, url) {
   const code  = url.searchParams.get('code');   // 42 Intra が発行した一時コード
   const state = url.searchParams.get('state');  // CSRF チェック用
@@ -1026,31 +1059,26 @@ async function handleCallback(request, env, url) {
   }
 
   // ─── Authorization Code → Access Token に交換 ───────────────────────
-  // この POST リクエストで CLIENT_SECRET を使う（ブラウザには渡さない）
-  const tokenResp = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type:    'authorization_code',         // フロー種別
-      client_id:     env.FORTY_TWO_CLIENT_ID,
-      client_secret: env.FORTY_TWO_CLIENT_SECRET,  // 秘密鍵（Workers Secretから取得）
-      code,                                        // 42 Intra が発行した一時コード
-      redirect_uri:  env.REDIRECT_URI,
-    }),
+  // この POST で client_secret を使う（ブラウザには渡さない）。
+  // Secretは定期ローテーションするため、現行→予備の順で交換を試みる（exchangeOAuthToken内）。
+  const tokenResult = await exchangeOAuthToken(env, {
+    grant_type:   'authorization_code',          // フロー種別
+    client_id:    env.FORTY_TWO_CLIENT_ID,
+    code,                                         // 42 Intra が発行した一時コード
+    redirect_uri: env.REDIRECT_URI,
   });
 
-  if (!tokenResp.ok) {
-    const errText = await tokenResp.text().catch(() => '');
-    const isClientError = errText.includes('invalid_client') || errText.includes('unknown client');
-    if (isClientError) {
+  if (!tokenResult.ok) {
+    // 現行・予備の両Secretが invalid_client の時だけ「メンテナンス中」を表示
+    if (tokenResult.clientError) {
       return errorPage('メンテナンス中',
         '42 OAuth認証キーの更新が必要です。管理者が対応するまでお待ちください。\n' +
         '合言葉ログインは引き続き利用可能です。');
     }
-    return errorPage('認証失敗', `トークン取得に失敗しました。\n${errText}`);
+    return errorPage('認証失敗', `トークン取得に失敗しました。\n${tokenResult.errText}`);
   }
 
-  const tokenData = await tokenResp.json();
+  const tokenData = await tokenResult.resp.json();
   const access_token = tokenData.access_token;
   if (!access_token) {
     return errorPage('認証失敗', 'アクセストークンが取得できませんでした。');
