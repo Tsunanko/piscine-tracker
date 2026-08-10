@@ -7,9 +7,10 @@ name: Update Piscine Data
 #   month を指定可能:
 #     "2408" → 2024年8月Piscine
 #     "02"   → 2026年2月Piscine
-#     "03"   → 2026年3月Piscine（デフォルト）
+#     "03"   → 2026年3月Piscine
+#     "2607" → 2026年7月Piscine（デフォルト）
 #
-# 自動実行: 3月Piscine進行中は1時間ごとに自動実行（UTC 0-15時 = JST 9-24時）
+# 自動実行: 7月Piscine進行中は1時間ごとに自動実行（UTC 0-15時 = JST 9-24時）
 #
 # 必要な GitHub Secrets:
 #   CLIENT_ID      → 42 Intra OAuth App UID
@@ -21,11 +22,11 @@ on:
   workflow_dispatch:
     inputs:
       month:
-        description: 'Piscine月 ("2303"=2023年3月 / "2408"=2024年8月 / "2409"=2024年9月 / "2502"=2025年2月 / "2503"=2025年3月 / "02"=2026年2月 / "03"=2026年3月)'
+        description: 'Piscine月 ("2303"=2023年3月 / "2408"=2024年8月 / "2409"=2024年9月 / "2502"=2025年2月 / "2503"=2025年3月 / "02"=2026年2月 / "03"=2026年3月 / "2607"=2026年7月)'
         required: false
-        default: '03'
+        default: '2607'
   schedule:
-    # 3月Piscine進行中（2026-03-11〜2026-04-05）は1時間ごと自動実行
+    # 7月Piscine進行中（2026-07-27〜2026-08-21）は1時間ごと自動実行
     # JST 9:00〜24:00 = UTC 0:00〜15:00
     - cron: '0 0-15 * * *'
 
@@ -34,7 +35,7 @@ permissions:
 
 # 同じ月の同時実行を防止（異なる月は並行実行OK）
 concurrency:
-  group: fetch-piscine-${{ github.event.inputs.month || '03' }}
+  group: fetch-piscine-${{ github.event.inputs.month || '2607' }}
   cancel-in-progress: true
 
 jobs:
@@ -62,7 +63,7 @@ jobs:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
-          PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
+          PISCINE_MONTH: ${{ github.event.inputs.month || '2607' }}
         run: python scripts/fetch_data.py
 
       # ─── Step 5: 座席隣接分析 → KV にアップロード ──────────────────
@@ -74,5 +75,5 @@ jobs:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
-          PISCINE_MONTH: ${{ github.event.inputs.month || '03' }}
+          PISCINE_MONTH: ${{ github.event.inputs.month || '2607' }}
         run: python scripts/fetch_neighbors.py

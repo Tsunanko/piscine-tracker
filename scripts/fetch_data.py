@@ -51,8 +51,9 @@ TOKEN_URL = f"{INTRA_API_BASE}/oauth/token"
 JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 
 # PISCINE_MONTH: どの月のPiscineを処理するか（環境変数で切り替え）
-# "02" → 2月Piscine（2026-02-02〜2026-02-27）
-# "03" → 3月Piscine（2026-03-16〜2026-04-10）
+# "02"   → 2月Piscine（2026-02-02〜2026-02-27）
+# "03"   → 3月Piscine（2026-03-16〜2026-04-10）
+# "2607" → 7月Piscine（2026-07-27〜2026-08-21）
 PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
 
 _PISCINE_CONFIG = {
@@ -91,10 +92,18 @@ _PISCINE_CONFIG = {
         "end":   datetime(2026, 4, 11, 0, 0, 0, tzinfo=JST),  # 4/10の翌日
         "days":  26,
     },
+    "2607": {
+        "start": datetime(2026, 7, 27, 0, 0, 0, tzinfo=JST),
+        "end":   datetime(2026, 8, 22, 0, 0, 0, tzinfo=JST),  # 8/21の翌日
+        "days":  26,
+    },
 }
 
 if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '2409', '02', or '03'.")
+    raise ValueError(
+        f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. "
+        f"Use one of: {', '.join(_PISCINE_CONFIG.keys())}."
+    )
 
 PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
 PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
