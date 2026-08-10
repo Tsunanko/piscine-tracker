@@ -228,7 +228,8 @@
 <div class="login-wrap">
   <div class="logo-ring">🏊</div>
   <div class="app-name">Piscine Tracker</div>
-  <div class="app-sub">42 Tokyo · Feb 2026</div>
+  <!-- 期の表示は piscine-config.js から動的に入れる（下の script 参照） -->
+  <div class="app-sub" id="appSub">42 Tokyo</div>
 
   <div class="login-card">
     <div class="login-desc">
@@ -275,11 +276,22 @@
 </div>
 
 <script src="auth.js"></script>
+<script src="piscine-config.js"></script>
 <script>
   // すでにログイン済みならダッシュボードへ
   if (sessionStorage.getItem('piscine_42_token')) {
     window.location.replace('dashboard.html');
   }
+
+  // ロゴ下の期表示を、開催中の期に合わせて出す（'Feb 2026' の固定表記だと期が変わるたび嘘になる）
+  (function () {
+    const el = document.getElementById('appSub');
+    if (!el || typeof getActivePiscineMonth !== 'function') return;
+    const pm = PISCINE_MONTHS[getActivePiscineMonth()];
+    if (!pm) return;
+    const started = new Date(pm.start + 'T00:00:00');
+    el.textContent = `42 Tokyo · ${started.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+  })();
 
   // ─── 同意管理 ──────────────────────────────
   function acceptConsent() {
