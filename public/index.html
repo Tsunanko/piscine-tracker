@@ -386,6 +386,7 @@
   }
 </style>
 <script src="auth.js"></script>
+<script src="piscine-config.js"></script>
 </head>
 <body>
 <script>
@@ -424,14 +425,14 @@
 const CIRCUMFERENCE = 2 * Math.PI * 85;
 const params = new URLSearchParams(window.location.search);
 const LOGIN = params.get('login') || 'yuichika';
-const PAGE_MONTH = params.get('month') || '02'; // 3月Piscineの場合 '03'
+const PAGE_MONTH = params.get('month') || getActivePiscineMonth(); // ?month= 未指定なら開催中の期
 
 // 初期表示のリンクにloginと月パラメータを付ける
 const initStatsLink = document.getElementById('statsLinkInit');
 const initDashLink = document.getElementById('dashLinkInit');
-const monthSuffix = PAGE_MONTH !== '02' ? `&month=${PAGE_MONTH}` : '';
+const monthSuffix = monthQuery(PAGE_MONTH, '&');
 if (initStatsLink) initStatsLink.href = `stats.html?login=${encodeURIComponent(LOGIN)}${monthSuffix}`;
-if (initDashLink && PAGE_MONTH !== '02') initDashLink.href = `dashboard.html?month=${PAGE_MONTH}`;
+if (initDashLink) initDashLink.href = `dashboard.html${monthQuery(PAGE_MONTH)}`;
 
 let currentStudentData = null;
 
@@ -587,7 +588,7 @@ function render(d) {
 
   app.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <a href="dashboard.html${PAGE_MONTH !== '02' ? '?month=' + PAGE_MONTH : ''}" class="back-link" style="margin-bottom:0">← Dashboard</a>
+      <a href="dashboard.html${monthQuery(PAGE_MONTH)}" class="back-link" style="margin-bottom:0">← Dashboard</a>
       <a href="stats.html?login=${encodeURIComponent(d.login)}${monthSuffix}" class="back-link" style="margin-bottom:0;color:var(--accent-light);border-color:var(--accent)">📊 統計</a>
     </div>
 
@@ -830,7 +831,7 @@ async function loadData() {
 
   try {
     const token = getToken();
-    const monthParam = PAGE_MONTH !== '02' ? `?month=${PAGE_MONTH}` : '';
+    const monthParam = monthQuery(PAGE_MONTH);
     const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data/${encodeURIComponent(LOGIN)}${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -851,7 +852,7 @@ let miniChartInstance = null;
 async function renderMiniChart(login) {
   try {
     const token = getToken();
-    const monthParam = PAGE_MONTH !== '02' ? `?month=${PAGE_MONTH}` : '';
+    const monthParam = monthQuery(PAGE_MONTH);
     const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -975,7 +976,7 @@ async function renderNeighbors(login, month) {
   const cacheKey = `neighbors_${month}`;
   if (!_neighborCache[cacheKey]) {
     try {
-      const monthParam = month !== '02' ? `?month=${month}` : '';
+      const monthParam = monthQuery(month);
       const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/neighbors${monthParam}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -999,7 +1000,7 @@ async function renderNeighbors(login, month) {
   };
 
   const top = studentNeighbors.top_neighbors.slice(0, 12);
-  const mSuffix = month !== '02' ? `&month=${month}` : '';
+  const mSuffix = monthQuery(month, '&');
 
   const avatarCards = top.map(n => {
     const p = PROX[n.proximity] || PROX.same_cluster;

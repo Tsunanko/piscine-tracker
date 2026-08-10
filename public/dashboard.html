@@ -547,7 +547,7 @@ let viewAsMode = null;   // 管理者用: 一般ユーザー視点テストモ�
 let currentMonth = (() => {
   const m = new URLSearchParams(location.search).get('month');
   const valid = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
-  return valid.includes(m) ? m : '02';
+  return valid.includes(m) ? m : getActivePiscineMonth();
 })();
 
 function esc(str) {
@@ -715,7 +715,8 @@ function renderDashboard() {
   if (monthTabs && (isAdmin || (userMonths && userMonths.length > 0))) {
     // piscine-config.js から月タブを動的生成
     const months = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
-    const visibleMonths = isAdmin ? months : months.filter(m => m === '02' || userMonths.includes(m));
+    // 非管理者には自分が参加した期のタブだけを出す（他の期のデータはWorker側でも弾かれる）
+    const visibleMonths = isAdmin ? months : months.filter(m => userMonths.includes(m));
     monthTabs.innerHTML = visibleMonths.map(m => {
       const pm = PISCINE_MONTHS?.[m];
       const label = pm ? `${pm.year}年${pm.label.replace('ピシン','')}` : m;
@@ -926,7 +927,7 @@ function onSearch(value) {
 }
 
 function goToStudent(login) {
-  const monthParam = currentMonth !== '02' ? `&month=${currentMonth}` : '';
+  const monthParam = monthQuery(currentMonth, '&');
   window.location.href = `index.html?login=${encodeURIComponent(login)}${monthParam}`;
 }
 
@@ -941,7 +942,7 @@ async function loadDashboard() {
 
   try {
     const token = sessionStorage.getItem('piscine_42_token') || '';
-    const monthParam = myMonth !== '02' ? `?month=${myMonth}` : '';
+    const monthParam = monthQuery(myMonth);
     const resp = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -989,7 +990,7 @@ function switchMonth(month) {
   });
   // 統計リンクのhrefを月に合わせて更新
   const statsBtn = document.getElementById('statsNavBtn');
-  if (statsBtn) statsBtn.href = month !== '02' ? `stats.html?month=${month}` : 'stats.html';
+  if (statsBtn) statsBtn.href = `stats.html${monthQuery(month)}`;
   loadDashboard();
 }
 
@@ -1059,8 +1060,8 @@ requireAuth().then(async user => {
     } catch (e) { console.error(e); }
   }
 
-  // URLパラメータで月が指定されていた場合、タブのスタイルと統計リンクを初期化
-  if (currentMonth !== '02') {
+  // 表示中の月に合わせてタブのスタイルと統計リンクを初期化
+  {
     validMonths.forEach(m => {
       const tab = document.getElementById(`tab${m}`);
       if (!tab) return;
@@ -1075,7 +1076,7 @@ requireAuth().then(async user => {
       }
     });
     const statsBtn = document.getElementById('statsNavBtn');
-    if (statsBtn) statsBtn.href = `stats.html?month=${currentMonth}`;
+    if (statsBtn) statsBtn.href = `stats.html${monthQuery(currentMonth)}`;
   }
   loadDashboard();
   setInterval(loadDashboard, 5 * 60 * 1000);
