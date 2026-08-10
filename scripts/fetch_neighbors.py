@@ -34,6 +34,10 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import requests
 
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from piscine_months import get_config, get_label  # noqa: E402
+
 # ─── .env 読み込み ────────────────────────────────────────────────────────────
 env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
@@ -52,27 +56,13 @@ JST = timezone(timedelta(hours=9))
 CAMPUS_ID = 26  # 42 Tokyo
 
 # Piscine 期間（環境変数で切り替え可能）
-# PISCINE_MONTH=03 で3月Piscine、2408 で2024年8月Piscine、デフォルトは02
+# 期間の定義は scripts/piscine_months.py に集約している（fetch_data.py と共用）
 PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
-_PISCINE_CONFIG = {
-    "2408": {"start": datetime(2024, 8, 5,  0, 0, 0, tzinfo=JST),
-             "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),
-             "label": "2024-08 Piscine"},
-    "2409": {"start": datetime(2024, 9, 2,  0, 0, 0, tzinfo=JST),   # 仮日付（要API確認）
-             "end":   datetime(2024, 9, 28, 0, 0, 0, tzinfo=JST),   # 9/27の翌日（仮）
-             "label": "2024-09 Piscine"},
-    "02":   {"start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
-             "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),
-             "label": "2026-02 Piscine"},
-    "03":   {"start": datetime(2026, 3, 16, 0, 0, 0, tzinfo=JST),
-             "end":   datetime(2026, 4, 11, 0, 0, 0, tzinfo=JST),
-             "label": "2026-03 Piscine"},
-}
-if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(f"Unknown PISCINE_MONTH: {PISCINE_MONTH}. Use '2408', '2409', '02', or '03'.")
-PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
-PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
-PISCINE_LABEL = _PISCINE_CONFIG[PISCINE_MONTH]["label"]
+
+_cfg = get_config(PISCINE_MONTH)
+PISCINE_START = _cfg["start"]
+PISCINE_END   = _cfg["end"]
+PISCINE_LABEL = get_label(PISCINE_MONTH)
 
 WORKER_URL    = os.environ.get("WORKER_URL", "https://piscine-tracker.tsunanko.workers.dev")
 WORKER_SECRET = os.environ.get("WORKER_SECRET", "")
