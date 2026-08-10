@@ -20,6 +20,50 @@ const PISCINE_MONTHS = {
 };
 
 /**
+ * 「いま見るべき月コード」を返す。
+ *
+ * 各ページの初期表示に使う。優先順位:
+ *   1. 開催中の期（今日が start〜end の中にある）
+ *   2. すでに始まった期のうち最も新しいもの（＝直近に終わった期）
+ *   3. どれにも当てはまらなければ定義の先頭
+ *
+ * 日付は 'YYYY-MM-DD' の文字列比較で判定する（この形式は辞書順＝時系列順）。
+ *
+ * @param {Date} [today] - 判定基準日。省略時は現在時刻（テスト時に差し込める）
+ * @returns {string} 月コード (例: '2607')
+ */
+function getActivePiscineMonth(today) {
+  const d = today || new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const codes = Object.keys(PISCINE_MONTHS);
+  if (!codes.length) return '';
+
+  const ongoing = codes.find((c) => PISCINE_MONTHS[c].start <= ymd && ymd <= PISCINE_MONTHS[c].end);
+  if (ongoing) return ongoing;
+
+  const started = codes
+    .filter((c) => PISCINE_MONTHS[c].start <= ymd)
+    .sort((a, b) => PISCINE_MONTHS[a].start.localeCompare(PISCINE_MONTHS[b].start));
+  return started.length ? started[started.length - 1] : codes[0];
+}
+
+/**
+ * ページ間リンクに付ける month クエリを生成する。
+ *
+ * 以前は「既定月（02）のときだけ省略する」書き方が各ページに散っていたため、
+ * 既定月を変えるとリンクが壊れた。常に付ける方式にして、その依存をなくす。
+ *
+ * @param {string} code - 月コード
+ * @param {string} [sep] - 区切り文字。URLの先頭なら '?'（既定）、既にクエリがあるなら '&'
+ * @returns {string} 例: '?month=2607' / '&month=2607'（code が空なら空文字）
+ */
+function monthQuery(code, sep) {
+  if (!code) return '';
+  return `${sep || '?'}month=${encodeURIComponent(code)}`;
+}
+
+/**
  * 月コードから表示用の期間文字列を生成
  * @param {string} code - 月コード (例: '02', '2408')
  * @returns {string} 例: 'Feb 2 – Feb 27, 2026'

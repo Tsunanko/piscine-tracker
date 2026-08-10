@@ -512,7 +512,7 @@ let isComposing   = false; // IME composition中フラグ（スマホ2重入力�
 let suppressInput = false; // compositionend直後のinput誤発火を防ぐフラグ
 let currentUser   = null;  // ログイン中ユーザー（管理者チェック用）
 let userIsAdmin = false;  // Worker側の判定結果を格納
-let statsMonth = new URLSearchParams(window.location.search).get('month') || '02'; // グローバルで参照
+let statsMonth = new URLSearchParams(window.location.search).get('month') || getActivePiscineMonth(); // グローバルで参照
 
 // 現在のフィルタ設定に基づく母集団を返す
 function currentStudents() {
@@ -658,7 +658,7 @@ async function loadData(currentUser = null) {
     const res = await fetch('./dev-data.json');
     d = await res.json();
   } else {
-    const monthParam = statsMonth !== '02' ? `?month=${statsMonth}` : '';
+    const monthParam = monthQuery(statsMonth);
     const res = await fetch(`https://piscine-tracker.tsunanko.workers.dev/api/data${monthParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -721,8 +721,8 @@ async function loadData(currentUser = null) {
       tabs.style.display = 'flex';
       updateStatsMonthTabStyle(statsMonth);
     }
-  } else if (statsMonth !== '02') {
-    // 非管理者でも2月以外参照時は月ラベル表示
+  } else {
+    // 非管理者には、いま見ている期のラベルを出す
     const lbl = document.getElementById('statsMonthLabel');
     if (lbl) { lbl.textContent = monthLabel; lbl.style.display = 'block'; }
   }
@@ -767,8 +767,7 @@ function switchStatsMonth(month) {
   updateStatsMonthTabStyle(month);
   // URLを更新（履歴に追加せず置換）
   const u = new URL(window.location.href);
-  if (month === '02') { u.searchParams.delete('month'); }
-  else { u.searchParams.set('month', month); }
+  u.searchParams.set('month', month);
   window.history.replaceState({}, '', u.toString());
   // データ再取得
   document.getElementById('headerSub').textContent = '読み込み中...';
@@ -1158,7 +1157,7 @@ function renderChart(cached) {
         const el = elements.find(e => e.datasetIndex === 0);
         if (el) {
           const login = pts[el.index].login;
-          const mSuffix = statsMonth !== '02' ? `&month=${statsMonth}` : '';
+          const mSuffix = monthQuery(statsMonth, '&');
           window.location.href = `index.html?login=${encodeURIComponent(login)}${mSuffix}`;
         }
       },
@@ -1310,7 +1309,7 @@ function renderExamTab() {
     const scoreColor = r === 'pass' ? 'var(--green)' : r === 'fail' ? 'var(--red)' : 'var(--text)';
     return `<tr>
       <td style="color:var(--text-dim)">${i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${monthQuery(statsMonth, '&')}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="font-weight:700;color:${scoreColor};font-size:16px">${s.exam_score}</td>
       <td>${makeResultBadge(r)}</td>
     </tr>`;
@@ -1321,7 +1320,7 @@ function renderExamTab() {
     const r = passes[s.login];
     return `<tr style="opacity:0.7">
       <td style="color:var(--text-dim)">${sorted.length + i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${monthQuery(statsMonth, '&')}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="color:var(--text-dim);font-size:16px">—</td>
       <td>${makeResultBadge(r)}</td>
     </tr>`;
@@ -1329,7 +1328,7 @@ function renderExamTab() {
 
   // 未受験で合格した人リスト
   const noScorePassRows = noScoreButPass.map(s =>
-    `<a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--green);text-decoration:none;margin-right:8px">${s.login}</a>`
+    `<a href="index.html?login=${encodeURIComponent(s.login)}${monthQuery(statsMonth, '&')}" style="color:var(--green);text-decoration:none;margin-right:8px">${s.login}</a>`
   ).join('');
 
   document.getElementById('mainCard').innerHTML = `
@@ -1854,7 +1853,7 @@ function renderFailAnalysisTab() {
 
       return `<tr style="${rowBg}">
         <td style="white-space:nowrap">
-          <a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
+          <a href="index.html?login=${encodeURIComponent(s.login)}${monthQuery(statsMonth, '&')}" style="color:var(--accent-light);text-decoration:none">${s.login}</a>
           <span style="margin-left:4px">${resultBadge}</span>
         </td>
         <td style="text-align:center;font-weight:700;color:${czColor};white-space:nowrap;font-size:13px">${cz != null ? (cz>=0?'+':'')+cz.toFixed(2)+'σ' : '—'}</td>
@@ -1898,7 +1897,7 @@ function renderFailAnalysisTab() {
     const cntColor = cnt === 3 ? 'var(--orange)' : cnt === 2 ? 'var(--accent-light)' : 'var(--text-dim)';
     return `<tr>
       <td style="color:var(--text-dim)">${i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${monthQuery(statsMonth, '&')}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="font-weight:700;color:${scoreColor};font-size:14px">${s.exam_score}</td>
       <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
       <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
@@ -1913,7 +1912,7 @@ function renderFailAnalysisTab() {
     const cnt = (c.exam ? 1 : 0) + (c.hours ? 1 : 0) + (c.level ? 1 : 0);
     return `<tr style="opacity:0.6">
       <td style="color:var(--text-dim)">${sortedFail.length + i + 1}</td>
-      <td><a href="index.html?login=${encodeURIComponent(s.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
+      <td><a href="index.html?login=${encodeURIComponent(s.login)}${monthQuery(statsMonth, '&')}" style="color:var(--accent-light);text-decoration:none">${s.login}</a></td>
       <td style="color:var(--text-dim)">—</td>
       <td style="color:var(--text-dim)">${s.total_hours != null ? s.total_hours.toFixed(1) : '—'}</td>
       <td style="color:var(--text-dim)">${s.level != null ? s.level.toFixed(2) : '—'}</td>
@@ -2796,7 +2795,7 @@ function renderFailAnalysisTab() {
             <div style="color:var(--red);font-weight:700;margin-bottom:4px">▼ 引き下げられた可能性（${falseNeg.length}人）</div>
             <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">数値は合格圏 → 実際は不合格</div>
             <div style="font-size:12px">
-              ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join('　')}
+              ${falseNeg.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}${monthQuery(statsMonth, '&')}" style="color:var(--red);text-decoration:none">${p.login}</a>`).join('　')}
             </div>
           </div>` : ''}
           ${falsePos.length > 0 ? `
@@ -2804,7 +2803,7 @@ function renderFailAnalysisTab() {
             <div style="color:var(--green);font-weight:700;margin-bottom:4px">▲ 引き上げられた可能性（${falsePos.length}人）</div>
             <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">数値は不合格圏 → 実際は合格</div>
             <div style="font-size:12px">
-              ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}${statsMonth !== '02' ? '&month=' + statsMonth : ''}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join('　')}
+              ${falsePos.map(p => `<a href="index.html?login=${encodeURIComponent(p.login)}${monthQuery(statsMonth, '&')}" style="color:var(--green);text-decoration:none">${p.login}</a>`).join('　')}
             </div>
           </div>` : ''}
         </div>
