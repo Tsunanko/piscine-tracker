@@ -31,6 +31,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import requests
 
+sys.path.insert(0, str(Path(__file__).parent))
+from piscine_months import get_config  # noqa: E402
+
 # ─── ローカルテスト用: .env ファイルの読み込み ────────────────────────────
 # GitHub Actions では環境変数 CLIENT_ID/CLIENT_SECRET が Secrets から注入される
 # ローカルでテストする場合は .env ファイルに書いておく（.gitignore で除外済み）
@@ -51,63 +54,13 @@ TOKEN_URL = f"{INTRA_API_BASE}/oauth/token"
 JST = timezone(timedelta(hours=9))  # 日本標準時 (UTC+9)
 
 # PISCINE_MONTH: どの月のPiscineを処理するか（環境変数で切り替え）
-# "02"   → 2月Piscine（2026-02-02〜2026-02-27）
-# "03"   → 3月Piscine（2026-03-16〜2026-04-10）
-# "2607" → 7月Piscine（2026-07-27〜2026-08-21）
+# 期間の定義は scripts/piscine_months.py に集約している（fetch_neighbors.py と共用）
 PISCINE_MONTH = os.environ.get("PISCINE_MONTH", "02")
 
-_PISCINE_CONFIG = {
-    "2303": {
-        "start": datetime(2023, 3, 6,  0, 0, 0, tzinfo=JST),
-        "end":   datetime(2023, 4, 1,  0, 0, 0, tzinfo=JST),  # 3/31の翌日
-        "days":  26,
-    },
-    "2408": {
-        "start": datetime(2024, 8, 5,  0, 0, 0, tzinfo=JST),
-        "end":   datetime(2024, 8, 31, 0, 0, 0, tzinfo=JST),  # 8/30の翌日
-        "days":  26,
-    },
-    "2409": {
-        "start": datetime(2024, 9, 2,  0, 0, 0, tzinfo=JST),  # 仮日付（要API確認）
-        "end":   datetime(2024, 9, 28, 0, 0, 0, tzinfo=JST),  # 9/27の翌日（仮）
-        "days":  26,
-    },
-    "2502": {
-        "start": datetime(2025, 2, 3,  0, 0, 0, tzinfo=JST),
-        "end":   datetime(2025, 3, 1,  0, 0, 0, tzinfo=JST),  # 2/28の翌日
-        "days":  26,
-    },
-    "2503": {
-        "start": datetime(2025, 3, 11, 0, 0, 0, tzinfo=JST),
-        "end":   datetime(2025, 4, 6,  0, 0, 0, tzinfo=JST),  # 4/5の翌日
-        "days":  26,
-    },
-    "02": {
-        "start": datetime(2026, 2, 2,  0, 0, 0, tzinfo=JST),
-        "end":   datetime(2026, 2, 28, 0, 0, 0, tzinfo=JST),  # 最終日の翌日
-        "days":  26,
-    },
-    "03": {
-        "start": datetime(2026, 3, 16, 0, 0, 0, tzinfo=JST),
-        "end":   datetime(2026, 4, 11, 0, 0, 0, tzinfo=JST),  # 4/10の翌日
-        "days":  26,
-    },
-    "2607": {
-        "start": datetime(2026, 7, 27, 0, 0, 0, tzinfo=JST),
-        "end":   datetime(2026, 8, 22, 0, 0, 0, tzinfo=JST),  # 8/21の翌日
-        "days":  26,
-    },
-}
-
-if PISCINE_MONTH not in _PISCINE_CONFIG:
-    raise ValueError(
-        f"Unsupported PISCINE_MONTH: {PISCINE_MONTH}. "
-        f"Use one of: {', '.join(_PISCINE_CONFIG.keys())}."
-    )
-
-PISCINE_START = _PISCINE_CONFIG[PISCINE_MONTH]["start"]
-PISCINE_END   = _PISCINE_CONFIG[PISCINE_MONTH]["end"]
-PISCINE_DAYS  = _PISCINE_CONFIG[PISCINE_MONTH]["days"]
+_cfg = get_config(PISCINE_MONTH)
+PISCINE_START = _cfg["start"]
+PISCINE_END   = _cfg["end"]
+PISCINE_DAYS  = _cfg["days"]
 TARGET_HOURS_PER_DAY = 8    # 1日の目標学習時間
 
 CAMPUS_ID         = 26  # 42 Tokyo のキャンパスID
