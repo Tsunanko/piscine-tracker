@@ -113,7 +113,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const results = {};
   const fetches = monthCodes.map(async (m) => {
     try {
-      const param = m === '02' ? '' : `?month=${m}`;
+      const param = monthQuery(m);
       const r = await fetch(`${WORKER}/api/data${param}`, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) results[m] = await r.json();
     } catch (e) { console.error(`Month ${m} fetch failed:`, e); }
