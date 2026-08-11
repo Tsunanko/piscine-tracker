@@ -546,7 +546,7 @@ let viewAsMode = null;   // 管理者用: 一般ユーザー視点テストモ�
 // URLパラメータ ?month=2408 等が指定されていれば初期月として使用
 let currentMonth = (() => {
   const m = new URLSearchParams(location.search).get('month');
-  const valid = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
+  const valid = (typeof PISCINE_MONTHS !== 'undefined') ? getPiscineMonthsInOrder() : ['02'];
   return valid.includes(m) ? m : getActivePiscineMonth();
 })();
 
@@ -714,7 +714,7 @@ function renderDashboard() {
   const monthTabs = document.getElementById('monthTabs');
   if (monthTabs && (isAdmin || (userMonths && userMonths.length > 0))) {
     // piscine-config.js から月タブを動的生成
-    const months = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
+    const months = (typeof PISCINE_MONTHS !== 'undefined') ? getPiscineMonthsInOrder() : ['02'];
     // 非管理者には自分が参加した期のタブだけを出す（他の期のデータはWorker側でも弾かれる）
     const visibleMonths = isAdmin ? months : months.filter(m => userMonths.includes(m));
     monthTabs.innerHTML = visibleMonths.map(m => {
@@ -974,7 +974,7 @@ function switchMonth(month) {
   const searchInput = document.getElementById('searchInput');
   if (searchInput) searchInput.value = '';
   // タブのスタイル切り替え（動的生成されたタブに対応）
-  const allMonths = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
+  const allMonths = (typeof PISCINE_MONTHS !== 'undefined') ? getPiscineMonthsInOrder() : ['02'];
   allMonths.forEach(m => {
     const tab = document.getElementById(`tab${m}`);
     if (!tab) return;
@@ -1027,7 +1027,7 @@ requireAuth().then(async user => {
   await isAdminUser(user);
   const isRealAdmin = user._isAdmin || false;
   const viewAsParam = new URLSearchParams(location.search).get('viewAs');
-  const validMonths = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
+  const validMonths = (typeof PISCINE_MONTHS !== 'undefined') ? getPiscineMonthsInOrder() : ['02'];
   if (isRealAdmin && viewAsParam && validMonths.includes(viewAsParam)) {
     viewAsMode = viewAsParam;
     userMonths = [viewAsParam];

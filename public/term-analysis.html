@@ -109,7 +109,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // 全月のデータを並行取得
-  const monthCodes = Object.keys(PISCINE_MONTHS);
+  const monthCodes = getPiscineMonthsInOrder();
   const results = {};
   const fetches = monthCodes.map(async (m) => {
     try {

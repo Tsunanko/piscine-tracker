@@ -358,9 +358,10 @@
     // viewAsリンクをpiscine-config.jsから動的生成
     const viewAsEl = document.getElementById('viewAsLinks');
     if (viewAsEl && typeof PISCINE_MONTHS !== 'undefined') {
-      viewAsEl.innerHTML = Object.entries(PISCINE_MONTHS).map(([code, pm]) =>
-        `<a href="dashboard.html?viewAs=${code}" style="padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:12px;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${pm.year} ${pm.label} 参加者</a>`
-      ).join('');
+      viewAsEl.innerHTML = getPiscineMonthsInOrder().map(code => {
+        const pm = PISCINE_MONTHS[code];
+        return `<a href="dashboard.html?viewAs=${code}" style="padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:12px;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${pm.year} ${pm.label} 参加者</a>`;
+      }).join('');
     }
     document.getElementById('checkUserSection').style.display = '';
   }
