@@ -713,7 +713,7 @@ async function loadData(currentUser = null) {
     const tabs = document.getElementById('statsMonthTabs');
     if (tabs && typeof PISCINE_MONTHS !== 'undefined') {
       // piscine-config.js から月タブを動的生成
-      tabs.innerHTML = Object.keys(PISCINE_MONTHS).map(m => {
+      tabs.innerHTML = getPiscineMonthsInOrder().map(m => {
         const pm = PISCINE_MONTHS[m];
         const label = pm ? `${pm.label.replace('ピシン','')}(${pm.year})` : m;
         return `<button id="statTab${m}" onclick="switchStatsMonth('${m}')" style="padding:4px 14px;border-radius:20px;border:1px solid rgba(136,136,160,0.3);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer">${label}</button>`;
@@ -745,7 +745,7 @@ async function loadData(currentUser = null) {
 // 月切り替え（管理者専用）
 // ─────────────────────────────────────────────
 function updateStatsMonthTabStyle(month) {
-  const months = (typeof PISCINE_MONTHS !== 'undefined') ? Object.keys(PISCINE_MONTHS) : ['02'];
+  const months = (typeof PISCINE_MONTHS !== 'undefined') ? getPiscineMonthsInOrder() : ['02'];
   months.forEach(m => {
     const btn = document.getElementById(`statTab${m}`);
     if (!btn) return;

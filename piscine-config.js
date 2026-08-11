@@ -20,6 +20,22 @@ const PISCINE_MONTHS = {
 };
 
 /**
+ * 全ての月コードを開催順（古い→新しい）で返す。
+ *
+ * Object.keys() をそのまま使ってはいけない。JavaScript のオブジェクトは
+ * 「整数に見えるキー」を数値の昇順で先に並べ、それ以外は定義順で後ろに置く。
+ * このため '2303','2607' などは数値順に並ぶ一方、先頭ゼロの '02','03' は
+ * 文字列扱いで最後に回り、2026年7月が2026年2月より前に表示されていた。
+ *
+ * @returns {string[]} 開始日の昇順に並べた月コード
+ */
+function getPiscineMonthsInOrder() {
+  return Object.keys(PISCINE_MONTHS).sort(
+    (a, b) => PISCINE_MONTHS[a].start.localeCompare(PISCINE_MONTHS[b].start)
+  );
+}
+
+/**
  * 「いま見るべき月コード」を返す。
  *
  * 各ページの初期表示に使う。優先順位:
