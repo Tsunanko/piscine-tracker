@@ -1,0 +1,93 @@
+name: Update Past Piscine Months
+# ───────────────────────────────────────────────────────────────────────────
+# このワークフローの役割:
+#   すでに終わった期のデータを1日1回だけ取り直す。
+#
+# なぜ必要か:
+#   在籍状況（42本科に残っているか、ブラックホールで離脱したか）は Piscine が
+#   終わったあとも変わり続ける。開催中の期しか更新していなかったため、
+#   3月期の合格者が離脱後も「42本科 在籍中」と表示され続けていた（2026-08-12 に発覚）。
+#
+# 設計上どうしても守ること:
+#   1. **必ず直列で回す（max-parallel: 1）**
+#      42 API のレート制限は OAuth アプリ単位で「毎秒2件・毎時1200件」しかない。
+#      2期を並列で流したところ 429 で両方落ちたうえ、利用者のログインまで
+#      巻き添えで弾かれた（Worker が /v2/me を叩けなくなるため）。
+#   2. **利用者がいない時間帯に回す**
+#      JST 3:00 開始。開催中の期を更新する update-data.yml は JST 9:00〜24:00 に
+#      毎時走るので、その枠とも重ならない。
+#   3. **対象の期はコードから生成する（下の list-months ジョブ）**
+#      ここに月コードを書き並べると、期を追加したときに更新漏れが起きる。
+#      実際 fetch_data.py と fetch_neighbors.py の二重定義が原因で
+#      座席分析だけ落ちる事故が起きている。定義は scripts/piscine_months.py だけ。
+# ───────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '0 18 * * *'   # UTC 18:00 = JST 3:00
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-past-months
+  cancel-in-progress: false
+
+jobs:
+  # ─── 対象の期を決める ────────────────────────────────────────────────
+  # 「終了日を過ぎた期」だけを拾う。開催中の期は update-data.yml の担当なので外す。
+  list-months:
+    runs-on: ubuntu-latest
+    outputs:
+      months: ${{ steps.gen.outputs.months }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: List finished piscine months
+        id: gen
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, sys
+          from datetime import datetime, timezone, timedelta
+          sys.path.insert(0, "scripts")
+          from piscine_months import PISCINE_CONFIG
+
+          now = datetime.now(timezone(timedelta(hours=9)))
+          # "end" は最終日の翌日。それを過ぎていれば終了済み。
+          finished = [m for m, c in PISCINE_CONFIG.items() if c["end"] <= now]
+          finished.sort(key=lambda m: PISCINE_CONFIG[m]["start"], reverse=True)  # 新しい期から
+          print("months=" + json.dumps(finished))
+          PY
+      - name: Show targets
+        run: echo "対象の期 → ${{ steps.gen.outputs.months }}"
+
+  # ─── 1期ずつ順番に取り直す ───────────────────────────────────────────
+  update:
+    needs: list-months
+    if: needs.list-months.outputs.months != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1     # ← 42 API のレート制限のため、絶対に増やさないこと
+      fail-fast: false    # 1期が失敗しても残りは続行する
+      matrix:
+        month: ${{ fromJson(needs.list-months.outputs.months) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Fetch piscine data (month=${{ matrix.month }})
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          CLIENT_SECRET_NEXT: ${{ secrets.CLIENT_SECRET_NEXT }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          PISCINE_MONTH: ${{ matrix.month }}
+        run: python scripts/fetch_data.py
+      - name: Cool down before the next month
+        # 次の期に移る前に間を置く。毎時1200件の枠を一気に使い切らないため。
+        run: sleep 120

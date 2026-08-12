@@ -62,6 +62,9 @@ jobs:
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          # 42のSecretは自動ローテーションされる。現行が無効なとき予備で認証し直すため、
+          # fetch_data.py が読む CLIENT_SECRET_NEXT もここで渡す（渡し忘れると無停止切替が効かない）
+          CLIENT_SECRET_NEXT: ${{ secrets.CLIENT_SECRET_NEXT }}
           WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
           PISCINE_MONTH: ${{ github.event.inputs.month || '2607' }}
         run: python scripts/fetch_data.py
@@ -74,6 +77,9 @@ jobs:
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          # 42のSecretは自動ローテーションされる。現行が無効なとき予備で認証し直すため、
+          # fetch_data.py が読む CLIENT_SECRET_NEXT もここで渡す（渡し忘れると無停止切替が効かない）
+          CLIENT_SECRET_NEXT: ${{ secrets.CLIENT_SECRET_NEXT }}
           WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
           PISCINE_MONTH: ${{ github.event.inputs.month || '2607' }}
         run: python scripts/fetch_neighbors.py
