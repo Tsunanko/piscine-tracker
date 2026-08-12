@@ -603,29 +603,40 @@ function render(d) {
     <!-- 合否バナー（結果発表済み かつ 自分のプロフィール or 管理者のみ） -->
     ${(d.piscine_result && d.results_announced && (loggedInUser?.login === d.login || isAdmin)) ? (() => {
       if (d.piscine_result === 'passed') {
+        // 42本科に今もいるかどうかで、バナーのトーンを変える。
+        // 突破した事実は誰に対しても残すが、「これからもよろしく」のような
+        // 現在進行形の呼びかけは、離脱した人のページには出さない。
+        const stillEnrolled = d.enrollment_42 === 'active';
+        const lvSuffix = d.current_42_level != null ? `（Lv ${d.current_42_level}）` : '';
+        const lastLvSuffix = d.current_42_level != null ? `（最終 Lv ${d.current_42_level}）` : '';
+        const statusLine = stillEnrolled
+          ? `✅ 42本科 在籍中${lvSuffix}`
+          : d.enrollment_42 === 'blackholed'
+          ? `🕳 ブラックホール${lastLvSuffix}`
+          : `⬜ 退学済み`;
+        const statusColor = stillEnrolled
+          ? 'var(--green)'
+          : d.enrollment_42 === 'blackholed' ? 'var(--orange)' : 'var(--text-dim)';
         return `<div class="fade-in" style="
-          background: linear-gradient(135deg, rgba(253,203,110,0.15), rgba(253,203,110,0.05));
-          border: 1px solid rgba(253,203,110,0.4);
+          background: ${stillEnrolled
+            ? 'linear-gradient(135deg, rgba(253,203,110,0.15), rgba(253,203,110,0.05))'
+            : 'rgba(136,136,160,0.06)'};
+          border: 1px solid ${stillEnrolled ? 'rgba(253,203,110,0.4)' : 'rgba(136,136,160,0.2)'};
           border-radius: 16px;
           padding: 20px;
           margin-bottom: 16px;
           text-align: center;
         ">
-          <div style="font-size: 32px; margin-bottom: 8px">🎉</div>
-          <div style="font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 6px">
-            42 Tokyo 入学おめでとうございます！
+          <div style="font-size: 32px; margin-bottom: 8px">${stillEnrolled ? '🎉' : '🏊'}</div>
+          <div style="font-size: 18px; font-weight: 800; color: ${stillEnrolled ? 'var(--orange)' : 'var(--text)'}; margin-bottom: 6px">
+            ${stillEnrolled ? '42 Tokyo 入学おめでとうございます！' : 'Piscine 突破'}
           </div>
           <div style="font-size: 13px; color: var(--text-dim); line-height: 1.6">
-            Piscine を突破しました。<br>
-            ここからが本当の始まりです。これからもよろしく！
+            ${stillEnrolled
+              ? 'Piscine を突破しました。<br>ここからが本当の始まりです。これからもよろしく！'
+              : `${d.piscine_days} 日間を走り抜き、42 Tokyo に入学しました。`}
           </div>
-          ${d.enrollment_42 != null ? `<div style="margin-top:10px;font-size:11px;color:${d.enrollment_42 === 'active' ? 'var(--green)' : d.enrollment_42 === 'blackholed' ? 'var(--orange)' : 'var(--text-dim)'}">
-            ${d.enrollment_42 === 'active'
-              ? `✅ 42本科 在籍中${d.current_42_level != null ? `（Lv ${d.current_42_level}）` : ''}`
-              : d.enrollment_42 === 'blackholed'
-              ? `🕳 ブラックホール${d.current_42_level != null ? `（最終 Lv ${d.current_42_level}）` : ''}`
-              : `⬜ 退学済み`}
-          </div>` : (d.piscine_result === 'passed' ? `<div style="margin-top:10px;font-size:11px;color:var(--text-dim)">⬜ 退学済み</div>` : '')}
+          <div style="margin-top:10px;font-size:11px;color:${statusColor}">${statusLine}</div>
         </div>`;
       } else {
         return `<div class="fade-in" style="
