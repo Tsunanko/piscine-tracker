@@ -158,10 +158,21 @@ def get_token():
                 print("  [AUTH] 現行Secretが無効 → 予備(CLIENT_SECRET_NEXT)で認証成功（ローテーション切替を検知）")
             _current_token = resp.json()["access_token"]
             return _current_token
+        # 失敗の中身を残す。応答本文に秘密情報は含まれない（OAuthのエラー名かWAFのHTML）
+        name = "CLIENT_SECRET" if idx == 0 else "CLIENT_SECRET_NEXT"
+        body = (resp.text or "").strip().replace("\n", " ")[:200]
+        print(f"  [AUTH] {name} → HTTP {resp.status_code} / {body}")
         last_resp = resp
 
-    # 現行・予備の両方で失敗 → Secret更新が必要
-    print("  [AUTH] CLIENT_SECRET / CLIENT_SECRET_NEXT の両方で認証失敗。Secret更新が必要です。")
+    # 現行・予備の両方で失敗。原因はステータスで切り分ける
+    # 401 invalid_client = Secretが違う / 403 = IP遮断やアプリ停止など別の壁
+    if last_resp.status_code == 401:
+        print("  [AUTH] 両方のSecretが不一致。42 Intra で Secret / Next secret を取り直してください。")
+    elif last_resp.status_code == 403:
+        print("  [AUTH] 403 = Secretの問題ではない。実行元IPの遮断やアプリ停止を疑ってください")
+        print("         （同じSecretが手元で通るなら、ほぼ実行元IPが原因）")
+    else:
+        print(f"  [AUTH] 想定外の応答: HTTP {last_resp.status_code}")
     last_resp.raise_for_status()  # エラー時は HTTPError を raise
 
 
